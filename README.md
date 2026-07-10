@@ -162,6 +162,39 @@ graph TD
    npm run dev
    ```
 
+
+### GitHub App Creation and Configuration
+
+To run Revora locally, you must register a GitHub App in your GitHub Developer settings to act as the integration bot.
+
+1. Go to [GitHub App Creation page](https://github.com/settings/apps/new).
+2. Configure the general settings:
+   - **GitHub App name**: Choose a unique name (e.g., `Revora - Local`).
+   - **Homepage URL**: `http://localhost:3000`
+   - **Callback URL**: `http://localhost:3000/auth/callback`
+   - **Request user authorization (OAuth) during installation**: Enabled.
+3. Configure Webhook settings:
+   - **Active**: Enabled
+   - **Webhook URL**: Enter your temporary ngrok URL (e.g., `https://xxxx.ngrok-free.app/api/v1/webhooks/github`).
+   - **Webhook secret**: Create a secure random string (e.g., `my_webhook_secret_123`). This maps to `GITHUB_WEBHOOK_SECRET` in `.env`.
+4. Configure Repository Permissions:
+   - **Checks**: Read & write (to create Check Runs).
+   - **Metadata**: Read-only (required by default).
+   - **Pull requests**: Read & write (to view diffs and post review comments).
+5. Configure Subscribe to events:
+   - Check **Pull request** to receive opened/reopened triggers.
+6. Under **Where can this GitHub App be installed?**, select **Only on this account** (for private/personal testing).
+7. Click **Create GitHub App**.
+
+#### Retrieving Environment Variables for `.env`
+
+Once created, copy the configuration details into your backend `.env` file:
+
+- **App ID**: Shown at the top of the app settings page (e.g., `4265854`). Maps to `GITHUB_APP_ID`.
+- **Client ID**: Shown under **Client credentials**. Maps to `GITHUB_CLIENT_ID`.
+- **Client Secret**: Click **Generate a new client secret** to create one. Copy it immediately. Maps to `GITHUB_CLIENT_SECRET`.
+- **Private Key**: Scroll down and click **Generate a private key**. Save the downloaded `.pem` file, open it in a text editor, copy the entire key (including the headers), and set it as `GITHUB_APP_PRIVATE_KEY` (use newline escape sequences `\n` to keep it as a single line in `.env`).
+
 ### Webhook Testing with ngrok
 
 To receive real-time webhook events on your local machine when actions occur in your repository, configure an ngrok tunnel:
