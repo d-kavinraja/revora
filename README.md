@@ -195,6 +195,18 @@ Once created, copy the configuration details into your backend `.env` file:
 - **Client Secret**: Click **Generate a new client secret** to create one. Copy it immediately. Maps to `GITHUB_CLIENT_SECRET`.
 - **Private Key**: Scroll down and click **Generate a private key**. Save the downloaded `.pem` file, open it in a text editor, copy the entire key (including the headers), and set it as `GITHUB_APP_PRIVATE_KEY` (use newline escape sequences `\n` to keep it as a single line in `.env`).
 
+#### Configuring GitHub OAuth for Sign-In
+
+To enable the **Sign In with GitHub** feature on your local dashboard:
+
+1. In your GitHub App settings page, scroll down to the **User authorization** section.
+2. Ensure **Request user authorization (OAuth) during installation** is checked/enabled.
+3. Set the **Callback URL** to:
+   ```text
+   http://localhost:3000/auth/callback
+   ```
+4. Save changes. Users visiting `http://localhost:3000/login` can now authenticate securely through your custom GitHub App OAuth provider.
+
 ### Webhook Testing with ngrok
 
 To receive real-time webhook events on your local machine when actions occur in your repository, configure an ngrok tunnel:
