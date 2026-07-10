@@ -1,0 +1,239 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from typing import List, Any, Dict
+import uuid
+import httpx
+from datetime import datetime, timezone
+
+from app.core.deps import get_current_user
+from app.db.session import get_db
+from app.models.user import User
+from app.models.github import Installation, Repository, PullRequest
+from app.models.review import Review
+from app.github.auth import github_app_auth
+
+router = APIRouter()
+
+
+@router.get("", response_model=List[Dict[str, Any]])
+async def list_repositories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all repositories linked to the current user's installations."""
+    # Get all installations for this user
+    installations_result = await db.execute(
+        select(Installation).where(Installation.user_id == current_user.id)
+    )
+    installations = installations_result.scalars().all()
+    installation_ids = [i.id for i in installations]
+
+    if not installation_ids:
+        return []
+
+    # Get repositories linked to those installations
+    repos_result = await db.execute(
+        select(Repository).where(Repository.installation_id.in_(installation_ids))
+    )
+    repos = repos_result.scalars().all()
+
+    result = []
+    for repo in repos:
+        # Count reviews for this repo via pull_requests
+        pr_ids_result = await db.execute(
+            select(PullRequest.id).where(PullRequest.repo_id == repo.id)
+        )
+        pr_ids = [r[0] for r in pr_ids_result.all()]
+
+        total_reviews = 0
+        if pr_ids:
+            count_result = await db.execute(
+                select(func.count(Review.id)).where(Review.pr_id.in_(pr_ids))
+            )
+            total_reviews = count_result.scalar() or 0
+
+        result.append({
+            "id": str(repo.id),
+            "name": repo.name,
+            "full_name": repo.full_name,
+            "description": repo.description,
+            "language": repo.language,
+            "is_private": repo.is_private,
+            "reviews_enabled": repo.reviews_enabled,
+            "total_reviews": total_reviews,
+            "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
+        })
+
+    return result
+
+
+@router.post("/{repo_id}/sync", response_model=dict)
+async def sync_repository(
+    repo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Sync pull requests and bot reviews (Revora, CodeRabbit, etc.) from GitHub."""
+    try:
+        try:
+            rid = uuid.UUID(repo_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid repository ID")
+
+        # Get repo
+        repo_result = await db.execute(select(Repository).where(Repository.id == rid))
+        repo = repo_result.scalars().first()
+        if not repo:
+            raise HTTPException(status_code=404, detail="Repository not found")
+
+        # Get installation
+        inst_result = await db.execute(select(Installation).where(Installation.id == repo.installation_id))
+        installation = inst_result.scalars().first()
+        if not installation:
+            raise HTTPException(status_code=404, detail="GitHub App Installation not found for this repository.")
+
+        # Get GitHub installation token
+        try:
+            token = await github_app_auth.get_installation_token(installation.installation_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to authenticate with GitHub App: {e}")
+
+        # Parse owner and repo name
+        parts = repo.full_name.split("/")
+        if len(parts) != 2:
+            raise HTTPException(status_code=400, detail="Invalid repository full name format.")
+        owner, repo_name = parts
+
+        async with httpx.AsyncClient() as client:
+            # 1. Fetch Pull Requests from GitHub
+            pulls_url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            }
+            
+            # Get both open and closed PRs
+            pulls_res = await client.get(f"{pulls_url}?state=all&per_page=50", headers=headers)
+            if not pulls_res.is_success:
+                raise HTTPException(status_code=400, detail="Failed to fetch pull requests from GitHub.")
+            
+            gh_pulls = pulls_res.json()
+            imported_prs = 0
+            imported_reviews = 0
+
+            for gh_pr in gh_pulls:
+                pr_number = gh_pr["number"]
+                title = gh_pr["title"]
+                author = gh_pr["user"]["login"]
+                head_sha = gh_pr["head"]["sha"]
+                base_branch = gh_pr["base"]["ref"]
+                head_branch = gh_pr["head"]["ref"]
+                status_str = gh_pr["state"] # open or closed
+                
+                # Fetch detailed PR for additions/deletions
+                detail_res = await client.get(f"{pulls_url}/{pr_number}", headers=headers)
+                additions, deletions, changed_files = 0, 0, 0
+                if detail_res.is_success:
+                    detail_data = detail_res.json()
+                    additions = detail_data.get("additions", 0)
+                    deletions = detail_data.get("deletions", 0)
+                    changed_files = detail_data.get("changed_files", 0)
+
+                # Get or create PullRequest
+                pr_check = await db.execute(
+                    select(PullRequest).where(
+                        PullRequest.repo_id == repo.id,
+                        PullRequest.pr_number == pr_number
+                    )
+                )
+                db_pr = pr_check.scalars().first()
+
+                if not db_pr:
+                    db_pr = PullRequest(
+                        repo_id=repo.id,
+                        pr_number=pr_number,
+                        title=title,
+                        author=author,
+                        head_sha=head_sha,
+                        base_branch=base_branch,
+                        head_branch=head_branch,
+                        status=status_str,
+                        additions=additions,
+                        deletions=deletions,
+                        changed_files=changed_files
+                    )
+                    db.add(db_pr)
+                    await db.commit()
+                    await db.refresh(db_pr)
+                else:
+                    db_pr.status = status_str
+                    db_pr.title = title
+                    db_pr.head_sha = head_sha
+                    db_pr.additions = additions
+                    db_pr.deletions = deletions
+                    db_pr.changed_files = changed_files
+                    db.add(db_pr)
+                    await db.commit()
+
+                imported_prs += 1
+
+                # 2. Fetch Reviews for this PR to import bot reviews (Revora, CodeRabbit, etc.)
+                reviews_res = await client.get(f"{pulls_url}/{pr_number}/reviews", headers=headers)
+                if reviews_res.is_success:
+                    gh_reviews = reviews_res.json()
+                    for gh_review in gh_reviews:
+                        body = gh_review.get("body") or ""
+                        reviewer_login = gh_review.get("user", {}).get("login", "")
+                        
+                        # Identify bot reviews (Revora, CodeRabbit, coderabbitai, or check if body looks like AI review)
+                        is_bot = (
+                            "coderabbit" in reviewer_login.lower() or
+                            "revora" in reviewer_login.lower() or
+                            "coderabbit" in body.lower() or
+                            "revora" in body.lower() or
+                            "gemini" in body.lower() or
+                            reviewer_login.endswith("[bot]")
+                        )
+                        
+                        if is_bot and body.strip():
+                            # Check if we already imported this review
+                            rev_check = await db.execute(
+                                select(Review).where(
+                                    Review.pr_id == db_pr.id,
+                                    Review.summary == body
+                                )
+                            )
+                            db_review = rev_check.scalars().first()
+
+                            if not db_review:
+                                db_review = Review(
+                                    pr_id=db_pr.id,
+                                    status="completed",
+                                    summary=body,
+                                    started_at=db_pr.created_at,
+                                    completed_at=datetime.now(timezone.utc),
+                                    stats={
+                                        "provider": "imported",
+                                        "model": reviewer_login,
+                                    }
+                                )
+                                db.add(db_review)
+                                await db.commit()
+                                imported_reviews += 1
+
+            # Update last synced time
+            repo.last_synced_at = datetime.now(timezone.utc)
+            db.add(repo)
+            await db.commit()
+
+            return {
+                "status": "success",
+                "message": f"Successfully synced repository. Imported {imported_prs} PRs and {imported_reviews} bot reviews."
+            }
+
+    except Exception as e:
+        print(f"Error syncing repository: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync repository: {e}")
+

@@ -1,0 +1,20 @@
+[project]
+name = "revora-backend"
+version = "1.0.0"
+description = "Backend for Revora AI-powered PR Review Platform"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --asyncio-mode=auto"
+testpaths = [
+    "tests",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
