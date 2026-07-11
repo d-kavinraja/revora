@@ -3,8 +3,12 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { GithubIcon } from "@animateicons/react/lucide";
+import { useRef } from "react";
 
 export default function LandingPage() {
+  const githubIconRef = useRef<any>(null);
+
   return (
     <div className="flex min-h-screen flex-col bg-black text-white relative overflow-hidden">
       {/* Background gradients */}
@@ -43,8 +47,14 @@ export default function LandingPage() {
           </p>
           <div className="flex items-center justify-center gap-6 pt-4">
             <Link href="/login">
-              <Button size="lg" className="h-14 px-8 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_30px_rgba(147,51,234,0.4)] border-0 transition-all hover:scale-105">
+              <Button
+                size="lg"
+                onMouseEnter={() => githubIconRef.current?.startAnimation()}
+                onMouseLeave={() => githubIconRef.current?.stopAnimation()}
+                className="h-14 px-8 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_30px_rgba(147,51,234,0.4)] border-0 transition-all hover:scale-105 gap-2"
+              >
                 Install GitHub App
+                <GithubIcon ref={githubIconRef} size={20} isAnimated={false} />
               </Button>
             </Link>
           </div>

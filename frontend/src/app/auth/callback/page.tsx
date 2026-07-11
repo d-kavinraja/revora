@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
+import { LoaderIcon } from '@/components/ui/loader-icon';
 
 function CallbackHandler() {
   const router = useRouter();
@@ -66,7 +67,7 @@ function CallbackHandler() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-center gap-2">
-            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <LoaderIcon size={20} className="text-indigo-400" />
             <span className="font-semibold text-lg">Authenticating with GitHub...</span>
           </div>
           <p className="text-zinc-500 text-sm">Setting up your secure session.</p>
@@ -86,7 +87,7 @@ export default function AuthCallbackPage() {
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
-              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <LoaderIcon size={20} className="text-indigo-400" />
               <span className="font-semibold text-lg">Loading secure session...</span>
             </div>
           </div>

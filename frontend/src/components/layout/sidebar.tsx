@@ -4,34 +4,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
+import { LoaderIcon } from '@/components/ui/loader-icon';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, LogoutIcon } from '@animateicons/react/lucide';
+import { useRef } from 'react';
 
 const navLinks = [
   {
     href: '/dashboard',
     label: 'Dashboard',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    ),
+    icon: LayoutGridIcon,
   },
   {
     href: '/repositories',
     label: 'Repositories',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-      </svg>
-    ),
+    icon: FolderIcon,
   },
   {
     href: '/reviews',
     label: 'Reviews',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-      </svg>
-    ),
+    icon: ClipboardIcon,
   },
 ];
 
@@ -39,18 +30,60 @@ const bottomLinks = [
   {
     href: '/settings/api-keys',
     label: 'API Keys',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-      </svg>
-    ),
+    icon: KeyIcon,
   },
 ];
+
+function NavLinkItem({ href, label, icon: Icon, isActive }: { href: string; label: string; icon: any; isActive: boolean }) {
+  const iconRef = useRef<any>(null);
+  return (
+    <Link
+      href={href}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+        isActive
+          ? 'bg-indigo-500/15 text-indigo-300 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
+          : 'text-zinc-400 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <span className={isActive ? 'text-indigo-400' : 'text-zinc-500'}>
+        <Icon ref={iconRef} size={16} isAnimated={false} />
+      </span>
+      {label}
+      {isActive && (
+        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+      )}
+    </Link>
+  );
+}
+
+function BottomLinkItem({ href, label, icon: Icon, isActive }: { href: string; label: string; icon: any; isActive: boolean }) {
+  const iconRef = useRef<any>(null);
+  return (
+    <Link
+      href={href}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+        isActive
+          ? 'bg-indigo-500/15 text-indigo-300 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
+          : 'text-zinc-400 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <span className={isActive ? 'text-indigo-400' : 'text-zinc-500'}>
+        <Icon ref={iconRef} size={16} isAnimated={false} />
+      </span>
+      {label}
+    </Link>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const logoutIconRef = useRef<any>(null);
 
   const handleLogout = () => {
     logout();
@@ -64,12 +97,15 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-6 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-sm shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-            R
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+            <LoaderIcon size={16} className="text-white" />
           </div>
           <div>
             <span className="font-bold text-lg tracking-tight text-white">Revora</span>
-            <div className="text-[10px] text-indigo-400 font-medium -mt-0.5">AI Code Review</div>
+            <div className="text-[10px] text-indigo-400 font-medium -mt-0.5 flex items-center gap-1">
+              <LoaderIcon size={10} className="text-indigo-400" />
+              AI Code Review
+            </div>
           </div>
         </div>
       </div>
@@ -80,43 +116,26 @@ export function Sidebar() {
           Navigation
         </div>
         {navLinks.map((link) => (
-          <Link
+          <NavLinkItem
             key={link.href}
             href={link.href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              isActive(link.href)
-                ? 'bg-indigo-500/15 text-indigo-300 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
-                : 'text-zinc-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <span className={isActive(link.href) ? 'text-indigo-400' : 'text-zinc-500'}>
-              {link.icon}
-            </span>
-            {link.label}
-            {isActive(link.href) && (
-              <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-            )}
-          </Link>
+            label={link.label}
+            icon={link.icon}
+            isActive={isActive(link.href)}
+          />
         ))}
 
         <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest px-3 mt-6 mb-3">
           Settings
         </div>
         {bottomLinks.map((link) => (
-          <Link
+          <BottomLinkItem
             key={link.href}
             href={link.href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              isActive(link.href)
-                ? 'bg-indigo-500/15 text-indigo-300 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
-                : 'text-zinc-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <span className={isActive(link.href) ? 'text-indigo-400' : 'text-zinc-500'}>
-              {link.icon}
-            </span>
-            {link.label}
-          </Link>
+            label={link.label}
+            icon={link.icon}
+            isActive={isActive(link.href)}
+          />
         ))}
       </nav>
 
@@ -133,11 +152,11 @@ export function Sidebar() {
         </div>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200"
+          onMouseEnter={() => logoutIconRef.current?.startAnimation()}
+          onMouseLeave={() => logoutIconRef.current?.stopAnimation()}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200 cursor-pointer"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
+          <LogoutIcon ref={logoutIconRef} size={16} isAnimated={false} />
           Sign out
         </button>
       </div>

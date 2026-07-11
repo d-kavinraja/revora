@@ -5,6 +5,8 @@ import { api, Review } from '@/lib/api';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { LoaderIcon } from '@/components/ui/loader-icon';
+import { TriangleAlertIcon, CodeIcon } from '@animateicons/react/lucide';
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string; dot: string }> = {
@@ -153,7 +155,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-8 mb-6 text-center">
           <div className="w-12 h-12 mx-auto mb-4 relative">
             <div className="w-12 h-12 rounded-full border-2 border-blue-500/20" />
-            <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center text-blue-400">
+              <LoaderIcon size={24} className="text-blue-400" />
+            </div>
           </div>
           <p className="text-blue-300 font-semibold text-lg">AI Review In Progress</p>
           <p className="text-zinc-500 text-sm mt-1">Gemini is analyzing your code... This page will update automatically.</p>
@@ -170,9 +174,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       {review.status === 'failed' && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6 mb-6">
           <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <TriangleAlertIcon size={20} className="text-red-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-red-300 font-semibold">Review Failed</p>
               {review.error_message && (
@@ -187,10 +189,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       {review.status === 'completed' && review.summary && (
         <div className="rounded-2xl border border-white/5 bg-zinc-950 overflow-hidden">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5 bg-black/20">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 text-white">
+              <CodeIcon size={14} />
             </div>
             <div>
               <span className="text-sm font-semibold text-white">Gemini AI Review</span>

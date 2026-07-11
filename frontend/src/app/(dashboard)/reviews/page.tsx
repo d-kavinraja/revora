@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, Review } from '@/lib/api';
 import Link from 'next/link';
+import { LoaderIcon } from '@/components/ui/loader-icon';
+import { CircleCheckIcon, TriangleAlertIcon, ClipboardIcon, MoveRightIcon } from '@animateicons/react/lucide';
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string; dot: string }> = {
@@ -27,6 +29,82 @@ function timeAgo(dateStr: string | null): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function ReviewListItem({ review }: { review: Review }) {
+  const statusRef = useRef<any>(null);
+  const arrowRef = useRef<any>(null);
+
+  const pr = review.pull_request;
+  const repo = review.repository;
+  const duration =
+    review.started_at && review.completed_at
+      ? Math.round((new Date(review.completed_at).getTime() - new Date(review.started_at).getTime()) / 1000)
+      : null;
+
+  return (
+    <Link
+      href={`/reviews/${review.id}`}
+      onMouseEnter={() => {
+        statusRef.current?.startAnimation?.();
+        arrowRef.current?.startAnimation?.();
+      }}
+      onMouseLeave={() => {
+        statusRef.current?.stopAnimation?.();
+        arrowRef.current?.stopAnimation?.();
+      }}
+      className="block rounded-xl border border-white/5 bg-zinc-950 hover:border-indigo-500/30 hover:bg-zinc-950/80 transition-all duration-200 p-5 group"
+    >
+      <div className="flex items-start gap-4">
+        {/* Icon */}
+        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-zinc-400 group-hover:text-indigo-400 transition-colors shrink-0">
+          {review.status === 'running' ? (
+            <LoaderIcon size={20} className="text-indigo-400" />
+          ) : review.status === 'completed' ? (
+            <CircleCheckIcon ref={statusRef} size={20} isAnimated={false} className="text-emerald-400" />
+          ) : review.status === 'failed' ? (
+            <TriangleAlertIcon ref={statusRef} size={20} isAnimated={false} className="text-red-400" />
+          ) : (
+            <ClipboardIcon ref={statusRef} size={20} isAnimated={false} />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-semibold text-white truncate">{pr?.title ?? 'Pull Request'}</span>
+            <StatusBadge status={review.status} />
+          </div>
+          <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500 flex-wrap">
+            <span className="text-indigo-400/80">{repo?.full_name}</span>
+            <span>·</span>
+            <span>PR #{pr?.pr_number}</span>
+            {pr?.author && <><span>·</span><span>@{pr.author}</span></>}
+            {pr?.additions !== undefined && (
+              <>
+                <span>·</span>
+                <span className="text-emerald-500">+{pr.additions}</span>
+                <span className="text-red-500">-{pr.deletions}</span>
+                <span>({pr.changed_files} files)</span>
+              </>
+            )}
+          </div>
+          {review.status === 'failed' && review.error_message && (
+            <p className="mt-1.5 text-xs text-red-400 truncate max-w-xl">{review.error_message}</p>
+          )}
+        </div>
+
+        {/* Meta */}
+        <div className="text-right shrink-0">
+          <div className="text-xs text-zinc-500">{timeAgo(review.created_at)}</div>
+          {duration !== null && (
+            <div className="text-xs text-zinc-600 mt-0.5">{duration}s</div>
+          )}
+          <MoveRightIcon ref={arrowRef} size={16} isAnimated={false} className="text-zinc-600 group-hover:text-indigo-400 transition-colors ml-auto mt-2" />
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export default function ReviewsPage() {
@@ -106,82 +184,9 @@ export default function ReviewsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((review) => {
-            const pr = review.pull_request;
-            const repo = review.repository;
-            const duration =
-              review.started_at && review.completed_at
-                ? Math.round((new Date(review.completed_at).getTime() - new Date(review.started_at).getTime()) / 1000)
-                : null;
-
-            return (
-              <Link
-                key={review.id}
-                href={`/reviews/${review.id}`}
-                className="block rounded-xl border border-white/5 bg-zinc-950 hover:border-indigo-500/30 hover:bg-zinc-950/80 transition-all duration-200 p-5 group"
-              >
-                <div className="flex items-start gap-4">
-                  {/* Icon */}
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-zinc-400 group-hover:text-indigo-400 transition-colors shrink-0">
-                    {review.status === 'running' ? (
-                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : review.status === 'completed' ? (
-                      <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    ) : review.status === 'failed' ? (
-                      <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="font-semibold text-white truncate">{pr?.title ?? 'Pull Request'}</span>
-                      <StatusBadge status={review.status} />
-                    </div>
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500 flex-wrap">
-                      <span className="text-indigo-400/80">{repo?.full_name}</span>
-                      <span>·</span>
-                      <span>PR #{pr?.pr_number}</span>
-                      {pr?.author && <><span>·</span><span>@{pr.author}</span></>}
-                      {pr?.additions !== undefined && (
-                        <>
-                          <span>·</span>
-                          <span className="text-emerald-500">+{pr.additions}</span>
-                          <span className="text-red-500">-{pr.deletions}</span>
-                          <span>({pr.changed_files} files)</span>
-                        </>
-                      )}
-                    </div>
-                    {review.status === 'failed' && review.error_message && (
-                      <p className="mt-1.5 text-xs text-red-400 truncate max-w-xl">{review.error_message}</p>
-                    )}
-                  </div>
-
-                  {/* Meta */}
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-zinc-500">{timeAgo(review.created_at)}</div>
-                    {duration !== null && (
-                      <div className="text-xs text-zinc-600 mt-0.5">{duration}s</div>
-                    )}
-                    <svg className="w-4 h-4 text-zinc-600 group-hover:text-indigo-400 transition-colors ml-auto mt-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {filtered.map((review) => (
+            <ReviewListItem key={review.id} review={review} />
+          ))}
         </div>
       )}
     </div>

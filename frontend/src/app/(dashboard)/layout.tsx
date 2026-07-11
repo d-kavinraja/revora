@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Sidebar } from '@/components/layout/sidebar';
+import { LoaderIcon } from '@/components/ui/loader-icon';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -24,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!hasHydrated || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#050508] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <LoaderIcon size={24} className="text-indigo-400" />
       </div>
     );
   }
