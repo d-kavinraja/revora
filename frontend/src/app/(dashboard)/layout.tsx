@@ -11,7 +11,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // Wait for client-side hydration from localStorage
   useEffect(() => {
     setHasHydrated(true);
   }, []);
@@ -24,16 +23,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!hasHydrated || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#050508] flex items-center justify-center">
-        <LoaderIcon size={24} className="text-indigo-400" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <LoaderIcon size={24} className="text-brand" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white flex">
+    <div className="min-h-screen bg-background text-foreground flex w-full">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 min-w-0 overflow-auto">
         {children}
       </main>
     </div>

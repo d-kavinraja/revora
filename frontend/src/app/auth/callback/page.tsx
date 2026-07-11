@@ -55,11 +55,11 @@ function CallbackHandler() {
 
       {error ? (
         <div className="space-y-4">
-          <div className="text-red-400 font-semibold text-lg">Authentication Failed</div>
-          <p className="text-zinc-500 text-sm">{error}</p>
+          <div className="text-error font-semibold text-lg">Authentication Failed</div>
+          <p className="text-muted-foreground text-sm">{error}</p>
           <button
             onClick={() => router.push('/login')}
-            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-colors border border-white/5"
+            className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-sm transition-colors border border-border"
           >
             Back to Login
           </button>
@@ -67,10 +67,10 @@ function CallbackHandler() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-center gap-2">
-            <LoaderIcon size={20} className="text-indigo-400" />
+            <LoaderIcon size={20} className="text-brand" />
             <span className="font-semibold text-lg">Authenticating with GitHub...</span>
           </div>
-          <p className="text-zinc-500 text-sm">Setting up your secure session.</p>
+          <p className="text-muted-foreground text-sm">Setting up your secure session.</p>
         </div>
       )}
     </div>
@@ -79,7 +79,7 @@ function CallbackHandler() {
 
 export default function AuthCallbackPage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#050508] text-white p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-6">
       <Suspense fallback={
         <div className="w-full max-w-sm text-center space-y-6">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-black text-2xl mx-auto shadow-[0_0_20px_rgba(59,130,246,0.4)]">
@@ -87,7 +87,7 @@ export default function AuthCallbackPage() {
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
-              <LoaderIcon size={20} className="text-indigo-400" />
+              <LoaderIcon size={20} className="text-brand" />
               <span className="font-semibold text-lg">Loading secure session...</span>
             </div>
           </div>

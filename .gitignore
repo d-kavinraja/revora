@@ -47,3 +47,6 @@ celerybeat-schedule
 .idea/
 .vscode/
 *.swp
+
+# MiMoCode
+.mimocode/

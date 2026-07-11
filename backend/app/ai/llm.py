@@ -41,12 +41,29 @@ class LLMService:
             model = f"gemini/{model}"
 
         # LiteLLM abstract call
-        response = completion(
-            model=model,
-            messages=messages,
-            api_key=api_key
-        )
-        
-        return response.choices[0].message.content
+        try:
+            response = completion(
+                model=model,
+                messages=messages,
+                api_key=api_key
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            error_str = str(e).lower()
+
+            if "429" in error_str or "rate" in error_str or "quota" in error_str:
+                raise RuntimeError("API rate limit exceeded or quota exhausted. Please check your API key credits.") from e
+            elif "401" in error_str or "unauthorized" in error_str:
+                raise RuntimeError("Invalid API key. Please update your API key in Settings > API Keys.") from e
+            elif "403" in error_str or "forbidden" in error_str:
+                raise RuntimeError("API access denied. Your API key may not have the required permissions.") from e
+            elif "404" in error_str or "not found" in error_str:
+                raise RuntimeError(f"Model '{model}' not found. Please check your provider settings.") from e
+            elif "timeout" in error_str:
+                raise RuntimeError("AI provider timed out. Please try again later.") from e
+            elif "connection" in error_str or "connect" in error_str:
+                raise RuntimeError("Unable to connect to AI provider. Please check your network connection.") from e
+            else:
+                raise RuntimeError(f"AI provider error: {e}") from e
 
 llm_service = LLMService()

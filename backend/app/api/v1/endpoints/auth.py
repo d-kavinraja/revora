@@ -45,7 +45,8 @@ async def login(
             "id": str(user.id),
             "email": user.email,
             "name": user.name,
-            "role": user.role
+            "role": user.role,
+            "image": user.avatar_url
         }
     }
 
@@ -177,6 +178,7 @@ async def github_login(
             "id": str(user.id),
             "email": user.email,
             "name": user.name,
-            "role": user.role
+            "role": user.role,
+            "image": user.avatar_url
         }
     }

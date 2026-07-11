@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { api, Repository } from '@/lib/api';
-import Link from 'next/link';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon } from '@animateicons/react/lucide';
+import { EmptyState } from '@/components/shared/empty-state';
+import { SkeletonList } from '@/components/shared/skeleton';
 
 function LangBadge({ lang }: { lang: string | null }) {
   if (!lang) return null;
@@ -16,7 +17,7 @@ function LangBadge({ lang }: { lang: string | null }) {
     Rust: 'bg-orange-500/15 text-orange-300',
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[lang] ?? 'bg-zinc-800 text-zinc-400'}`}>
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[lang] ?? 'bg-muted text-muted-foreground'}`}>
       {lang}
     </span>
   );
@@ -36,18 +37,18 @@ function RepositoryCard({ repo, syncingRepoId, handleSync }: { repo: Repository;
         folderRef.current?.stopAnimation();
         reviewsRef.current?.stopAnimation();
       }}
-      className="rounded-2xl border border-white/5 bg-zinc-950 hover:border-indigo-500/25 transition-all duration-200 p-6 group flex flex-col justify-between"
+      className="rounded-xl border border-border bg-surface-1 hover:border-brand/25 transition-all duration-150 p-5 group flex flex-col justify-between"
     >
       <div>
-        <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="flex items-start justify-between mb-2 gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <FolderIcon ref={folderRef} size={20} isAnimated={false} className="text-zinc-400 group-hover:text-indigo-400 transition-colors shrink-0" />
-            <span className="font-semibold text-white truncate">{repo.full_name}</span>
+            <FolderIcon ref={folderRef} size={18} isAnimated={false} className="text-muted-foreground group-hover:text-brand transition-colors shrink-0" />
+            <span className="font-semibold text-foreground text-sm truncate">{repo.full_name}</span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <LangBadge lang={repo.language} />
             {repo.is_private && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400">
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                 Private
               </span>
             )}
@@ -55,40 +56,40 @@ function RepositoryCard({ repo, syncingRepoId, handleSync }: { repo: Repository;
         </div>
 
         {repo.description && (
-          <p className="text-zinc-500 text-sm mb-4 line-clamp-2">{repo.description}</p>
+          <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{repo.description}</p>
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
-        <div className="flex items-center gap-4 text-sm text-zinc-500">
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            <ClipboardIcon ref={reviewsRef} size={16} isAnimated={false} />
+            <ClipboardIcon ref={reviewsRef} size={14} isAnimated={false} />
             {repo.total_reviews} reviews
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             disabled={syncingRepoId !== null}
             onClick={() => handleSync(repo.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-all cursor-pointer border border-white/5 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground rounded-lg text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-50"
           >
             {syncingRepoId === repo.id ? (
               <>
-                <LoaderIcon size={14} className="text-zinc-300" />
+                <LoaderIcon size={12} className="text-muted-foreground" />
                 Syncing...
               </>
             ) : (
               <>
-                <LoaderIcon size={14} className="text-zinc-300" />
-                Sync Historical Reviews
+                <LoaderIcon size={12} className="text-muted-foreground" />
+                Sync Reviews
               </>
             )}
           </button>
 
           <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${repo.reviews_enabled ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-            <span className="text-xs text-zinc-500">
+            <div className={`w-1.5 h-1.5 rounded-full ${repo.reviews_enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
+            <span className="text-xs text-muted-foreground">
               {repo.reviews_enabled ? 'Active' : 'Disabled'}
             </span>
           </div>
@@ -148,16 +149,16 @@ export default function RepositoriesPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Repositories</h1>
-          <p className="text-zinc-400 mt-1.5">Connected repositories from your GitHub App installation.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Repositories</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Connected repositories from your GitHub App installation.</p>
         </div>
         
         <div className="flex items-center gap-3">
           {syncMessage && (
-            <div className="px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-sm animate-fade-in">
+            <div className="px-3 py-1.5 rounded-lg bg-brand/10 text-brand border border-brand/20 text-sm animate-fade-in">
               {syncMessage}
             </div>
           )}
@@ -165,16 +166,16 @@ export default function RepositoriesPage() {
           <button
             onClick={handleSyncAll}
             disabled={isSyncingAll}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer"
           >
             {isSyncingAll ? (
               <>
-                <LoaderIcon size={16} className="text-white" />
-                Syncing list...
+                <LoaderIcon size={14} className="text-brand-foreground" />
+                Syncing...
               </>
             ) : (
               <>
-                <LoaderIcon size={16} className="text-white" />
+                <LoaderIcon size={14} className="text-brand-foreground" />
                 Sync from GitHub
               </>
             )}
@@ -183,33 +184,25 @@ export default function RepositoriesPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-36 rounded-2xl bg-zinc-950 border border-white/5 animate-pulse" />
-          ))}
-        </div>
+        <SkeletonList count={2} height="h-28" />
       ) : repos.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 p-20 text-center">
-          <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mx-auto mb-4">
-            <FolderIcon size={32} className="text-zinc-600" />
-          </div>
-          <p className="text-zinc-300 font-semibold text-lg">No repositories connected</p>
-          <p className="text-zinc-500 text-sm mt-2 max-w-sm mx-auto">
-            Install the Revora GitHub App and select repositories to start getting AI code reviews.
-          </p>
-          <div className="flex justify-center gap-4 mt-6">
+        <EmptyState
+          icon={<FolderIcon size={32} />}
+          title="No repositories connected"
+          description="Install the Revora GitHub App and select repositories to start getting AI code reviews."
+          action={
             <a
               href="https://github.com/apps"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-hover text-brand-foreground rounded-lg text-sm font-medium transition-colors"
             >
               Install GitHub App
             </a>
-          </div>
-        </div>
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {repos.map((repo) => (
             <RepositoryCard
               key={repo.id}
