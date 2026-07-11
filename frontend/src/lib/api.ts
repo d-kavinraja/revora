@@ -82,4 +82,5 @@ export const api = {
   getReview: (id: string) => apiClient.get<Review>(`/reviews/${id}`).then((r) => r.data),
   getRepositories: () => apiClient.get<Repository[]>('/repositories').then((r) => r.data),
   syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
+  syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),
 };

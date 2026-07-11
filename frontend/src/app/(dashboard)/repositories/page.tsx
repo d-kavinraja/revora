@@ -24,6 +24,7 @@ export default function RepositoriesPage() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const fetchRepos = () => {
@@ -40,7 +41,6 @@ export default function RepositoriesPage() {
     try {
       const result = await api.syncRepository(id);
       setSyncMessage(result.message);
-      // Refresh list to update review count
       fetchRepos();
       setTimeout(() => setSyncMessage(null), 5000);
     } catch (err: any) {
@@ -52,6 +52,23 @@ export default function RepositoriesPage() {
     }
   };
 
+  const handleSyncAll = async () => {
+    setIsSyncingAll(true);
+    setSyncMessage(null);
+    try {
+      const result = await api.syncAllRepositories();
+      setSyncMessage(result.message);
+      fetchRepos();
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err: any) {
+      console.error(err);
+      setSyncMessage(err.response?.data?.detail || 'Global sync failed.');
+      setTimeout(() => setSyncMessage(null), 5000);
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
@@ -60,12 +77,33 @@ export default function RepositoriesPage() {
           <p className="text-zinc-400 mt-1.5">Connected repositories from your GitHub App installation.</p>
         </div>
         
-        {/* Status Toast Banner */}
-        {syncMessage && (
-          <div className="px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-sm animate-fade-in">
-            {syncMessage}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {syncMessage && (
+            <div className="px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-sm animate-fade-in">
+              {syncMessage}
+            </div>
+          )}
+
+          <button
+            onClick={handleSyncAll}
+            disabled={isSyncingAll}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg cursor-pointer"
+          >
+            {isSyncingAll ? (
+              <>
+                <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin" />
+                Syncing list...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3m-3-3v12" />
+                </svg>
+                Sync from GitHub
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -85,14 +123,16 @@ export default function RepositoriesPage() {
           <p className="text-zinc-500 text-sm mt-2 max-w-sm mx-auto">
             Install the Revora GitHub App and select repositories to start getting AI code reviews.
           </p>
-          <a
-            href="https://github.com/apps"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            Install GitHub App
-          </a>
+          <div className="flex justify-center gap-4 mt-6">
+            <a
+              href="https://github.com/apps"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Install GitHub App
+            </a>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

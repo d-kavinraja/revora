@@ -18,6 +18,7 @@ from app.ai.state import ReviewState
 
 
 async def handle_installation_created(payload: Dict[str, Any], delivery_id: str):
+    print(f"[{delivery_id}] Handling installation.created event...")
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
     account = installation_payload.get("account", {})
@@ -53,6 +54,7 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
             await db.refresh(db_inst)
             print(f"Stored installation {inst_id} for user {user.email}")
 
+        # Add repositories in payload
         for r in payload.get("repositories", []):
             repo_gid = r.get("id")
             res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
@@ -67,6 +69,77 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
                     reviews_enabled=True
                 )
                 db.add(db_repo)
+                print(f"Created repository {r.get('full_name')} from installation payload.")
+        await db.commit()
+
+
+async def handle_installation_deleted(payload: Dict[str, Any], delivery_id: str):
+    print(f"[{delivery_id}] Handling installation.deleted event...")
+    installation_payload = payload.get("installation", {})
+    inst_id = installation_payload.get("id")
+
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        db_inst = res.scalars().first()
+        if db_inst:
+            # Delete linked repositories
+            repos_res = await db.execute(select(Repository).where(Repository.installation_id == db_inst.id))
+            repos = repos_res.scalars().all()
+            for r in repos:
+                await db.delete(r)
+                print(f"Deleted repository {r.full_name} due to app uninstallation.")
+            
+            await db.delete(db_inst)
+            await db.commit()
+            print(f"Successfully deleted installation {inst_id} and its repositories.")
+
+
+async def handle_installation_repositories(payload: Dict[str, Any], delivery_id: str):
+    print(f"[{delivery_id}] Handling installation_repositories event...")
+    installation_payload = payload.get("installation", {})
+    inst_id = installation_payload.get("id")
+    action = payload.get("action")
+
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        db_inst = res.scalars().first()
+        if not db_inst:
+            print(f"Installation {inst_id} not found in DB.")
+            return
+
+        # 1. Handle added repositories
+        for r in payload.get("repositories_added", []):
+            repo_gid = r.get("id")
+            res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+            db_repo = res.scalars().first()
+            if not db_repo:
+                db_repo = Repository(
+                    github_id=repo_gid,
+                    name=r.get("name"),
+                    full_name=r.get("full_name"),
+                    is_private=r.get("private", False),
+                    installation_id=db_inst.id,
+                    reviews_enabled=True
+                )
+                db.add(db_repo)
+                print(f"Added repository {r.get('full_name')} from repositories_added webhook event.")
+            else:
+                db_repo.installation_id = db_inst.id
+                db_repo.name = r.get("name")
+                db_repo.full_name = r.get("full_name")
+                db_repo.is_private = r.get("private", False)
+                db.add(db_repo)
+                print(f"Updated repository {r.get('full_name')} installation mapping.")
+
+        # 2. Handle removed repositories
+        for r in payload.get("repositories_removed", []):
+            repo_gid = r.get("id")
+            res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+            db_repo = res.scalars().first()
+            if db_repo:
+                await db.delete(db_repo)
+                print(f"Removed repository {r.get('full_name')} from database via webhook.")
+        
         await db.commit()
 
 
@@ -316,10 +389,18 @@ class GitHubWebhookService:
     @staticmethod
     async def process_webhook(event: str, action: str, payload: Dict[str, Any], delivery_id: str):
         print(f"Received webhook: event={event}, action={action}, delivery_id={delivery_id}")
+        
+        # Comprehensive log of incoming webhook request payloads for debugging sync issue
+        import json
+        print(f"Webhook payload detail:\n{json.dumps(payload, indent=2)}")
+
         handlers = {
             ("pull_request", "opened"): handle_pr_opened,
             ("pull_request", "reopened"): handle_pr_opened,
             ("installation", "created"): handle_installation_created,
+            ("installation", "deleted"): handle_installation_deleted,
+            ("installation_repositories", "added"): handle_installation_repositories,
+            ("installation_repositories", "removed"): handle_installation_repositories,
         }
         handler = handlers.get((event, action))
         if handler:

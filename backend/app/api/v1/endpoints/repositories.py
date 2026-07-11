@@ -68,6 +68,91 @@ async def list_repositories(
     return result
 
 
+@router.post("/sync-all", response_model=dict)
+async def sync_all_repositories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch and sync connected repositories directly from GitHub API for all installations of this user."""
+    # Get all installations for this user
+    installations_result = await db.execute(
+        select(Installation).where(Installation.user_id == current_user.id)
+    )
+    installations = installations_result.scalars().all()
+    
+    if not installations:
+        return {
+            "status": "success",
+            "message": "No installations found for this user. Please install the GitHub App first.",
+            "synced": []
+        }
+
+    synced_repos = []
+    async with httpx.AsyncClient() as client:
+        for inst in installations:
+            try:
+                # Retrieve Installation Access Token
+                token = await github_app_auth.get_installation_token(inst.installation_id)
+                
+                # Fetch repositories for this installation from GitHub
+                repos_res = await client.get(
+                    "https://api.github.com/installation/repositories",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    }
+                )
+                
+                if not repos_res.is_success:
+                    print(f"Failed to fetch repositories for installation {inst.installation_id}: {repos_res.text}")
+                    continue
+                
+                repos_data = repos_res.json().get("repositories", [])
+                for r in repos_data:
+                    repo_gid = r.get("id")
+                    res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+                    db_repo = res.scalars().first()
+                    
+                    if not db_repo:
+                        db_repo = Repository(
+                            github_id=repo_gid,
+                            name=r.get("name"),
+                            full_name=r.get("full_name"),
+                            description=r.get("description"),
+                            language=r.get("language"),
+                            is_private=r.get("private", False),
+                            installation_id=inst.id,
+                            reviews_enabled=True,
+                            last_synced_at=datetime.now(timezone.utc)
+                        )
+                        db.add(db_repo)
+                        print(f"Synced new repository {r.get('full_name')} from API.")
+                    else:
+                        db_repo.installation_id = inst.id
+                        db_repo.name = r.get("name")
+                        db_repo.full_name = r.get("full_name")
+                        db_repo.description = r.get("description")
+                        db_repo.language = r.get("language")
+                        db_repo.is_private = r.get("private", False)
+                        db_repo.last_synced_at = datetime.now(timezone.utc)
+                        db.add(db_repo)
+                        print(f"Updated repository {r.get('full_name')} from API.")
+                    
+                    synced_repos.append(r.get("full_name"))
+                    
+            except Exception as e:
+                print(f"Error syncing repositories for installation {inst.installation_id}: {e}")
+
+        await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Successfully synced {len(synced_repos)} repositories from GitHub.",
+        "synced": synced_repos
+    }
+
+
 @router.post("/{repo_id}/sync", response_model=dict)
 async def sync_repository(
     repo_id: str,
@@ -236,4 +321,3 @@ async def sync_repository(
     except Exception as e:
         print(f"Error syncing repository: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to sync repository: {e}")
-
