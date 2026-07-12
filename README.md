@@ -61,36 +61,36 @@ Revora's Context Engineering Engine:
 
 ```mermaid
 graph TB
-    subgraph Frontend["🖥️ Frontend — Next.js 16"]
+    subgraph Frontend["Frontend - Next.js 16"]
         UI[Dashboard & Review UI]
         SSE[Real-Time SSE Stream]
     end
 
-    subgraph Backend["⚙️ Backend — FastAPI"]
+    subgraph Backend["Backend - FastAPI"]
         WH[Webhook Receiver]
         PIPE[Review Pipeline Orchestrator]
     end
 
-    subgraph ContextEngine["🧠 Context Engineering Engine"]
+    subgraph ContextEngine["Context Engineering Engine"]
         direction TB
-        I1["📊 Repository Intelligence<br/>Languages, Frameworks, Architecture"]
-        I2["🔍 Repository Indexing<br/>AST, Import Graph, Call Graph"]
-        I3["📚 Knowledge Base<br/>Conventions, Rules, Summaries"]
-        I4["🎯 Context Retrieval<br/>RAG, Ranking, Compression"]
-        I5["📝 Prompt Builder<br/>Modular, Versioned Prompts"]
-        I6["🤖 LLM Orchestrator<br/>Multi-Provider with Fallbacks"]
-        I7["✅ Verification Engine<br/>File/Line/Hallucination Checks"]
-        I8["📋 Review Generator<br/>GitHub API Format"]
+        I1["Repository Intelligence - Languages, Frameworks, Architecture"]
+        I2["Repository Indexing - AST, Import Graph, Call Graph"]
+        I3["Knowledge Base - Conventions, Rules, Summaries"]
+        I4["Context Retrieval - RAG, Ranking, Compression"]
+        I5["Prompt Builder - Modular, Versioned Prompts"]
+        I6["LLM Orchestrator - Multi-Provider with Fallbacks"]
+        I7["Verification Engine - File/Line/Hallucination Checks"]
+        I8["Review Generator - GitHub API Format"]
     end
 
-    subgraph Data["💾 Data Layer"]
+    subgraph Data["Data Layer"]
         PG[(PostgreSQL)]
         RD[(Redis)]
     end
 
-    subgraph External["🌐 External"]
+    subgraph External["External"]
         GH[GitHub API]
-        LLM[LLM Providers<br/>Gemini / OpenAI / Claude / Groq / DeepSeek]
+        LLM[LLM Providers]
     end
 
     UI <--> SSE
@@ -157,7 +157,7 @@ sequenceDiagram
 <tr>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/🧠-Repository%20Intelligence-6366f1?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Repository%20Intelligence-6366f1?style=for-the-badge" /><br/>
 
 **Repository Intelligence**
 <br/><sub>Languages, frameworks, architecture, database, CI/CD, security patterns — all detected without LLM</sub>
@@ -165,7 +165,7 @@ sequenceDiagram
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/📊-Code%20Graphs-06b6d4?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Code%20Graphs-06b6d4?style=for-the-badge" /><br/>
 
 **Code Graph Indexing**
 <br/><sub>Import graphs, call graphs, module graphs, API graphs, DB models, test coverage maps</sub>
@@ -173,7 +173,7 @@ sequenceDiagram
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/🎯-Context%20Retrieval-10b981?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Context%20Retrieval-10b981?style=for-the-badge" /><br/>
 
 **Smart Context Retrieval**
 <br/><sub>Only relevant files retrieved. Token-budgeted, compressed, deduplicated context</sub>
@@ -183,15 +183,16 @@ sequenceDiagram
 <tr>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/🤖-Multi-Provider%20LLM-f59e0b?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Multi-Provider%20LLM-f59e0b?style=for-the-badge" /><br/>
 
-**Multi-Provider LLM**
-<br/><sub>Gemini, OpenAI, Claude, Groq, DeepSeek, Ollama — with fallbacks, retries, cost tracking</sub>
+**Multi-Provider LLM** `In Development`
+<br/><sub>Gemini, OpenAI, Claude, Groq, DeepSeek — with fallbacks, retries, cost tracking</sub>
+<br/><sub>Currently only **Gemini** is available. Other providers coming soon.</sub>
 
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/✅-Verification%20Engine-22c55e?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Verification%20Engine-22c55e?style=for-the-badge" /><br/>
 
 **Verification Engine**
 <br/><sub>Every finding verified: file exists, line exists, not hallucinated, confidence-scored</sub>
@@ -199,7 +200,7 @@ sequenceDiagram
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/📡-Real-Time%20SSE-8b5cf6?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Real-Time%20SSE-8b5cf6?style=for-the-badge" /><br/>
 
 **Real-Time Pipeline**
 <br/><sub>Watch every stage execute live — no black boxes, full transparency and explainability</sub>
@@ -209,7 +210,7 @@ sequenceDiagram
 <tr>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/🔒-Security%20First-ef4444?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Security%20%26%20Sanitization-ef4444?style=for-the-badge" /><br/>
 
 **Security & Sanitization**
 <br/><sub>Secret redaction, prompt injection detection, sandboxed repo cloning</sub>
@@ -217,15 +218,16 @@ sequenceDiagram
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/💰-BYOK%20Cost%20Control-f97316?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/BYOK%20Cost%20Control-f97316?style=for-the-badge" /><br/>
 
-**Bring Your Own Key**
+**Bring Your Own Key** `In Development`
 <br/><sub>Users provide their own API keys. Full cost transparency with token dashboards</sub>
+<br/><sub>API Keys UI page and backend management coming soon.</sub>
 
 </td>
 <td align="center" width="33%">
 
-<img src="https://img.shields.io/badge/🏗️-Enterprise%20Ready-6366f1?style=for-the-badge" /><br/>
+<img src="https://img.shields.io/badge/Enterprise%20Ready-6366f1?style=for-the-badge" /><br/>
 
 **Enterprise Ready**
 <br/><sub>Clean Architecture, SOLID principles, async workers, Docker deployment</sub>
@@ -236,19 +238,38 @@ sequenceDiagram
 
 ---
 
-## Supported LLM Providers
+## LLM Provider Support
 
 <table>
 <tr>
-<td align="center"><img src="https://img.shields.io/badge/Google%20Gemini-4285f4?style=for-the-badge&logo=google&logoColor=white" /><br/><sub>Default</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white" /><br/><sub>GPT-4o</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/Anthropic%20Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white" /><br/><sub>Claude Sonnet</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/Groq-6366f1?style=for-the-badge" /><br/><sub>Llama 3.3</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/DeepSeek-0066ff?style=for-the-badge" /><br/><sub>DeepSeek Chat</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Google%20Gemini-4285f4?style=for-the-badge&logo=google&logoColor=white" /><br/><sub>Available</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/OpenAI-Coming%20Soon-412991?style=for-the-badge&logo=openai&logoColor=white" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Anthropic%20Claude-Coming%20Soon-D97757?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Groq-Coming%20Soon-6366f1?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/DeepSeek-Coming%20Soon-0066ff?style=for-the-badge" /><br/><sub>In Development</sub></td>
 </tr>
 </table>
 
-All providers are accessed through **LiteLLM** with automatic fallbacks, retries, and rate limiting.
+> **Note:** Currently only **Google Gemini** is fully integrated and available for use. Multi-provider support (OpenAI, Claude, Groq, DeepSeek) is actively being developed. See [Issue #1](https://github.com/d-kavinraja/revora/issues/1) for progress.
+
+---
+
+## Roadmap & In Development
+
+The following features are actively being developed. Contributions are welcome — check the [Issues](https://github.com/d-kavinraja/revora/issues) tab to see what is being worked on:
+
+| Feature | Status | Issue |
+|---------|--------|-------|
+| Multi-Provider LLM Support (OpenAI, Claude, Groq, DeepSeek) | In Development | [#1](https://github.com/d-kavinraja/revora/issues/1) |
+| API Keys UI Page (Settings) | In Development | [#2](https://github.com/d-kavinraja/revora/issues/2) |
+| API Keys Backend Management | In Development | [#3](https://github.com/d-kavinraja/revora/issues/3) |
+| Repository Chat (AI Assistant) | Planned | [#4](https://github.com/d-kavinraja/revora/issues/4) |
+| Automatic Unit Test Generation | Planned | [#5](https://github.com/d-kavinraja/revora/issues/5) |
+| AI Documentation Generation | Planned | [#6](https://github.com/d-kavinraja/revora/issues/6) |
+| Automatic Patch Generation | Planned | [#7](https://github.com/d-kavinraja/revora/issues/7) |
+| Engineering Analytics Dashboard | Planned | [#8](https://github.com/d-kavinraja/revora/issues/8) |
+| CLI Tool | Planned | [#9](https://github.com/d-kavinraja/revora/issues/9) |
+| IDE Plugins (VS Code, JetBrains) | Planned | [#10](https://github.com/d-kavinraja/revora/issues/10) |
 
 ---
 
@@ -298,34 +319,34 @@ All providers are accessed through **LiteLLM** with automatic fallbacks, retries
 ## Context Engineering Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    REVORA CONTEXT ENGINEERING FLOW                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐     │
-│  │  📊 Repo  │───▶│ 🔍 Index │───▶│ 📚 Know  │───▶│ 🎯 RAG   │     │
-│  │ Intelligence│  │  Graphs  │    │  Base    │    │ Retrieve │     │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘     │
-│       │                │               │               │            │
-│       ▼                ▼               ▼               ▼            │
-│  Languages       Import Graph    Conventions     Ranked Files      │
-│  Frameworks      Call Graph      Rules           Compressed        │
-│  Architecture    Module Graph    Summaries       Token-Budgeted    │
-│  Database        API Graph       ADRs            Deduplicated      │
-│  CI/CD           DB Graph        Learnings                        │
-│                                                                     │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐     │
-│  │ 📝 Prompt │───▶│ 🤖 LLM   │───▶│ ✅ Verify│───▶│ 📋 GitHub│     │
-│  │  Builder  │    │Orchestr.│    │  Engine  │    │  Review  │     │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘     │
-│       │                │               │               │            │
-│       ▼                ▼               ▼               ▼            │
-│  System Prompt    Multi-Provider  File Exists     PR Comments      │
-│  Repo Context     Fallbacks       Line Exists     Risk Score       │
-│  Diff Content     Retries         Not Duplicate   Suggestions      │
-│  Related Files    Cost Tracking   Confidence      Summary          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------+
+|                    REVORA CONTEXT ENGINEERING FLOW                     |
++-----------------------------------------------------------------------+
+|                                                                       |
+|  +----------+    +----------+    +----------+    +----------+         |
+|  | Repo     |--->| Index    |--->| Know     |--->| RAG      |         |
+|  | Intelligence|  | Graphs   |   | Base     |   | Retrieve |         |
+|  +----------+    +----------+    +----------+    +----------+         |
+|       |               |              |              |                  |
+|       v               v              v              v                  |
+|  Languages       Import Graph   Conventions    Ranked Files           |
+|  Frameworks      Call Graph     Rules          Compressed             |
+|  Architecture    Module Graph   Summaries      Token-Budgeted         |
+|  Database        API Graph      ADRs           Deduplicated           |
+|  CI/CD           DB Graph       Learnings                             |
+|                                                                       |
+|  +----------+    +----------+    +----------+    +----------+         |
+|  | Prompt   |--->| LLM      |--->| Verify   |--->| GitHub   |         |
+|  | Builder  |    |Orchestr. |    | Engine   |    | Review   |         |
+|  +----------+    +----------+    +----------+    +----------+         |
+|       |               |              |              |                  |
+|       v               v              v              v                  |
+|  System Prompt   Multi-Provider File Exists    PR Comments            |
+|  Repo Context    Fallbacks      Line Exists    Risk Score             |
+|  Diff Content    Retries        Not Duplicate  Suggestions            |
+|  Related Files   Cost Tracking  Confidence     Summary                |
+|                                                                       |
++-----------------------------------------------------------------------+
 ```
 
 ---
@@ -341,20 +362,20 @@ revora/
 │   │   ├── core/                # Auth, config, security, dependencies
 │   │   ├── db/                  # SQLAlchemy engine & session
 │   │   ├── github/              # GitHub App auth, client, webhooks
-│   │   ├── intelligence/        # 🧠 Repository Intelligence Engine
-│   │   ├── indexing/            # 🔍 Code Graph Indexing
-│   │   ├── knowledge/           # 📚 Knowledge Base
+│   │   ├── intelligence/        # Repository Intelligence Engine
+│   │   ├── indexing/            # Code Graph Indexing
+│   │   ├── knowledge/           # Knowledge Base
 │   │   ├── models/              # SQLAlchemy ORM models
-│   │   ├── orchestrator/        # 🤖 LLM Orchestrator
-│   │   ├── pipeline/            # 🔗 Review Pipeline Orchestrator
-│   │   ├── prompt_engine/       # 📝 Prompt Builder
-│   │   ├── retrieval/           # 🎯 Context Retrieval Engine
-│   │   ├── security/            # 🔒 Sanitization & injection detection
+│   │   ├── orchestrator/        # LLM Orchestrator
+│   │   ├── pipeline/            # Review Pipeline Orchestrator
+│   │   ├── prompt_engine/       # Prompt Builder
+│   │   ├── retrieval/           # Context Retrieval Engine
+│   │   ├── security/            # Sanitization & injection detection
 │   │   ├── schemas/             # Pydantic request/response schemas
 │   │   ├── services/            # Business logic services
-│   │   ├── sse/                 # 📡 Server-Sent Events
-│   │   ├── verification/        # ✅ Finding Verification Engine
-│   │   ├── github_review/       # 📋 GitHub Review Generator
+│   │   ├── sse/                 # Server-Sent Events
+│   │   ├── verification/        # Finding Verification Engine
+│   │   ├── github_review/       # GitHub Review Generator
 │   │   └── worker/              # Celery background tasks
 │   ├── alembic/                 # Database migrations
 │   └── requirements.txt
@@ -379,34 +400,15 @@ revora/
 
 Revora does not show a loading spinner. Users watch every pipeline stage execute live:
 
-<table>
-<tr>
-<td align="center">
-
-**Pipeline Timeline**
-<br/><sub>30+ stages with status indicators</sub>
-
-</td>
-<td align="center">
-
-**Live Log Stream**
-<br/><sub>Real-time SSE event streaming</sub>
-
-</td>
-<td align="center>
-
-**Token Dashboard**
-<br/><sub>Input/output tokens, cost, latency</sub>
-
-</td>
-</tr>
-</table>
+- **Pipeline Timeline** — 30+ stages with status indicators
+- **Live Log Stream** — Real-time SSE event streaming
+- **Token Dashboard** — Input/output tokens, cost, latency
 
 Each stage exposes:
-- ⏳ **Status** — Waiting / Running / Completed / Failed / Skipped
-- ⏱️ **Duration** — Execution time per stage
-- 📊 **Metrics** — Files scanned, tokens used, context size
-- 📝 **Logs** — Detailed execution logs
+- **Status** — Waiting / Running / Completed / Failed / Skipped
+- **Duration** — Execution time per stage
+- **Metrics** — Files scanned, tokens used, context size
+- **Logs** — Detailed execution logs
 
 ---
 
@@ -453,7 +455,7 @@ npm run dev
 
 ## Contributing
 
-We welcome contributions! Please see our contributing guidelines.
+We welcome contributions! Check the [Issues](https://github.com/d-kavinraja/revora/issues) tab for open tasks.
 
 1. **Fork** the repository
 2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
@@ -471,7 +473,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <div align="center">
 
-**Built with ❤️ by [Kavinraja.D](https://github.com/d-kavinraja)**
+**Built with care by [Kavinraja.D](https://github.com/d-kavinraja)**
 
 <img src="https://img.shields.io/badge/Revora-Context%20Engineering%20Platform-6366f1?style=for-the-badge&logo=github&logoColor=white" />
 
