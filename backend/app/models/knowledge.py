@@ -14,7 +14,7 @@ class RepositoryKnowledge(Base):
     repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"), index=True, nullable=False)
     knowledge_type: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    extra_metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
