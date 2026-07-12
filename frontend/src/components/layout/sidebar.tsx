@@ -31,7 +31,7 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: s
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isActive
-          ? 'bg-brand/15 text-brand-foreground shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
+          ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
           : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
       }`}
     >
@@ -58,7 +58,7 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isActive
-          ? 'bg-brand/15 text-brand-foreground shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
+          ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
           : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
       }`}
     >
@@ -127,11 +127,11 @@ export function Sidebar() {
         <div className={`p-4 border-b border-sidebar-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-brand to-purple-600 flex items-center justify-center shadow-[0_0_16px_rgba(99,102,241,0.3)] shrink-0 overflow-hidden">
-                <span className="flex items-center justify-center w-4 h-4">
-                  <LoaderIcon size={16} className="text-white" />
-                </span>
-              </div>
+              <img
+                src="/revora-logo.png"
+                alt="Revora Logo"
+                className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+              />
               <div className="min-w-0">
                 <span className="font-bold text-lg tracking-tight text-foreground block leading-tight">Revora</span>
                 <div className="text-[10px] text-brand font-medium flex items-center gap-1 leading-tight">

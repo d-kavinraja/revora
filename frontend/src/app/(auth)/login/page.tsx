@@ -29,9 +29,11 @@ export default function LoginPage() {
         className="w-full max-w-md p-8 bg-surface-1/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/30 z-10"
       >
         <div className="text-center mb-8">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-blue-500 via-brand to-purple-600 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]">
-            <LoaderIcon size={20} className="text-white" />
-          </div>
+          <img
+            src="/revora-logo.png"
+            alt="Revora Logo"
+            className="w-12 h-12 mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+          />
           <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
           <p className="text-muted-foreground mt-2">Sign in to your Revora account</p>
         </div>
@@ -47,9 +49,20 @@ export default function LoginPage() {
           Sign in with GitHub
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Username and password login coming soon.
-        </p>
+        <div className="overflow-hidden w-full mt-6 border-t border-border pt-4 relative h-8 flex items-center">
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: '-100%' }}
+            transition={{
+              repeat: Infinity,
+              ease: 'linear',
+              duration: 8,
+            }}
+            className="absolute whitespace-nowrap text-xs text-muted-foreground font-medium"
+          >
+            📢 Notice: Username and password login coming soon.
+          </motion.div>
+        </div>
       </motion.div>
     </div>
   );

@@ -49,9 +49,11 @@ function CallbackHandler() {
 
   return (
     <div className="w-full max-w-sm text-center space-y-6">
-      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-black text-2xl mx-auto shadow-[0_0_20px_rgba(59,130,246,0.4)]">
-        R
-      </div>
+      <img
+        src="/revora-logo.png"
+        alt="Revora Logo"
+        className="w-14 h-14 rounded-2xl object-contain mx-auto shadow-[0_0_20px_rgba(59,130,246,0.4)]"
+      />
 
       {error ? (
         <div className="space-y-4">
@@ -82,9 +84,11 @@ export default function AuthCallbackPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-6">
       <Suspense fallback={
         <div className="w-full max-w-sm text-center space-y-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-black text-2xl mx-auto shadow-[0_0_20px_rgba(59,130,246,0.4)]">
-            R
-          </div>
+          <img
+            src="/revora-logo.png"
+            alt="Revora Logo"
+            className="w-14 h-14 rounded-2xl object-contain mx-auto shadow-[0_0_20px_rgba(59,130,246,0.4)]"
+          />
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
               <LoaderIcon size={20} className="text-brand" />
