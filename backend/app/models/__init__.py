@@ -4,8 +4,15 @@ from app.models.organization import Organization, OrgMember
 from app.models.team import Team, TeamMember
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review, ReviewComment
+from app.models.knowledge import (
+    RepositoryKnowledge,
+    RepositoryRule,
+    RepositoryIndex,
+    RepositoryIntelligence,
+    ReviewEvent,
+    ReviewMetrics,
+)
 
-# Ensure all models are imported here so Alembic can discover them
 __all__ = [
     "User",
     "ApiKey",
@@ -18,4 +25,10 @@ __all__ = [
     "PullRequest",
     "Review",
     "ReviewComment",
+    "RepositoryKnowledge",
+    "RepositoryRule",
+    "RepositoryIndex",
+    "RepositoryIntelligence",
+    "ReviewEvent",
+    "ReviewMetrics",
 ]
