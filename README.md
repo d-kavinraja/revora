@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Revora-AI%20Code%20Review-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="Revora Banner" />
+<img src="banner/revora-banner.png" alt="Revora Banner" width="100%" />
 
 # **Revora**
  
