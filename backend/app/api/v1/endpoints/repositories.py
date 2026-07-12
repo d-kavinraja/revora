@@ -207,6 +207,7 @@ async def sync_repository(
             gh_pulls = pulls_res.json()
             imported_prs = 0
             imported_reviews = 0
+            triggered_reviews = 0
 
             for gh_pr in gh_pulls:
                 pr_number = gh_pr["number"]
@@ -266,6 +267,7 @@ async def sync_repository(
 
                 # 2. Fetch Reviews for this PR to import bot reviews (Revora, CodeRabbit, etc.)
                 reviews_res = await client.get(f"{pulls_url}/{pr_number}/reviews", headers=headers)
+                has_bot_review = False
                 if reviews_res.is_success:
                     gh_reviews = reviews_res.json()
                     for gh_review in gh_reviews:
@@ -283,6 +285,7 @@ async def sync_repository(
                         )
                         
                         if is_bot and body.strip():
+                            has_bot_review = True
                             # Check if we already imported this review
                             rev_check = await db.execute(
                                 select(Review).where(
@@ -308,6 +311,41 @@ async def sync_repository(
                                 await db.commit()
                                 imported_reviews += 1
 
+                # Check if we have any review (completed, failed, or running) for this PR locally
+                local_rev_check = await db.execute(
+                    select(Review).where(Review.pr_id == db_pr.id)
+                )
+                local_review = local_rev_check.scalars().first()
+
+                if not has_bot_review and not local_review:
+                    # Trigger Revora review pipeline in background
+                    import asyncio
+                    from app.github.webhooks import run_pr_review_pipeline
+                    
+                    payload = {
+                        "installation": {"id": installation.installation_id},
+                        "repository": {
+                            "owner": {"login": owner},
+                            "name": repo_name,
+                            "full_name": repo.full_name,
+                            "private": repo.is_private,
+                            "id": repo.github_id,
+                        },
+                        "pull_request": {
+                            "number": pr_number,
+                            "title": title,
+                            "body": gh_pr.get("body", "") or "",
+                            "head": {"sha": head_sha, "ref": head_branch},
+                            "base": {"ref": base_branch},
+                            "user": {"login": author},
+                            "additions": additions,
+                            "deletions": deletions,
+                            "changed_files": changed_files,
+                        }
+                    }
+                    asyncio.create_task(run_pr_review_pipeline(payload, f"sync-{pr_number}"))
+                    triggered_reviews += 1
+
             # Update last synced time
             repo.last_synced_at = datetime.now(timezone.utc)
             db.add(repo)
@@ -315,7 +353,7 @@ async def sync_repository(
 
             return {
                 "status": "success",
-                "message": f"Successfully synced repository. Imported {imported_prs} PRs and {imported_reviews} bot reviews."
+                "message": f"Successfully synced repository. Synced {imported_prs} PRs, imported {imported_reviews} bot reviews, and triggered {triggered_reviews} new reviews in the background."
             }
 
     except Exception as e:
