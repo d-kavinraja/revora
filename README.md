@@ -3,8 +3,8 @@
 <img src="https://img.shields.io/badge/Revora-AI%20Code%20Review-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="Revora Banner" />
 
 # **Revora**
-
-### The Open-Source Context Engineering Platform for AI Code Reviews
+ 
+### The Open-Source AI Agent Code Reviewer for Modern Software Engineering
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -18,7 +18,11 @@
 
 ---
 
-**Revora** is not another AI code review tool that reads diffs. It is a **Context Engineering Platform** that builds deep repository understanding before reasoning — understanding architecture, dependencies, conventions, and developer intent to deliver enterprise-grade reviews.
+**Revora** is an open-source AI Agent Code Reviewer built for modern software engineering teams.
+
+Unlike traditional AI code review tools that analyze only pull request diffs, Revora employs a repository-aware Context Engineering architecture to understand the entire codebase before generating reviews.
+
+By combining Repository Intelligence, Context Engineering, Multi-Agent AI, Verification, and Bring Your Own API Key (BYOK), Revora delivers explainable, high-confidence, enterprise-grade code reviews while giving developers complete control over their AI providers and costs.
 
 </div>
 
