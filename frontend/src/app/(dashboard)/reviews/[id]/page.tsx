@@ -147,15 +147,40 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {review.status === 'failed' && (
-        <div className="rounded-xl border border-error/20 bg-error/5 p-5 mb-5">
-          <div className="flex items-start gap-3">
-            <TriangleAlertIcon size={18} className="text-error shrink-0 mt-0.5" />
+        <div className="rounded-xl border border-error/30 bg-surface-1 overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border bg-error/5">
+            <div className="w-6 h-6 rounded-md bg-error/15 flex items-center justify-center shrink-0 text-error">
+              <TriangleAlertIcon size={12} className="text-error animate-pulse" />
+            </div>
             <div>
-              <p className="text-error font-semibold">Review Failed</p>
-              {review.error_message && (
-                <p className="text-muted-foreground text-sm mt-1 font-mono">{review.error_message}</p>
+              <span className="text-sm font-semibold text-error">AI Review Failed</span>
+              {review.stats && (review.stats as Record<string, string>).provider && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  {(review.stats as Record<string, string>).provider} · {(review.stats as Record<string, string>).model}
+                </span>
               )}
             </div>
+          </div>
+          <div className="p-5 md:p-6 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground mb-2">Error Details</h3>
+              <div className="p-4 bg-surface-2 border border-border rounded-lg text-xs font-mono text-error/90 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                {review.error_message || 'An unknown error occurred during execution.'}
+              </div>
+            </div>
+            {review.stats && Object.keys(review.stats).length > 0 && (
+              <div>
+                <h3 className="text-sm font-bold text-foreground mb-2">Execution Metrics</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-surface-2/50 border border-border rounded-lg p-3 text-xs">
+                  {Object.entries(review.stats).map(([key, val]) => (
+                    <div key={key} className="flex flex-col">
+                      <span className="text-muted-foreground uppercase text-[10px] tracking-wide">{key.replace(/_/g, ' ')}</span>
+                      <span className="font-semibold text-foreground mt-0.5">{String(val)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

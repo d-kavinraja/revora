@@ -69,7 +69,9 @@ function ReviewListItem({ review }: { review: Review }) {
             )}
           </div>
           {review.status === 'failed' && review.error_message && (
-            <p className="mt-1 text-xs text-error truncate max-w-xl">{review.error_message}</p>
+            <div className="mt-2 p-2.5 bg-error/5 border border-error/20 rounded-lg text-xs font-mono text-error/90 whitespace-pre-wrap break-all">
+              {review.error_message}
+            </div>
           )}
         </div>
 

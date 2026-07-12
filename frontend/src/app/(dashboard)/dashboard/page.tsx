@@ -85,6 +85,11 @@ function ReviewItem({ review }: { review: Review }) {
             <span className="text-border">·</span>
             <span>{timeAgo(review.created_at)}</span>
           </div>
+          {review.status === 'failed' && review.error_message && (
+            <div className="mt-2 p-2.5 bg-error/5 border border-error/20 rounded-lg text-xs font-mono text-error/90 whitespace-pre-wrap break-all">
+              {review.error_message}
+            </div>
+          )}
         </div>
         <MoveRightIcon ref={arrowRef} size={16} isAnimated={false} className="text-border group-hover:text-brand transition-colors shrink-0 mt-2" />
       </div>
