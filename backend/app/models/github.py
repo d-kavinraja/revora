@@ -3,9 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy import String, Boolean, BigInteger, ForeignKey, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.db.base import Base
+from app.db.base import Base, JSON_TYPE
 
 class Installation(Base):
     __tablename__ = "installations"
@@ -16,8 +14,8 @@ class Installation(Base):
     account_type: Mapped[str] = mapped_column(String(20), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     repository_selection: Mapped[str] = mapped_column(String(20), nullable=False)
-    permissions: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    events: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    permissions: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    events: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
@@ -37,7 +35,7 @@ class Repository(Base):
     installation_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("installations.id", ondelete="SET NULL"), index=True, nullable=True)
     org_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("organizations.id", ondelete="SET NULL"), index=True, nullable=True)
     reviews_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    settings: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default='{}')
+    settings: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
     last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships

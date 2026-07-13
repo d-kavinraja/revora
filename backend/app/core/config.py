@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db"
-    
-    # Redis / Celery
-    REDIS_URL: str = "redis://localhost:6379/0"
+
     
     # GitHub App
     GITHUB_CLIENT_ID: Optional[str] = None

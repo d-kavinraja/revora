@@ -29,11 +29,15 @@ target_metadata = Base.metadata
 
 import os
 from dotenv import load_dotenv
+from app.db.session import is_db_connectable
 
 load_dotenv()
 
 def get_url():
-    return os.getenv("DATABASE_URL", "postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db")
+    url = os.getenv("DATABASE_URL", "postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db")
+    if not is_db_connectable(url):
+        url = "sqlite+aiosqlite:///./revora.db"
+    return url
 
 
 def run_migrations_offline() -> None:
