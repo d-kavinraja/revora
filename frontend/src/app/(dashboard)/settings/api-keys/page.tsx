@@ -290,7 +290,7 @@ export default function ApiKeysSettingsPage() {
                             ) : (
                               <TriangleAlertIcon size={12} />
                             )}
-                            {key.is_valid ? 'Valid' : 'Invalid'}
+                            {key.is_valid ? 'Active' : 'Inactive'}
                           </span>
                         )}
                       </div>
