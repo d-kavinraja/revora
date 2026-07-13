@@ -6,7 +6,7 @@ import {
   KeyIcon, 
   TrashIcon, 
   PlusIcon, 
-  RefreshCwIcon, 
+  LoaderCircleIcon, 
   CircleCheckIcon, 
   TriangleAlertIcon, 
   EyeIcon, 
@@ -312,7 +312,7 @@ export default function ApiKeysSettingsPage() {
                         className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
                         title="Test key connectivity"
                       >
-                        <RefreshCwIcon 
+                        <LoaderCircleIcon 
                           ref={(el) => { refreshIconRefs.current[key.id] = el; }} 
                           size={14} 
                           isAnimated={false} 
