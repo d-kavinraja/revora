@@ -3,9 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy import String, ForeignKey, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.db.base import Base
+from app.db.base import Base, JSON_TYPE
 
 class Review(Base):
     __tablename__ = "reviews"
@@ -13,7 +11,7 @@ class Review(Base):
     pr_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pull_requests.id", ondelete="CASCADE"), index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    stats: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default='{}')
+    stats: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)

@@ -6,8 +6,7 @@ asyncpg
 psycopg2-binary
 pydantic
 pydantic-settings
-celery
-redis
+aiosqlite
 passlib[bcrypt]
 PyJWT
 cryptography

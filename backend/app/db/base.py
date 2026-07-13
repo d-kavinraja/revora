@@ -2,10 +2,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, Uuid, JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB
+
+JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
 
 # Use a consistent naming convention for metadata
 # This helps Alembic auto-generate migrations reliably
@@ -24,7 +26,7 @@ class Base(DeclarativeBase):
     
     # Common columns for all models
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4
     )

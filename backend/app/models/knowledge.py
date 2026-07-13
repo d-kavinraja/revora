@@ -3,9 +3,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy import String, Text, Boolean, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.db.base import Base
+from app.db.base import Base, JSON_TYPE
 
 
 class RepositoryKnowledge(Base):
@@ -14,7 +12,7 @@ class RepositoryKnowledge(Base):
     repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"), index=True, nullable=False)
     knowledge_type: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    extra_metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    extra_metadata: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default="{}")
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
@@ -32,8 +30,8 @@ class RepositoryIndex(Base):
     __tablename__ = "repository_indexes"
 
     repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"), index=True, nullable=False)
-    index_data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    graphs: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    index_data: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    graphs: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default="{}")
     commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
 
@@ -41,7 +39,7 @@ class RepositoryIntelligence(Base):
     __tablename__ = "repository_intelligence"
 
     repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repositories.id", ondelete="CASCADE"), index=True, nullable=False)
-    intelligence_data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    intelligence_data: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
 
@@ -53,7 +51,7 @@ class ReviewEvent(Base):
     stage: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metrics: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    metrics: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default="{}")
     progress: Mapped[Optional[float]] = mapped_column(nullable=True)
     duration_ms: Mapped[Optional[float]] = mapped_column(nullable=True)
 
@@ -76,4 +74,4 @@ class ReviewMetrics(Base):
     provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     total_duration_ms: Mapped[Optional[float]] = mapped_column(nullable=True)
-    stages: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    stages: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default="{}")

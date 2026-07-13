@@ -50,3 +50,10 @@ celerybeat-schedule
 
 # MiMoCode
 .mimocode/
+
+# Local databases and agents
+*.db
+.agents/
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md

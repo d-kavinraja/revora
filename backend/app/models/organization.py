@@ -3,9 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy import String, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.db.base import Base
+from app.db.base import Base, JSON_TYPE
 
 class Organization(Base):
     __tablename__ = "organizations"
@@ -15,7 +13,7 @@ class Organization(Base):
     description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    settings: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default='{}')
+    settings: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
 
     # Relationships
     members: Mapped[List["OrgMember"]] = relationship("OrgMember", back_populates="organization", cascade="all, delete-orphan")

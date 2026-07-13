@@ -1,9 +1,7 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy import String, Boolean, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.db.base import Base
+from app.db.base import Base, JSON_TYPE
 
 class User(Base):
     __tablename__ = "users"
@@ -17,7 +15,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     default_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    settings: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, server_default='{}')
+    settings: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
 
     # Relationships
     api_keys: Mapped[List["ApiKey"]] = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
