@@ -260,17 +260,26 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
         )
         check_run_id = check_run.get("id")
 
-        # Determine AI provider
-        from app.core.config import settings
-        if settings.GEMINI_API_KEY:
-            provider = "gemini"
-            model = "gemini-3.1-flash-lite"
-        elif settings.OPENAI_API_KEY:
-            provider = "openai"
-            model = "gpt-4o"
-        else:
-            provider = "gemini"
-            model = "gemini-3.1-flash-lite"
+        # Determine AI provider/model — repo config takes priority
+        provider = None
+        model = None
+
+        if db_repo and db_repo.settings:
+            provider = db_repo.settings.get("assigned_provider")
+            model = db_repo.settings.get("assigned_model")
+
+        # Fallback to env defaults
+        if not provider or not model:
+            from app.core.config import settings
+            if settings.GEMINI_API_KEY:
+                provider = "gemini"
+                model = "gemini-2.5-flash"
+            elif settings.OPENAI_API_KEY:
+                provider = "openai"
+                model = "gpt-4o"
+            else:
+                provider = "gemini"
+                model = "gemini-2.5-flash"
 
         # Run AI graph
         initial_state = ReviewState(

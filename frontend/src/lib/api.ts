@@ -66,6 +66,10 @@ export interface Repository {
   reviews_enabled: boolean;
   total_reviews: number;
   last_synced_at: string | null;
+  settings?: {
+    assigned_provider?: string;
+    assigned_model?: string;
+  };
 }
 
 export interface DashboardStats {
@@ -118,6 +122,9 @@ export const api = {
   deleteApiKey: (id: string) => apiClient.delete<void>(`/api-keys/${id}`).then((r) => r.data),
   testApiKey: (id: string) => apiClient.post<{ status: string; message: string }>(`/api-keys/${id}/test`).then((r) => r.data),
   getThemeConfig: () => apiClient.get<ThemeConfig>('/ui/settings/theme').then((r) => r.data),
-  validateForm: (data: { provider: string; api_key: string; label: string }) => 
+  validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
+  getAvailableModels: () => apiClient.get<Record<string, string[]>>('/repositories/available-models').then((r) => r.data),
+  updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; reviews_enabled?: boolean }) =>
+    apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
 };
