@@ -12,6 +12,7 @@ class ReviewState(TypedDict):
     user_id: str
     provider: str
     model: Optional[str]
+    api_key_id: Optional[str]
     
     # Agent Outputs
     bug_analysis: List[str]

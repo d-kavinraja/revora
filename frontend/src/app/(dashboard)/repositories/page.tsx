@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, Repository } from '@/lib/api';
+import { api, Repository, ApiKey } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon } from '@animateicons/react/lucide';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -26,16 +26,21 @@ function LangBadge({ lang }: { lang: string | null }) {
 function ConfigModal({
   repo,
   availableModels,
+  apiKeys,
   onClose,
   onSave,
 }: {
   repo: Repository;
   availableModels: Record<string, string[]>;
+  apiKeys: ApiKey[];
   onClose: () => void;
-  onSave: (config: { assigned_provider?: string; assigned_model?: string; reviews_enabled?: boolean }) => void;
+  onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => void;
 }) {
   const providers = Object.keys(availableModels);
   const [selectedProvider, setSelectedProvider] = useState(repo.settings?.assigned_provider || (providers[0] ?? ''));
+  
+  const providerKeys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
+  const [selectedKeyId, setSelectedKeyId] = useState(repo.settings?.assigned_key_id || (providerKeys[0]?.id ?? ''));
   const [selectedModel, setSelectedModel] = useState(repo.settings?.assigned_model || '');
   const [reviewsEnabled, setReviewsEnabled] = useState(repo.reviews_enabled);
   const [saving, setSaving] = useState(false);
@@ -47,10 +52,23 @@ function ConfigModal({
     if (providers.length > 0 && !selectedProvider) {
       const initialProvider = repo.settings?.assigned_provider || providers[0];
       setSelectedProvider(initialProvider);
+      const keys = apiKeys.filter(k => k.provider.toLowerCase() === initialProvider.toLowerCase() && k.is_valid);
+      const initialKey = repo.settings?.assigned_key_id || keys[0]?.id || '';
+      setSelectedKeyId(initialKey);
       const initialModels = availableModels[initialProvider] || [];
       setSelectedModel(repo.settings?.assigned_model || initialModels[0] || '');
     }
-  }, [availableModels, providers, repo.settings?.assigned_provider, repo.settings?.assigned_model]);
+  }, [availableModels, apiKeys, providers, repo.settings?.assigned_provider, repo.settings?.assigned_model, repo.settings?.assigned_key_id]);
+
+  useEffect(() => {
+    const keys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
+    const hasCurrentKey = keys.some(k => k.id === selectedKeyId);
+    if (!hasCurrentKey && keys.length > 0) {
+      setSelectedKeyId(keys[0].id);
+    } else if (keys.length === 0) {
+      setSelectedKeyId('');
+    }
+  }, [selectedProvider, apiKeys, selectedKeyId]);
 
   useEffect(() => {
     if (selectedProvider && models.length > 0 && !models.includes(selectedModel)) {
@@ -67,6 +85,7 @@ function ConfigModal({
     await onSave({
       assigned_provider: selectedProvider || undefined,
       assigned_model: selectedModel || undefined,
+      assigned_key_id: selectedKeyId || undefined,
       reviews_enabled: reviewsEnabled,
     });
     setSaving(false);
@@ -109,6 +128,24 @@ function ConfigModal({
                 ))}
               </select>
             </div>
+
+            {/* API Key Selector */}
+            {providerKeys.length > 0 && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
+                <select
+                  value={selectedKeyId}
+                  onChange={(e) => setSelectedKeyId(e.target.value)}
+                  className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
+                >
+                  {providerKeys.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.label} ({k.masked_key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Model Selector */}
             <div>
@@ -158,11 +195,13 @@ function RepositoryCard({
   syncingRepoId,
   handleSync,
   onConfigure,
+  apiKeys,
 }: {
   repo: Repository;
   syncingRepoId: string | null;
   handleSync: (id: string) => void;
   onConfigure: (repo: Repository) => void;
+  apiKeys: ApiKey[];
 }) {
   const folderRef = useRef<any>(null);
   const reviewsRef = useRef<any>(null);
@@ -170,6 +209,9 @@ function RepositoryCard({
 
   const assignedModel = repo.settings?.assigned_model;
   const assignedProvider = repo.settings?.assigned_provider;
+  const assignedKeyId = repo.settings?.assigned_key_id;
+  const keyObj = apiKeys.find(k => k.id === assignedKeyId);
+  const keyLabel = keyObj ? ` (${keyObj.label})` : '';
 
   return (
     <div
@@ -208,7 +250,7 @@ function RepositoryCard({
         {assignedModel && (
           <div className="mb-3">
             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand/10 text-brand border border-brand/20">
-              {assignedProvider}: {assignedModel}
+              {assignedProvider}: {assignedModel}{keyLabel}
             </span>
           </div>
         )}
@@ -270,6 +312,7 @@ export default function RepositoriesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [configRepo, setConfigRepo] = useState<Repository | null>(null);
   const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
 
   const fetchRepos = () => {
     api.getRepositories().then(setRepos).finally(() => setLoading(false));
@@ -277,20 +320,26 @@ export default function RepositoriesPage() {
 
   useEffect(() => {
     fetchRepos();
+    api.getApiKeys().then(setApiKeys).catch(() => {});
   }, []);
 
   const handleConfigure = async (repo: Repository) => {
     try {
-      const models = await api.getAvailableModels();
+      const [models, keys] = await Promise.all([
+        api.getAvailableModels(),
+        api.getApiKeys(),
+      ]);
       setAvailableModels(models);
+      setApiKeys(keys);
       setConfigRepo(repo);
     } catch {
       setAvailableModels({});
+      setApiKeys([]);
       setConfigRepo(repo);
     }
   };
 
-  const handleSaveConfig = async (config: { assigned_provider?: string; assigned_model?: string; reviews_enabled?: boolean }) => {
+  const handleSaveConfig = async (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => {
     if (!configRepo) return;
     try {
       const updated = await api.updateRepositoryConfig(configRepo.id, config);
@@ -433,6 +482,7 @@ export default function RepositoriesPage() {
                   syncingRepoId={syncingRepoId}
                   handleSync={handleSync}
                   onConfigure={handleConfigure}
+                  apiKeys={apiKeys}
                 />
               ))}
             </div>
@@ -445,6 +495,7 @@ export default function RepositoriesPage() {
         <ConfigModal
           repo={configRepo}
           availableModels={availableModels}
+          apiKeys={apiKeys}
           onClose={() => setConfigRepo(null)}
           onSave={handleSaveConfig}
         />

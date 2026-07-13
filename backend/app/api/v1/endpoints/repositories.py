@@ -370,6 +370,7 @@ async def sync_repository(
 class RepoConfigUpdate(BaseModel):
     assigned_provider: Optional[str] = None
     assigned_model: Optional[str] = None
+    assigned_key_id: Optional[str] = None
     reviews_enabled: Optional[bool] = None
 
 
@@ -437,6 +438,8 @@ async def update_repository_config(
         settings["assigned_provider"] = config.assigned_provider
     if config.assigned_model is not None:
         settings["assigned_model"] = config.assigned_model
+    if config.assigned_key_id is not None:
+        settings["assigned_key_id"] = config.assigned_key_id
     repo.settings = settings
 
     db.add(repo)

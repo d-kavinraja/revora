@@ -16,7 +16,8 @@ async def bug_agent(state: ReviewState):
         user_id=uuid.UUID(state["user_id"]),
         provider=state["provider"],
         messages=[{"role": "user", "content": prompt}],
-        model=state.get("model")
+        model=state.get("model"),
+        api_key_id=state.get("api_key_id")
     )
     state["bug_analysis"] = [result]
     return state
@@ -30,7 +31,8 @@ async def security_agent(state: ReviewState):
         user_id=uuid.UUID(state["user_id"]),
         provider=state["provider"],
         messages=[{"role": "user", "content": prompt}],
-        model=state.get("model")
+        model=state.get("model"),
+        api_key_id=state.get("api_key_id")
     )
     state["security_analysis"] = [result]
     return state
@@ -44,7 +46,8 @@ async def performance_agent(state: ReviewState):
         user_id=uuid.UUID(state["user_id"]),
         provider=state["provider"],
         messages=[{"role": "user", "content": prompt}],
-        model=state.get("model")
+        model=state.get("model"),
+        api_key_id=state.get("api_key_id")
     )
     state["performance_analysis"] = [result]
     return state
@@ -60,7 +63,8 @@ async def coordinator_agent(state: ReviewState):
         user_id=uuid.UUID(state["user_id"]),
         provider=state["provider"],
         messages=[{"role": "user", "content": prompt}],
-        model=state.get("model")
+        model=state.get("model"),
+        api_key_id=state.get("api_key_id")
     )
     state["final_review_markdown"] = result
     return state

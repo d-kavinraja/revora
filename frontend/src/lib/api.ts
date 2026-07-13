@@ -69,6 +69,7 @@ export interface Repository {
   settings?: {
     assigned_provider?: string;
     assigned_model?: string;
+    assigned_key_id?: string;
   };
 }
 
@@ -125,6 +126,6 @@ export const api = {
   validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
   getAvailableModels: () => apiClient.get<Record<string, string[]>>('/repositories/available-models').then((r) => r.data),
-  updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; reviews_enabled?: boolean }) =>
+  updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
 };

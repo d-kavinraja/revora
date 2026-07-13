@@ -263,10 +263,12 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
         # Determine AI provider/model — repo config takes priority
         provider = None
         model = None
+        api_key_id = None
 
         if db_repo and db_repo.settings:
             provider = db_repo.settings.get("assigned_provider")
             model = db_repo.settings.get("assigned_model")
+            api_key_id = db_repo.settings.get("assigned_key_id")
 
         # Fallback to env defaults
         if not provider or not model:
@@ -291,6 +293,7 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
             user_id=str(user_id),
             provider=provider,
             model=model,
+            api_key_id=api_key_id,
             bug_analysis=[],
             security_analysis=[],
             performance_analysis=[],
