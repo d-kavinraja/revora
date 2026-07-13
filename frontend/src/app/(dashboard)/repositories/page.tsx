@@ -44,10 +44,19 @@ function ConfigModal({
   const models = availableModels[selectedProvider] || [];
 
   useEffect(() => {
+    if (providers.length > 0 && !selectedProvider) {
+      const initialProvider = repo.settings?.assigned_provider || providers[0];
+      setSelectedProvider(initialProvider);
+      const initialModels = availableModels[initialProvider] || [];
+      setSelectedModel(repo.settings?.assigned_model || initialModels[0] || '');
+    }
+  }, [availableModels, providers, repo.settings?.assigned_provider, repo.settings?.assigned_model]);
+
+  useEffect(() => {
     if (selectedProvider && models.length > 0 && !models.includes(selectedModel)) {
       setSelectedModel(models[0]);
     }
-  }, [selectedProvider]);
+  }, [selectedProvider, models, selectedModel]);
 
   useEffect(() => {
     settingsRef.current?.startAnimation?.();
@@ -271,12 +280,13 @@ export default function RepositoriesPage() {
   }, []);
 
   const handleConfigure = async (repo: Repository) => {
-    setConfigRepo(repo);
     try {
       const models = await api.getAvailableModels();
       setAvailableModels(models);
+      setConfigRepo(repo);
     } catch {
       setAvailableModels({});
+      setConfigRepo(repo);
     }
   };
 

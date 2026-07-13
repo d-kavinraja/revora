@@ -389,7 +389,7 @@ async def get_available_models(
 ):
     """Return LLM models available based on the user's active API keys."""
     api_keys = await api_key_service.get_all_for_user(db, current_user.id)
-    active_providers = {key.provider for key in api_keys if key.is_valid}
+    active_providers = {key.provider.lower() for key in api_keys if key.is_valid}
 
     available = {}
     for provider, models in PROVIDER_MODELS.items():
