@@ -37,33 +37,42 @@ function ConfigModal({
   onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => void;
 }) {
   const providers = Object.keys(availableModels);
-  const [selectedProvider, setSelectedProvider] = useState(repo.settings?.assigned_provider || (providers[0] ?? ''));
+  
+  const [selectedProvider, setSelectedProvider] = useState(() => {
+    const saved = repo.settings?.assigned_provider;
+    if (saved && providers.includes(saved)) {
+      return saved;
+    }
+    return providers[0] ?? '';
+  });
   
   const providerKeys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
-  const [selectedKeyId, setSelectedKeyId] = useState(repo.settings?.assigned_key_id || (providerKeys[0]?.id ?? ''));
-  const [selectedModel, setSelectedModel] = useState(repo.settings?.assigned_model || '');
+  
+  const [selectedKeyId, setSelectedKeyId] = useState(() => {
+    const saved = repo.settings?.assigned_key_id;
+    if (saved && providerKeys.some(k => k.id === saved)) {
+      return saved;
+    }
+    return providerKeys[0]?.id ?? '';
+  });
+
+  const models = availableModels[selectedProvider] || [];
+
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = repo.settings?.assigned_model;
+    if (saved && models.includes(saved)) {
+      return saved;
+    }
+    return models[0] || '';
+  });
+
   const [reviewsEnabled, setReviewsEnabled] = useState(repo.reviews_enabled);
   const [saving, setSaving] = useState(false);
   const settingsRef = useRef<any>(null);
 
-  const models = availableModels[selectedProvider] || [];
-
-  useEffect(() => {
-    if (providers.length > 0 && !selectedProvider) {
-      const initialProvider = repo.settings?.assigned_provider || providers[0];
-      setSelectedProvider(initialProvider);
-      const keys = apiKeys.filter(k => k.provider.toLowerCase() === initialProvider.toLowerCase() && k.is_valid);
-      const initialKey = repo.settings?.assigned_key_id || keys[0]?.id || '';
-      setSelectedKeyId(initialKey);
-      const initialModels = availableModels[initialProvider] || [];
-      setSelectedModel(repo.settings?.assigned_model || initialModels[0] || '');
-    }
-  }, [availableModels, apiKeys, providers, repo.settings?.assigned_provider, repo.settings?.assigned_model, repo.settings?.assigned_key_id]);
-
   useEffect(() => {
     const keys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
-    const hasCurrentKey = keys.some(k => k.id === selectedKeyId);
-    if (!hasCurrentKey && keys.length > 0) {
+    if (keys.length > 0 && !keys.some(k => k.id === selectedKeyId)) {
       setSelectedKeyId(keys[0].id);
     } else if (keys.length === 0) {
       setSelectedKeyId('');
