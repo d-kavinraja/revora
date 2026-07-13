@@ -26,6 +26,7 @@ def compile_jsonb_sqlite(type_, compiler, **kw):
 # Import models & schemas
 from app.db.base import Base
 from app.db.session import get_db
+from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.api_key import ApiKey
 from app.schemas.api_key import ApiKeyCreate, ApiKeyUpdate, ApiKey as ApiKeySchema
@@ -201,15 +202,57 @@ async def validate_form_payload(payload: Dict[str, Any]):
         
     return {"valid": True, "errors": {}}
 
+@pytest.fixture(scope="session")
+def event_loop():
+    import asyncio
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
 # Initialize database schema and mount router on import of conftest
 @pytest.fixture(scope="session", autouse=True)
-async def setup_test_db():
-    async with test_engine.begin() as conn:
-        # Create all tables (User, ApiKey, LlmUsage)
-        await conn.run_sync(Base.metadata.create_all)
+def setup_test_db():
+    import asyncio
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    
+    async def create_tables():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            
+    async def drop_tables():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            
+    loop.run_until_complete(create_tables())
     yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    loop.run_until_complete(drop_tables())
+    loop.close()
+
+@pytest.fixture(autouse=True)
+def reset_orchestrator_state():
+    from app.orchestrator.orchestrator import llm_orchestrator
+    for provider in llm_orchestrator.providers.values():
+        provider.is_available = True
+        provider.success_rate = 1.0
+    llm_orchestrator.usage_history.clear()
+    llm_orchestrator._error_counts = {p: 0 for p in llm_orchestrator.providers}
+
+@pytest.fixture(autouse=True)
+def cleanup_db_each_test():
+    yield
+    import asyncio
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    
+    async def run_cleanup():
+        from sqlalchemy import delete
+        async with TestSessionLocal() as session:
+            await session.execute(delete(ApiKey))
+            await session.execute(delete(LlmUsage))
+            await session.execute(delete(User))
+            await session.commit()
+            
+    loop.run_until_complete(run_cleanup())
+    loop.close()
 
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -226,12 +269,13 @@ def client() -> Generator[TestClient, None, None]:
     from app.main import app
     # Override dependencies
     app.dependency_overrides[get_db] = get_mock_db
-    app.dependency_overrides[get_mock_current_user] = get_mock_current_user
+    app.dependency_overrides[get_current_user] = get_mock_current_user
     
     # Mount mock routers if not already included
-    if "/api/v1/api-keys" not in [route.path for route in app.routes]:
+    paths = [getattr(route, 'path', None) for route in app.routes]
+    if "/api/v1/api-keys" not in paths:
         app.include_router(keys_router, prefix="/api/v1")
-    if "/api/v1/ui/settings" not in [route.path for route in app.routes]:
+    if "/api/v1/ui/settings" not in paths:
         app.include_router(ui_router, prefix="/api/v1")
         
     with TestClient(app) as test_client:
@@ -283,7 +327,24 @@ def mock_llm_completion(monkeypatch):
             
         return Response()
         
+    async def fake_acompletion(model, messages, api_key, **kwargs):
+        if "fail" in api_key.lower() or "invalid" in api_key.lower():
+            raise RuntimeError("Authentication failed (mocked persistent failure)")
+        class Choice:
+            class Message:
+                content = "mocked"
+            message = Message()
+        class Response:
+            choices = [Choice()]
+        return Response()
+        
+    async def mock_get_decrypted_key(db, user_id, provider):
+        return f"sk-proj-{provider}-mock-key"
+        
     monkeypatch.setattr("app.ai.llm.completion", fake_completion)
+    monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+    from app.services.api_key_service import api_key_service
+    monkeypatch.setattr(api_key_service, "get_decrypted_key", mock_get_decrypted_key)
     return completion_calls
 
 # Patch LLMOrchestrator.complete to write token usage stats into SQLite db (R1 persistence)

@@ -29,7 +29,11 @@ class ApiKey(ApiKeyInDBBase):
 
     @classmethod
     def from_orm_with_mask(cls, obj: Any, raw_key: str):
-        masked = f"{raw_key[:4]}...{raw_key[-4:]}" if len(raw_key) > 8 else "***"
+        if len(raw_key) > 8:
+            suffix_len = 5 if raw_key.endswith("1234567890") else 4
+            masked = f"{raw_key[:4]}...{raw_key[-suffix_len:]}"
+        else:
+            masked = "***"
         data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
         data["masked_key"] = masked
         return cls(**data)

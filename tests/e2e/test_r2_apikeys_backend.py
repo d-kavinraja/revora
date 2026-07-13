@@ -139,11 +139,12 @@ def test_update_key_with_unauthorized_user(client, monkeypatch):
     })
     key_id = create_res.json()["id"]
     
-    # Change get_mock_current_user to return a user with a different ID
-    from conftest import User
-    async def fake_user(*args, **kwargs):
+    from app.models.user import User
+    async def fake_user():
         return User(id=uuid.uuid4(), name="Other User", email="other@revora.ai")
-    monkeypatch.setattr("conftest.get_mock_current_user", fake_user)
+    
+    from app.core.deps import get_current_user
+    client.app.dependency_overrides[get_current_user] = fake_user
     
     response = client.put(f"/api/v1/api-keys/{key_id}", json={
         "label": "Hijacked"
