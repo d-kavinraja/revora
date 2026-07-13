@@ -6,9 +6,9 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { TriangleAlertIcon, CodeIcon, ChevronRightIcon } from '@animateicons/react/lucide';
+import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { timeAgo } from '@/components/shared/time-ago';
+import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -84,7 +84,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 mb-2 flex-wrap">
               <StatusBadge status={review.status} size="md" />
-              <span className="text-xs text-muted-foreground">{timeAgo(review.created_at)}</span>
+              <span className="text-xs text-muted-foreground">{formatDateTimeWithRelative(review.created_at)}</span>
             </div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground leading-snug">{pr?.title}</h1>
             <p className="text-brand/80 text-sm mt-1 font-medium">{repo?.full_name}</p>
@@ -189,8 +189,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       {review.status === 'completed' && review.summary && (
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-brand flex items-center justify-center shrink-0 text-white">
-              <CodeIcon size={12} />
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-brand flex items-center justify-center shrink-0 text-white p-1">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5">
+                <path d="M12 3C12 7.97056 7.97056 12 3 12C7.97056 12 12 16.0294 12 21C12 16.0294 16.0294 12 21 12C16.0294 12 12 7.97056 12 3Z" fill="currentColor" />
+                <path d="M19 3C19 4.65685 17.6569 6 16 6C17.6569 6 19 7.34315 19 9C19 7.34315 20.3431 6 22 6C20.3431 6 19 4.65685 19 3Z" fill="currentColor" />
+              </svg>
             </div>
             <div>
               <span className="text-sm font-semibold text-foreground">Gemini AI Review</span>
