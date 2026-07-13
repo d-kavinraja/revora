@@ -154,10 +154,9 @@ async def test_test_api_key_invalid(mock_acompletion, client: TestClient, test_d
     await test_db.commit()
 
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 200
+    assert response.status_code == 400
     data = response.json()
-    assert data["status"] == "failed"
-    assert "Invalid API Key" in data["message"]
+    assert "Connectivity test failed" in data["detail"]
     
     # Check key is marked invalid in DB
     await test_db.refresh(key)

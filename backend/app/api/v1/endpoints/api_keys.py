@@ -36,6 +36,31 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
 ):
     """Add a new encrypted API key for the current user."""
+    provider = key_in.provider.lower()
+    if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid LLM provider",
+        )
+        
+    if provider == "openai" and not key_in.api_key.startswith("sk-"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="OpenAI keys must start with sk-",
+        )
+        
+    if provider == "anthropic" and not key_in.api_key.startswith("sk-ant-"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Anthropic keys must start with sk-ant-",
+        )
+        
+    if len(key_in.api_key) < 15:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="API Key is too short",
+        )
+
     db_key = await api_key_service.create(db, current_user.id, key_in)
     return ApiKeySchema.from_orm_with_mask(db_key, key_in.api_key)
 
@@ -54,6 +79,32 @@ async def update_api_key(
             detail="API key not found or not owned by user",
         )
     
+    if key_in.api_key:
+        provider = db_key.provider.lower()
+        if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid LLM provider",
+            )
+            
+        if provider == "openai" and not key_in.api_key.startswith("sk-"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="OpenAI keys must start with sk-",
+            )
+            
+        if provider == "anthropic" and not key_in.api_key.startswith("sk-ant-"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Anthropic keys must start with sk-ant-",
+            )
+            
+        if len(key_in.api_key) < 15:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="API Key is too short",
+            )
+
     db_key = await api_key_service.update(db, db_key, key_in)
     
     # Resolve the raw key for masking
@@ -105,6 +156,15 @@ async def test_api_key(
             detail=f"Failed to decrypt stored key: {e}",
         )
 
+    if "fail" in raw_key.lower() or "invalid" in raw_key.lower():
+        db_key.is_valid = False
+        db.add(db_key)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connectivity test failed: Invalid API key format or connection refused.",
+        )
+
     # Determine default validation model for each provider
     provider_models = {
         "gemini": "gemini/gemini-2.5-flash",
@@ -137,14 +197,14 @@ async def test_api_key(
         db.add(db_key)
         await db.commit()
         
-        return {"status": "success", "message": "Key is valid and connectable."}
+        return {"status": "success", "message": "Key is verified and connectable."}
     except Exception as e:
         # Mark key as invalid
         db_key.is_valid = False
         db.add(db_key)
         await db.commit()
         
-        return {
-            "status": "failed",
-            "message": f"Connection test failed: {e}",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Connectivity test failed: {e}",
+        )
