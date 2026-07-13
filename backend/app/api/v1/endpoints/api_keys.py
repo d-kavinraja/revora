@@ -167,7 +167,7 @@ async def test_api_key(
 
     # Determine default validation model for each provider
     provider_models = {
-        "gemini": "gemini/gemini-2.5-flash",
+        "gemini": "gemini/gemini-3.5-flash",
         "openai": "gpt-4o-mini",
         "anthropic": "anthropic/claude-3-5-haiku-20241022",
         "groq": "groq/llama-3.3-70b-versatile",

@@ -11,7 +11,7 @@ from app.prompt_engine.models import CompiledPrompt
 logger = logging.getLogger(__name__)
 
 PROVIDER_PRIORITY = [
-    ProviderConfig(name="gemini", model="gemini-2.5-flash", priority=0, timeout_seconds=60),
+    ProviderConfig(name="gemini", model="gemini-3.5-flash", priority=0, timeout_seconds=60),
     ProviderConfig(name="openai", model="gpt-4o", priority=1, timeout_seconds=60),
     ProviderConfig(name="anthropic", model="anthropic/claude-sonnet-4-20250514", priority=2, timeout_seconds=60),
     ProviderConfig(name="deepseek", model="deepseek/deepseek-chat", priority=3, timeout_seconds=90),

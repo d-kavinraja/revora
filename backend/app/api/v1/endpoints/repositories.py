@@ -374,7 +374,7 @@ class RepoConfigUpdate(BaseModel):
 
 
 PROVIDER_MODELS = {
-    "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
+    "gemini": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-3.1-flash-lite"],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
     "anthropic": ["anthropic/claude-sonnet-4-20250514", "anthropic/claude-3-5-haiku-20241022"],
     "deepseek": ["deepseek/deepseek-chat", "deepseek/deepseek-coder"],

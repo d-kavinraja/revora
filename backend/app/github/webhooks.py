@@ -273,13 +273,13 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
             from app.core.config import settings
             if settings.GEMINI_API_KEY:
                 provider = "gemini"
-                model = "gemini-2.5-flash"
+                model = "gemini-3.5-flash"
             elif settings.OPENAI_API_KEY:
                 provider = "openai"
                 model = "gpt-4o"
             else:
                 provider = "gemini"
-                model = "gemini-2.5-flash"
+                model = "gemini-3.5-flash"
 
         # Run AI graph
         initial_state = ReviewState(
