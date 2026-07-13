@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="banner/revora-banner.png" alt="Revora Banner" width="100%" />
+<img src="https://img.shields.io/badge/Revora-AI%20Code%20Review-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="Revora Banner" />
 
 # **Revora**
- 
-### The Open-Source AI Agent Code Reviewer for Modern Software Engineering
+
+### The Open-Source Context Engineering Platform for AI Code Reviews
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -18,11 +18,7 @@
 
 ---
 
-**Revora** is an open-source AI Agent Code Reviewer built for modern software engineering teams.
-
-Unlike traditional AI code review tools that analyze only pull request diffs, Revora employs a repository-aware Context Engineering architecture to understand the entire codebase before generating reviews.
-
-By combining Repository Intelligence, Context Engineering, Multi-Agent AI, Verification, and Bring Your Own API Key (BYOK), Revora delivers explainable, high-confidence, enterprise-grade code reviews while giving developers complete control over their AI providers and costs.
+**Revora** is not another AI code review tool that reads diffs. It is a **Context Engineering Platform** that builds deep repository understanding before reasoning — analyzing architecture, dependencies, conventions, and developer intent to deliver enterprise-grade reviews.
 
 </div>
 
@@ -50,10 +46,10 @@ Current AI code review tools:
 
 Revora's Context Engineering Engine:
 - Analyzes the **entire repository** structure
-- Builds **code graphs** (imports, calls, modules)
+- Builds **code graphs** (imports, calls, modules, APIs)
 - Retrieves **only relevant context** for each change
 - **Verifies every finding** against actual code
-- Streams the full pipeline in **real-time**
+- Supports **per-repository model configuration**
 
 </td>
 </tr>
@@ -65,47 +61,52 @@ Revora's Context Engineering Engine:
 
 ```mermaid
 graph TB
-    subgraph Frontend["Frontend - Next.js 16"]
-        UI[Dashboard & Review UI]
-        SSE[Real-Time SSE Stream]
+    subgraph Frontend["Frontend - Next.js 16 + Tailwind CSS"]
+        UI[Dashboard, Repos, Reviews]
+        ConfigModal[Repository Model Config]
     end
 
-    subgraph Backend["Backend - FastAPI"]
+    subgraph Backend["Backend - FastAPI + SQLAlchemy"]
         WH[Webhook Receiver]
-        PIPE[Review Pipeline Orchestrator]
+        API[REST API Endpoints]
     end
 
     subgraph ContextEngine["Context Engineering Engine"]
         direction TB
-        I1["Repository Intelligence - Languages, Frameworks, Architecture"]
-        I2["Repository Indexing - AST, Import Graph, Call Graph"]
-        I3["Knowledge Base - Conventions, Rules, Summaries"]
-        I4["Context Retrieval - RAG, Ranking, Compression"]
+        I1["Repository Intelligence - Language, Framework, Architecture, DB, CI/CD Detection"]
+        I2["Repository Indexing - Import Graph, Call Graph, Module Graph, API Graph, DB Graph"]
+        I3["Knowledge Base - Conventions, Rules, Summaries (PostgreSQL)"]
+        I4["Context Retrieval - RAG, Ranking, Compression, Token Budgeting"]
         I5["Prompt Builder - Modular, Versioned Prompts"]
-        I6["LLM Orchestrator - Multi-Provider with Fallbacks"]
-        I7["Verification Engine - File/Line/Hallucination Checks"]
-        I8["Review Generator - GitHub API Format"]
+        I6["LLM Orchestrator - Multi-Provider with Fallbacks, Retries, Cost Tracking"]
+        I7["Verification Engine - File/Line Existence, Hallucination Detection, Confidence Scoring"]
+        I8["GitHub Review Generator - Risk Scoring, Inline Comments, PR Summary"]
+    end
+
+    subgraph Security["Security Layer"]
+        SEC[Secret Redaction]
+        INJ[Prompt Injection Detection]
     end
 
     subgraph Data["Data Layer"]
-        PG[(PostgreSQL)]
-        RD[(Redis)]
+        PG[(PostgreSQL 15)]
+        RD[(Redis 7)]
     end
 
-    subgraph External["External"]
-        GH[GitHub API]
-        LLM[LLM Providers]
+    subgraph External["External Services"]
+        GH[GitHub API - Webhooks, PR Reviews, Check Runs]
+        LLM[Gemini / OpenAI / Claude / Groq / DeepSeek]
     end
 
-    UI <--> SSE
-    SSE <--> PIPE
-    WH --> PIPE
-    PIPE --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
-    PIPE <--> PG
-    PIPE <--> RD
+    UI <--> API
+    ConfigModal --> API
+    WH --> I1
+    I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
+    SEC --> I4
+    INJ --> I4
+    API <--> PG
     I8 <--> GH
     I6 <--> LLM
-    SSE <--> UI
 ```
 
 ---
@@ -116,125 +117,130 @@ graph TB
 sequenceDiagram
     participant GH as GitHub
     participant WH as Webhook
-    participant PIPE as Pipeline
-    participant INT as Intelligence
+    participant INT as Intelligence Engine
     participant IDX as Indexer
+    participant KB as Knowledge Base
     participant RET as Retriever
-    participant LLM as LLM Provider
+    participant PROM as Prompt Builder
+    participant ORCH as LLM Orchestrator
     participant VER as Verifier
     participant GEN as Review Generator
-    participant UI as Frontend (SSE)
+    participant SEC as Security Layer
 
-    GH->>WH: PR Opened/Reopened
-    WH->>PIPE: Trigger Review
-    PIPE->>UI: SSE: Pipeline Started
+    GH->>WH: PR Opened / Reopened
+    WH->>WH: Verify HMAC Signature
+    WH->>INT: Phase 1: Analyze Repository
 
-    PIPE->>INT: Phase 1: Analyze Repo
-    INT-->>PIPE: Languages, Frameworks, Architecture
+    Note over INT: Detect languages, frameworks,<br/>architecture, DB, CI/CD, security patterns
 
-    PIPE->>IDX: Phase 2: Build Code Graphs
-    IDX-->>PIPE: Import/Call/Module/API Graphs
+    INT->>IDX: Phase 2: Build Code Graphs
 
-    PIPE->>PIPE: Phase 3: Load Knowledge Base
-    PIPE->>RET: Phase 4: Retrieve Context
-    RET-->>PIPE: Ranked, Compressed Context
+    Note over IDX: Import graph, call graph,<br/>module graph, API graph,<br/>DB models, config, tests
 
-    PIPE->>PIPE: Phase 5: Build Prompt
-    PIPE->>LLM: Phase 6: Send to LLM
-    LLM-->>PIPE: AI Review Response
+    IDX->>KB: Phase 3: Load Knowledge Base
 
-    PIPE->>VER: Phase 7: Verify Findings
-    VER-->>PIPE: Verified, Confidence-Scored
+    Note over KB: Conventions, review rules,<br/>cached summaries
 
-    PIPE->>GEN: Phase 8: Generate GitHub Review
-    GEN-->>PIPE: PR Comment + Inline Notes
+    KB->>RET: Phase 4: Retrieve Relevant Context
 
-    PIPE->>GH: Publish Review
-    PIPE->>UI: SSE: Review Complete
+    Note over RET: RAG retrieval from graphs,<br/>ranking, compression,<br/>token budgeting (5k-12k)
+
+    RET->>SEC: Sanitize Content
+    SEC->>SEC: Redact secrets, detect injection
+    SEC->>PROM: Phase 5: Build Prompt
+
+    Note over PROM: System prompt + repo context<br/>+ diff + related files<br/>+ analysis instructions
+
+    PROM->>ORCH: Phase 6: Call LLM Provider
+
+    Note over ORCH: Multi-provider fallback,<br/>retries, cost tracking
+
+    ORCH->>VER: Phase 7: Verify Findings
+
+    Note over VER: File exists? Line exists?<br/>Hallucination check?<br/>Confidence scoring
+
+    VER->>GEN: Phase 8: Generate GitHub Review
+
+    Note over GEN: Risk scoring, inline comments,<br/>PR summary, suggested fixes
+
+    GEN->>GH: Publish Review via API
 ```
 
 ---
 
-## Features
+## Feature Status
 
 <table>
 <tr>
-<td align="center" width="33%">
+<td width="50%" valign="top">
 
-<img src="https://img.shields.io/badge/Repository%20Intelligence-6366f1?style=for-the-badge" /><br/>
+### Completed
 
-**Repository Intelligence**
-<br/><sub>Languages, frameworks, architecture, database, CI/CD, security patterns — all detected without LLM</sub>
+**Backend - Context Engineering Engine:**
+- Repository Intelligence Engine (13 detectors)
+- Repository Indexing (7 code graphs)
+- Knowledge Base with PostgreSQL persistence
+- Context Retrieval with RAG and token budgeting
+- Modular Prompt Builder
+- Multi-Provider LLM Orchestrator (Gemini, OpenAI, Claude, Groq, DeepSeek)
+- Verification Engine (file/line checks, hallucination detection)
+- GitHub Review Generator (inline comments, risk scoring)
+- Security layer (secret redaction, prompt injection detection)
+- SSE real-time event emitter
+- Repository-level model configuration
 
-</td>
-<td align="center" width="33%">
+**Backend - Core:**
+- GitHub App authentication (JWT + installation tokens)
+- GitHub OAuth login flow
+- Webhook receiver with HMAC verification
+- Review pipeline with 8-phase execution
+- Celery worker configuration
+- Alembic migrations (4 migrations, 17 tables)
 
-<img src="https://img.shields.io/badge/Code%20Graphs-06b6d4?style=for-the-badge" /><br/>
-
-**Code Graph Indexing**
-<br/><sub>Import graphs, call graphs, module graphs, API graphs, DB models, test coverage maps</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Context%20Retrieval-10b981?style=for-the-badge" /><br/>
-
-**Smart Context Retrieval**
-<br/><sub>Only relevant files retrieved. Token-budgeted, compressed, deduplicated context</sub>
-
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Multi-Provider%20LLM-f59e0b?style=for-the-badge" /><br/>
-
-**Multi-Provider LLM** `In Development`
-<br/><sub>Gemini, OpenAI, Claude, Groq, DeepSeek — with fallbacks, retries, cost tracking</sub>
-<br/><sub>Currently only **Gemini** is available. Other providers coming soon.</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Verification%20Engine-22c55e?style=for-the-badge" /><br/>
-
-**Verification Engine**
-<br/><sub>Every finding verified: file exists, line exists, not hallucinated, confidence-scored</sub>
+**Frontend:**
+- Landing page with hero and features
+- GitHub OAuth login
+- Dashboard with stats and recent reviews
+- Repositories page with model configuration modal
+- Reviews list with status filters
+- Review detail with markdown rendering
+- Settings page (API keys management)
+- Light/dark mode toggle
+- Responsive sidebar with collapse
+- Shared components (StatusBadge, Skeleton, EmptyState)
 
 </td>
-<td align="center" width="33%">
+<td width="50%" valign="top">
 
-<img src="https://img.shields.io/badge/Real-Time%20SSE-8b5cf6?style=for-the-badge" /><br/>
+### In Development
 
-**Real-Time Pipeline**
-<br/><sub>Watch every stage execute live — no black boxes, full transparency and explainability</sub>
+**AI Capabilities:**
+- Multi-provider LLM support (only Gemini available now)
+- Auto-remediation (generating fix commits)
+- Conversational PR interface (Chat with PR)
+- PR description auto-generation
 
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
+**GitHub Integration:**
+- GitHub Checks API (pass/fail status checks)
+- Inline code annotations on PR diffs
 
-<img src="https://img.shields.io/badge/Security%20%26%20Sanitization-ef4444?style=for-the-badge" /><br/>
+**Context Engineering:**
+- Cross-repository context (microservices)
+- Historical PR context understanding
+- Tree-sitter based AST parsing (currently regex-based)
 
-**Security & Sanitization**
-<br/><sub>Secret redaction, prompt injection detection, sandboxed repo cloning</sub>
+**Review Quality:**
+- Developer feedback loop (upvote/downvote comments)
+- Review accuracy improvement from feedback
 
-</td>
-<td align="center" width="33%">
+**Enterprise:**
+- Role-Based Access Control (RBAC)
+- SSO/SAML integration
+- Audit logging
 
-<img src="https://img.shields.io/badge/BYOK%20Cost%20Control-f97316?style=for-the-badge" /><br/>
-
-**Bring Your Own Key** `In Development`
-<br/><sub>Users provide their own API keys. Full cost transparency with token dashboards</sub>
-<br/><sub>API Keys UI page and backend management coming soon.</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Enterprise%20Ready-6366f1?style=for-the-badge" /><br/>
-
-**Enterprise Ready**
-<br/><sub>Clean Architecture, SOLID principles, async workers, Docker deployment</sub>
+**Frontend:**
+- Real-time SSE execution dashboard on review detail page
+- API keys settings page (route exists, needs full UI)
 
 </td>
 </tr>
@@ -242,7 +248,7 @@ sequenceDiagram
 
 ---
 
-## LLM Provider Support
+## Supported LLM Providers
 
 <table>
 <tr>
@@ -254,26 +260,40 @@ sequenceDiagram
 </tr>
 </table>
 
-> **Note:** Currently only **Google Gemini** is fully integrated and available for use. Multi-provider support (OpenAI, Claude, Groq, DeepSeek) is actively being developed. See [Issue #1](https://github.com/d-kavinraja/revora/issues/1) for progress.
+> Currently only **Google Gemini** is fully integrated. Multi-provider support is actively being developed.
 
 ---
 
-## Roadmap & In Development
+## Context Engineering Modules
 
-The following features are actively being developed. Contributions are welcome — check the [Issues](https://github.com/d-kavinraja/revora/issues) tab to see what is being worked on:
+<table>
+<tr>
+<td align="center" width="25%">
 
-| Feature | Status | Issue |
-|---------|--------|-------|
-| Multi-Provider LLM Support (OpenAI, Claude, Groq, DeepSeek) | In Development | [#1](https://github.com/d-kavinraja/revora/issues/1) |
-| API Keys UI Page (Settings) | In Development | [#2](https://github.com/d-kavinraja/revora/issues/2) |
-| API Keys Backend Management | In Development | [#3](https://github.com/d-kavinraja/revora/issues/3) |
-| Repository Chat (AI Assistant) | Planned | [#4](https://github.com/d-kavinraja/revora/issues/4) |
-| Automatic Unit Test Generation | Planned | [#5](https://github.com/d-kavinraja/revora/issues/5) |
-| AI Documentation Generation | Planned | [#6](https://github.com/d-kavinraja/revora/issues/6) |
-| Automatic Patch Generation | Planned | [#7](https://github.com/d-kavinraja/revora/issues/7) |
-| Engineering Analytics Dashboard | Planned | [#8](https://github.com/d-kavinraja/revora/issues/8) |
-| CLI Tool | Planned | [#9](https://github.com/d-kavinraja/revora/issues/9) |
-| IDE Plugins (VS Code, JetBrains) | Planned | [#10](https://github.com/d-kavinraja/revora/issues/10) |
+**Repository Intelligence**
+<br/><sub>13 detectors analyzing languages, frameworks, architecture pattern, database, package manager, testing, build tools, CI/CD, security auth, cloud provider, caching, queues, repo type — all without LLM</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Code Graph Indexing**
+<br/><sub>7 graph types: import graph, call graph, module graph, API endpoint graph, database model graph, configuration graph, test graph — built via regex-based code parsing</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Context Retrieval**
+<br/><sub>RAG-based retrieval from code graphs, hybrid ranking, context compression, token budgeting (5k-12k per review), deduplication</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Verification Engine**
+<br/><sub>Every AI finding verified: file exists in repo, line number valid, not duplicate, not hallucinated, confidence-scored above threshold</sub>
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -312,46 +332,10 @@ The following features are actively being developed. Contributions are welcome �
 ![Redis](https://img.shields.io/badge/Redis-7-dc382d?style=flat-square&logo=redis)
 ![Celery](https://img.shields.io/badge/Celery-5-9ddc10?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker)
-![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Ready-2088ff?style=flat-square&logo=githubactions)
 
 </td>
 </tr>
 </table>
-
----
-
-## Context Engineering Flow
-
-```
-+-----------------------------------------------------------------------+
-|                    REVORA CONTEXT ENGINEERING FLOW                     |
-+-----------------------------------------------------------------------+
-|                                                                       |
-|  +----------+    +----------+    +----------+    +----------+         |
-|  | Repo     |--->| Index    |--->| Know     |--->| RAG      |         |
-|  | Intelligence|  | Graphs   |   | Base     |   | Retrieve |         |
-|  +----------+    +----------+    +----------+    +----------+         |
-|       |               |              |              |                  |
-|       v               v              v              v                  |
-|  Languages       Import Graph   Conventions    Ranked Files           |
-|  Frameworks      Call Graph     Rules          Compressed             |
-|  Architecture    Module Graph   Summaries      Token-Budgeted         |
-|  Database        API Graph      ADRs           Deduplicated           |
-|  CI/CD           DB Graph       Learnings                             |
-|                                                                       |
-|  +----------+    +----------+    +----------+    +----------+         |
-|  | Prompt   |--->| LLM      |--->| Verify   |--->| GitHub   |         |
-|  | Builder  |    |Orchestr. |    | Engine   |    | Review   |         |
-|  +----------+    +----------+    +----------+    +----------+         |
-|       |               |              |              |                  |
-|       v               v              v              v                  |
-|  System Prompt   Multi-Provider File Exists    PR Comments            |
-|  Repo Context    Fallbacks      Line Exists    Risk Score             |
-|  Diff Content    Retries        Not Duplicate  Suggestions            |
-|  Related Files   Cost Tracking  Confidence     Summary                |
-|                                                                       |
-+-----------------------------------------------------------------------+
-```
 
 ---
 
@@ -361,58 +345,42 @@ The following features are actively being developed. Contributions are welcome �
 revora/
 ├── backend/
 │   ├── app/
-│   │   ├── ai/                  # Core AI pipeline (LLM, graph, prompts)
-│   │   ├── api/v1/endpoints/    # FastAPI route handlers
-│   │   ├── core/                # Auth, config, security, dependencies
-│   │   ├── db/                  # SQLAlchemy engine & session
-│   │   ├── github/              # GitHub App auth, client, webhooks
-│   │   ├── intelligence/        # Repository Intelligence Engine
-│   │   ├── indexing/            # Code Graph Indexing
-│   │   ├── knowledge/           # Knowledge Base
-│   │   ├── models/              # SQLAlchemy ORM models
-│   │   ├── orchestrator/        # LLM Orchestrator
-│   │   ├── pipeline/            # Review Pipeline Orchestrator
-│   │   ├── prompt_engine/       # Prompt Builder
-│   │   ├── retrieval/           # Context Retrieval Engine
-│   │   ├── security/            # Sanitization & injection detection
-│   │   ├── schemas/             # Pydantic request/response schemas
-│   │   ├── services/            # Business logic services
-│   │   ├── sse/                 # Server-Sent Events
-│   │   ├── verification/        # Finding Verification Engine
-│   │   ├── github_review/       # GitHub Review Generator
-│   │   └── worker/              # Celery background tasks
-│   ├── alembic/                 # Database migrations
+│   │   ├── ai/                    # LLM service, LangGraph agents, prompts, state
+│   │   ├── api/v1/endpoints/      # FastAPI routes (auth, repos, reviews, dashboard, webhooks)
+│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet encryption)
+│   │   ├── db/                    # SQLAlchemy async engine and session
+│   │   ├── github/                # GitHub App auth, API client, webhook handler
+│   │   ├── github_review/         # GitHub PR review format generator
+│   │   ├── indexing/              # Code graph builders (import, call, module, API, DB, config, test)
+│   │   ├── intelligence/          # Repository analysis (13 detectors, no LLM)
+│   │   ├── knowledge/             # Knowledge base with DB persistence and caching
+│   │   ├── models/                # SQLAlchemy ORM models (17 tables)
+│   │   ├── orchestrator/          # Multi-provider LLM with fallbacks and cost tracking
+│   │   ├── pipeline/              # 8-phase review pipeline orchestrator
+│   │   ├── prompt_engine/         # Modular prompt builder with templates
+│   │   ├── retrieval/             # RAG context retrieval with ranking and compression
+│   │   ├── schemas/               # Pydantic request/response schemas
+│   │   ├── security/              # Secret redaction, prompt injection detection
+│   │   ├── services/              # Business logic (user, API key management)
+│   │   ├── sse/                   # Server-Sent Events emitter
+│   │   ├── verification/          # AI finding verification engine
+│   │   └── worker/                # Celery background tasks
+│   ├── alembic/                   # Database migrations (4 migrations)
 │   └── requirements.txt
 │
 ├── frontend/
 │   └── src/
-│       ├── app/                 # Next.js App Router pages
-│       ├── components/          # React components
-│       │   ├── layout/          # Sidebar, ThemeProvider
-│       │   ├── shared/          # StatusBadge, Skeleton, EmptyState
-│       │   └── ui/              # shadcn/ui primitives
-│       ├── lib/                 # API client, utilities
-│       └── store/               # Zustand state stores
+│       ├── app/                   # Next.js App Router (9 pages)
+│       ├── components/            # React components
+│       │   ├── layout/            # Sidebar, ThemeProvider
+│       │   ├── shared/            # StatusBadge, Skeleton, EmptyState
+│       │   └── ui/                # shadcn/ui primitives, Button, LoaderIcon, ThemeToggle
+│       ├── lib/                   # Axios API client, utilities
+│       └── store/                 # Zustand stores (auth, theme)
 │
-├── docker-compose.yml           # Full stack deployment
+├── docker-compose.yml
 └── README.md
 ```
-
----
-
-## Real-Time Execution Dashboard
-
-Revora does not show a loading spinner. Users watch every pipeline stage execute live:
-
-- **Pipeline Timeline** — 30+ stages with status indicators
-- **Live Log Stream** — Real-time SSE event streaming
-- **Token Dashboard** — Input/output tokens, cost, latency
-
-Each stage exposes:
-- **Status** — Waiting / Running / Completed / Failed / Skipped
-- **Duration** — Execution time per stage
-- **Metrics** — Files scanned, tokens used, context size
-- **Logs** — Detailed execution logs
 
 ---
 
@@ -477,7 +445,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <div align="center">
 
-**Built with care by [Revora-Team](https://github.com/Revora-PR)**
+**Built with care by [Kavinraja.D](https://github.com/d-kavinraja)**
 
 <img src="https://img.shields.io/badge/Revora-Context%20Engineering%20Platform-6366f1?style=for-the-badge&logo=github&logoColor=white" />
 
