@@ -212,7 +212,7 @@ sequenceDiagram
 </td>
 <td width="50%" valign="top">
 
-### In Development
+### In Development 
 
 **AI Capabilities:**
 - Multi-provider LLM support (only Gemini available now)
