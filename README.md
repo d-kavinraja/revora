@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Revora-AI%20Code%20Review-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="Revora Banner" />
+<img src="banner/revora-banner.png" alt="Revora Banner" width="100%" />
 
 # **Revora**
  
@@ -254,7 +254,7 @@ sequenceDiagram
 </tr>
 </table>
 
-> **Note:** **Google Gemini, OpenAI, Claude, Groq, and DeepSeek** are fully integrated and available for use via the API Keys Settings page. See [Issue #1](https://github.com/d-kavinraja/revora/issues/1) for progress.
+> **Note:** Currently only **Google Gemini** is fully integrated and available for use. Multi-provider support (OpenAI, Claude, Groq, DeepSeek) is actively being developed. See [Issue #1](https://github.com/d-kavinraja/revora/issues/1) for progress.
 
 ---
 
@@ -264,9 +264,9 @@ The following features are actively being developed. Contributions are welcome â
 
 | Feature | Status | Issue |
 |---------|--------|-------|
-| Multi-Provider LLM Support (OpenAI, Claude, Groq, DeepSeek) | Completed | [#1](https://github.com/d-kavinraja/revora/issues/1) |
-| API Keys UI Page (Settings) | Completed | [#2](https://github.com/d-kavinraja/revora/issues/2) |
-| API Keys Backend Management | Completed | [#3](https://github.com/d-kavinraja/revora/issues/3) |
+| Multi-Provider LLM Support (OpenAI, Claude, Groq, DeepSeek) | In Development | [#1](https://github.com/d-kavinraja/revora/issues/1) |
+| API Keys UI Page (Settings) | In Development | [#2](https://github.com/d-kavinraja/revora/issues/2) |
+| API Keys Backend Management | In Development | [#3](https://github.com/d-kavinraja/revora/issues/3) |
 | Repository Chat (AI Assistant) | Planned | [#4](https://github.com/d-kavinraja/revora/issues/4) |
 | Automatic Unit Test Generation | Planned | [#5](https://github.com/d-kavinraja/revora/issues/5) |
 | AI Documentation Generation | Planned | [#6](https://github.com/d-kavinraja/revora/issues/6) |

@@ -105,6 +105,7 @@ export default function RepositoriesPage() {
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchRepos = () => {
     api.getRepositories().then(setRepos).finally(() => setLoading(false));
@@ -183,6 +184,19 @@ export default function RepositoriesPage() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      {repos.length > 0 && (
+        <div className="mb-6 max-w-md">
+          <input
+            type="text"
+            placeholder="Search repositories by name, description, or language..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-3.5 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+          />
+        </div>
+      )}
+
       {loading ? (
         <SkeletonList count={2} height="h-28" />
       ) : repos.length === 0 ? (
@@ -202,16 +216,39 @@ export default function RepositoriesPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {repos.map((repo) => (
-            <RepositoryCard
-              key={repo.id}
-              repo={repo}
-              syncingRepoId={syncingRepoId}
-              handleSync={handleSync}
-            />
-          ))}
-        </div>
+        (() => {
+          const filteredRepos = repos.filter((repo) => {
+            const query = searchQuery.toLowerCase();
+            const name = (repo.name || '').toLowerCase();
+            const fullName = (repo.full_name || '').toLowerCase();
+            const desc = (repo.description || '').toLowerCase();
+            const lang = (repo.language || '').toLowerCase();
+            return name.includes(query) || fullName.includes(query) || desc.includes(query) || lang.includes(query);
+          });
+
+          if (filteredRepos.length === 0) {
+            return (
+              <EmptyState
+                icon={<FolderIcon size={32} />}
+                title="No matching repositories"
+                description="Try adjusting your search terms."
+              />
+            );
+          }
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredRepos.map((repo) => (
+                <RepositoryCard
+                  key={repo.id}
+                  repo={repo}
+                  syncingRepoId={syncingRepoId}
+                  handleSync={handleSync}
+                />
+              ))}
+            </div>
+          );
+        })()
       )}
     </div>
   );

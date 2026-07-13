@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { GithubIcon, ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateicons/react/lucide";
 import { useRef } from "react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const features = [
   {
@@ -37,12 +38,15 @@ export default function LandingPage() {
 
       <header className="flex items-center justify-between p-6 z-10 border-b border-border bg-background/50 backdrop-blur-md sticky top-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-brand to-purple-600 flex items-center justify-center shadow-[0_0_16px_rgba(99,102,241,0.3)]">
-            <span className="font-bold text-lg text-white">R</span>
-          </div>
+          <img
+            src="/revora-logo.png"
+            alt="Revora Logo"
+            className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+          />
           <span className="font-bold text-xl tracking-tight">Revora</span>
         </div>
-        <nav className="flex gap-3">
+        <nav className="flex items-center gap-3">
+          <ThemeToggle />
           <Link href="/login">
             <Button variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-white/[0.04]">Sign In</Button>
           </Link>

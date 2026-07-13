@@ -12,6 +12,7 @@
     "@animateicons/react": "^0.3.4",
     "@base-ui/react": "^1.6.0",
     "@hookform/resolvers": "^5.4.0",
+    "@lobehub/icons": "^5.11.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tanstack/react-query": "^5.101.2",

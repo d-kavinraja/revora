@@ -6,7 +6,7 @@ import { api, Review, DashboardStats } from '@/lib/api';
 import Link from 'next/link';
 import { FolderIcon, GitBranchIcon, TriangleAlertIcon, CircleCheckIcon, MessageCircleIcon, MoveRightIcon } from '@animateicons/react/lucide';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { timeAgo } from '@/components/shared/time-ago';
+import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonCard, SkeletonList } from '@/components/shared/skeleton';
 
@@ -83,8 +83,13 @@ function ReviewItem({ review }: { review: Review }) {
             <span className="text-border">·</span>
             <span>@{review.pull_request?.author}</span>
             <span className="text-border">·</span>
-            <span>{timeAgo(review.created_at)}</span>
+            <span>{formatDateTimeWithRelative(review.created_at)}</span>
           </div>
+          {review.status === 'failed' && review.error_message && (
+            <div className="mt-2 p-2.5 bg-error/5 border border-error/20 rounded-lg text-xs font-mono text-error/90 whitespace-pre-wrap break-all">
+              {review.error_message}
+            </div>
+          )}
         </div>
         <MoveRightIcon ref={arrowRef} size={16} isAnimated={false} className="text-border group-hover:text-brand transition-colors shrink-0 mt-2" />
       </div>
@@ -98,6 +103,16 @@ export default function Dashboard() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [timeText, setTimeText] = useState('0s ago');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    setTimeText(timeAgo(lastRefresh.toISOString()));
+    const t = setInterval(() => {
+      setTimeText(timeAgo(lastRefresh.toISOString()));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [lastRefresh]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -142,7 +157,7 @@ export default function Dashboard() {
               Live
             </span>
           )}
-          <span>Updated {timeAgo(lastRefresh.toISOString())}</span>
+          <span>Updated {timeText}</span>
         </div>
       </div>
 
@@ -180,9 +195,18 @@ export default function Dashboard() {
 
       {/* Recent Reviews */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <h2 className="text-lg font-bold text-foreground">Recent Reviews</h2>
-          <ViewAllLink />
+          <div className="flex items-center gap-3 flex-1 sm:max-w-md w-full">
+            <input
+              type="text"
+              placeholder="Search reviews by PR title, repo, or author..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-1.5 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+            />
+            <ViewAllLink />
+          </div>
         </div>
 
         {loading ? (
@@ -194,11 +218,33 @@ export default function Dashboard() {
             description="Open a Pull Request to trigger your first AI review."
           />
         ) : (
-          <div className="space-y-2">
-            {reviews.map((review) => (
-              <ReviewItem key={review.id} review={review} />
-            ))}
-          </div>
+          (() => {
+            const filteredReviews = reviews.filter((review) => {
+              const query = searchQuery.toLowerCase();
+              const title = (review.pull_request?.title || '').toLowerCase();
+              const repoName = (review.repository?.full_name || '').toLowerCase();
+              const author = (review.pull_request?.author || '').toLowerCase();
+              return title.includes(query) || repoName.includes(query) || author.includes(query);
+            });
+
+            if (filteredReviews.length === 0) {
+              return (
+                <EmptyState
+                  icon={<GitBranchIcon size={28} />}
+                  title="No matching reviews"
+                  description="Try adjusting your search terms."
+                />
+              );
+            }
+
+            return (
+              <div className="space-y-2">
+                {filteredReviews.map((review) => (
+                  <ReviewItem key={review.id} review={review} />
+                ))}
+              </div>
+            );
+          })()
         )}
       </div>
     </div>
