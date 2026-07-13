@@ -409,6 +409,7 @@ class GitHubWebhookService:
         handlers = {
             ("pull_request", "opened"): handle_pr_opened,
             ("pull_request", "reopened"): handle_pr_opened,
+            ("pull_request", "synchronize"): handle_pr_opened,
             ("installation", "created"): handle_installation_created,
             ("installation", "deleted"): handle_installation_deleted,
             ("installation_repositories", "added"): handle_installation_repositories,

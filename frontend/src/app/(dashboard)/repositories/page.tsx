@@ -330,6 +330,8 @@ export default function RepositoriesPage() {
   useEffect(() => {
     fetchRepos();
     api.getApiKeys().then(setApiKeys).catch(() => {});
+    const interval = setInterval(fetchRepos, 3_000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleConfigure = async (repo: Repository) => {
