@@ -1,101 +1,178 @@
-import os
-from typing import List
+"""Architecture detection engine.
+
+Detects architectural patterns (DDD, Clean, Hexagonal, MVC, etc.)
+and repository type (monorepo, microservices) from directory structure.
+Uses the shared RepoWalker for efficient filesystem access.
+"""
+
+import json
+from typing import List, Set
 
 from app.intelligence.models import ArchitectureInfo
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 
-def detect_architecture(repo_path: str) -> ArchitectureInfo:
-    indicators: list[str] = []
-    scores: dict[str, float] = {}
+class ArchitectureDetector(BaseDetector):
+    """Detects architectural patterns and repository type."""
 
-    top_level = set()
-    for item in os.listdir(repo_path):
-        if os.path.isdir(os.path.join(repo_path, item)) and not item.startswith("."):
-            top_level.add(item.lower())
+    @property
+    def name(self) -> str:
+        return "architecture_detector"
 
-    src_contents = set()
-    src_path = os.path.join(repo_path, "src")
-    if os.path.isdir(src_path):
-        for item in os.listdir(src_path):
-            if os.path.isdir(os.path.join(src_path, item)):
-                src_contents.add(item.lower())
+    @property
+    def version(self) -> str:
+        return "1.0.0"
 
-    app_path = os.path.join(repo_path, "app")
-    app_contents = set()
-    if os.path.isdir(app_path):
-        for item in os.listdir(app_path):
-            if os.path.isdir(os.path.join(app_path, item)):
-                app_contents.add(item.lower())
+    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+        """Detect architecture using the RepoWalker cache.
 
-    all_dirs = top_level | src_contents | app_contents
+        Args:
+            walker: Initialized RepoWalker.
 
-    # DDD patterns
-    ddd_markers = {"domain", "application", "infrastructure", "presentation"}
-    if len(ddd_markers & all_dirs) >= 2:
-        scores["ddd"] = 0.9
-        indicators.append(f"DDD directories found: {ddd_markers & all_dirs}")
+        Returns:
+            DetectorResult with architecture info and repo type.
+        """
+        indicators: List[str] = []
+        scores = {}
 
-    # Clean Architecture
-    clean_markers = {"entities", "usecases", "adapters", "frameworks", "interfaces"}
-    if len(clean_markers & all_dirs) >= 2:
-        scores["clean"] = 0.85
-        indicators.append(f"Clean Architecture directories: {clean_markers & all_dirs}")
+        # Collect all directory names from file paths
+        all_dirs: Set[str] = set()
+        for fp in walker.file_paths:
+            parts = fp.replace("\\", "/").split("/")
+            for part in parts[:-1]:  # Skip filename
+                all_dirs.add(part.lower())
 
-    # Hexagonal Architecture
-    hex_markers = {"domain", "ports", "adapters"}
-    if len(hex_markers & all_dirs) >= 2:
-        scores["hexagonal"] = 0.8
-        indicators.append(f"Hexagonal Architecture markers: {hex_markers & all_dirs}")
+        # DDD patterns
+        ddd_markers = {"domain", "application", "infrastructure", "presentation"}
+        found_ddd = ddd_markers & all_dirs
+        if len(found_ddd) >= 2:
+            scores["ddd"] = 0.9
+            indicators.append(f"DDD directories found: {found_ddd}")
 
-    # Layered Architecture
-    layer_markers = {"controllers", "services", "repositories", "models"}
-    if len(layer_markers & all_dirs) >= 2:
-        scores["layered"] = 0.75
-        indicators.append(f"Layered Architecture directories: {layer_markers & all_dirs}")
+        # Clean Architecture
+        clean_markers = {"entities", "usecases", "adapters", "frameworks", "interfaces"}
+        found_clean = clean_markers & all_dirs
+        if len(found_clean) >= 2:
+            scores["clean"] = 0.85
+            indicators.append(f"Clean Architecture directories: {found_clean}")
 
-    # MVC
-    mvc_markers = {"models", "views", "controllers"}
-    if len(mvc_markers & all_dirs) >= 2:
-        scores["mvc"] = 0.7
-        indicators.append(f"MVC directories: {mvc_markers & all_dirs}")
+        # Hexagonal Architecture
+        hex_markers = {"domain", "ports", "adapters"}
+        found_hex = hex_markers & all_dirs
+        if len(found_hex) >= 2:
+            scores["hexagonal"] = 0.8
+            indicators.append(f"Hexagonal Architecture markers: {found_hex}")
 
-    # Microservices
-    services_dir = os.path.join(repo_path, "services")
-    packages_dir = os.path.join(repo_path, "packages")
-    modules_dir = os.path.join(repo_path, "modules")
-    if os.path.isdir(services_dir) or os.path.isdir(packages_dir) or os.path.isdir(modules_dir):
-        service_dir = services_dir if os.path.isdir(services_dir) else (packages_dir if os.path.isdir(packages_dir) else modules_dir)
-        sub_services = [d for d in os.listdir(service_dir) if os.path.isdir(os.path.join(service_dir, d))]
-        if len(sub_services) >= 2:
-            scores["microservices"] = 0.8
-            indicators.append(f"Multiple service directories: {sub_services}")
+        # Layered Architecture
+        layer_markers = {"controllers", "services", "repositories", "models"}
+        found_layered = layer_markers & all_dirs
+        if len(found_layered) >= 2:
+            scores["layered"] = 0.75
+            indicators.append(f"Layered Architecture directories: {found_layered}")
 
-    # Monorepo detection
-    has_workspaces = False
-    package_json = os.path.join(repo_path, "package.json")
-    if os.path.exists(package_json):
-        try:
-            import json
-            with open(package_json, "r") as f:
-                pkg = json.load(f)
-            if "workspaces" in pkg:
-                has_workspaces = True
-                indicators.append("npm/yarn workspaces detected")
-        except (json.JSONDecodeError, OSError):
-            pass
+        # MVC
+        mvc_markers = {"models", "views", "controllers"}
+        found_mvc = mvc_markers & all_dirs
+        if len(found_mvc) >= 2:
+            scores["mvc"] = 0.7
+            indicators.append(f"MVC directories: {found_mvc}")
 
-    if has_workspaces or os.path.isdir(os.path.join(repo_path, "packages")) or os.path.isdir(os.path.join(repo_path, "apps")):
-        scores["monorepo"] = 0.85
-        if "monorepo" not in str(indicators):
-            indicators.append("Monorepo structure detected")
+        # Microservices detection
+        has_services = "services" in all_dirs or "microservices" in all_dirs
+        if has_services:
+            service_files = [
+                fp for fp in walker.file_paths
+                if "/services/" in fp or "/microservices/" in fp
+            ]
+            # Count unique service directories
+            service_dirs = set()
+            for fp in service_files:
+                parts = fp.replace("\\", "/").split("/")
+                for i, part in enumerate(parts):
+                    if part in ("services", "microservices") and i + 1 < len(parts) - 1:
+                        service_dirs.add(parts[i + 1])
+            if len(service_dirs) >= 2:
+                scores["microservices"] = 0.8
+                indicators.append(f"Multiple service directories: {service_dirs}")
 
-    # Select best match
-    if scores:
-        best_pattern = max(scores, key=scores.get)
-        return ArchitectureInfo(
-            pattern=best_pattern,
-            confidence=scores[best_pattern],
-            indicators=indicators,
+        # Monorepo detection
+        has_workspaces = False
+        package_json_files = [
+            fp for fp in walker.file_paths if fp.endswith("package.json")
+        ]
+        for pj_file in package_json_files:
+            content = await walker.get_content(pj_file, max_chars=5000)
+            try:
+                pkg = json.loads(content)
+                if "workspaces" in pkg:
+                    has_workspaces = True
+                    indicators.append("npm/yarn workspaces detected")
+                    break
+            except (json.JSONDecodeError, ValueError):
+                continue
+
+        has_packages_dir = "packages" in all_dirs
+        has_apps_dir = "apps" in all_dirs
+
+        if has_workspaces or has_packages_dir or has_apps_dir:
+            scores["monorepo"] = 0.85
+            if not any("monorepo" in ind for ind in indicators):
+                indicators.append("Monorepo structure detected")
+
+        # Select best match
+        if scores:
+            best_pattern = max(scores, key=scores.get)
+            repo_type = best_pattern
+        else:
+            best_pattern = "standard"
+            repo_type = "standard"
+            indicators.append("No specific architecture pattern detected")
+
+        return DetectorResult(
+            success=True,
+            data={
+                "pattern": best_pattern,
+                "confidence": scores.get(best_pattern, 0.5),
+                "indicators": indicators,
+                "repo_type": repo_type,
+                "all_scores": scores,
+            },
+            confidence=scores.get(best_pattern, 0.5),
         )
 
-    return ArchitectureInfo(pattern="standard", confidence=0.5, indicators=["No specific architecture pattern detected"])
+
+# Legacy function interface for backward compatibility
+def detect_architecture(repo_path: str) -> ArchitectureInfo:
+    """Detect architecture in a repository (legacy interface).
+
+    Args:
+        repo_path: Path to repository root.
+
+    Returns:
+        ArchitectureInfo object.
+    """
+    import asyncio
+    from app.intelligence.repo_walker import RepoWalker
+
+    async def _detect():
+        walker = RepoWalker(repo_path)
+        await walker.walk()
+        detector = ArchitectureDetector()
+        result = await detector.detect(walker)
+        data = result.data
+        return ArchitectureInfo(
+            pattern=data.get("pattern", "standard"),
+            confidence=data.get("confidence", 0.5),
+            indicators=data.get("indicators", []),
+        )
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, _detect()).result()
+        else:
+            return loop.run_until_complete(_detect())
+    except RuntimeError:
+        return asyncio.run(_detect())

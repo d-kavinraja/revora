@@ -111,12 +111,12 @@ async def test_delete_api_key(client: TestClient, test_db: AsyncSession, mock_us
     assert db_key is None
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.api_keys.acompletion")
-async def test_test_api_key_valid(mock_acompletion, client: TestClient, test_db: AsyncSession, mock_user):
-    # Setup mock acompletion success
-    mock_acompletion.return_value = AsyncMock()
+@patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
+async def test_test_api_key_valid(mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user):
+    # Setup mock: to_thread returns a list of models (key is valid)
+    mock_to_thread.return_value = ["gpt-4o", "gpt-4o-mini"]
 
-    encrypted = encryption_service.encrypt("sk-valid")
+    encrypted = encryption_service.encrypt("sk-valid-key-1234567890")
     key = ApiKey(
         user_id=mock_user.id,
         provider="openai",
@@ -131,18 +131,18 @@ async def test_test_api_key_valid(mock_acompletion, client: TestClient, test_db:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    
+
     # Check key is marked valid in DB
     await test_db.refresh(key)
     assert key.is_valid is True
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.api_keys.acompletion")
-async def test_test_api_key_invalid(mock_acompletion, client: TestClient, test_db: AsyncSession, mock_user):
-    # Setup mock acompletion error
-    mock_acompletion.side_effect = Exception("Invalid API Key credentials")
+@patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
+async def test_test_api_key_invalid(mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user):
+    # Setup mock: to_thread raises an auth error (key is invalid)
+    mock_to_thread.side_effect = Exception("Invalid API Key credentials — 401 unauthorized")
 
-    encrypted = encryption_service.encrypt("sk-invalid")
+    encrypted = encryption_service.encrypt("sk-bad-key-0000000000000")
     key = ApiKey(
         user_id=mock_user.id,
         provider="openai",
@@ -157,7 +157,7 @@ async def test_test_api_key_invalid(mock_acompletion, client: TestClient, test_d
     assert response.status_code == 400
     data = response.json()
     assert "Connectivity test failed" in data["detail"]
-    
+
     # Check key is marked invalid in DB
     await test_db.refresh(key)
     assert key.is_valid is False

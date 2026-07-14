@@ -374,13 +374,7 @@ class RepoConfigUpdate(BaseModel):
     reviews_enabled: Optional[bool] = None
 
 
-PROVIDER_MODELS = {
-    "gemini": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-3.1-flash-lite"],
-    "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
-    "anthropic": ["anthropic/claude-sonnet-4-20250514", "anthropic/claude-3-5-haiku-20241022"],
-    "deepseek": ["deepseek/deepseek-chat", "deepseek/deepseek-coder"],
-    "groq": ["groq/llama-3.3-70b-versatile"],
-}
+# PROVIDER_MODELS is now dynamically queried from litellm in get_available_models endpoint.
 
 
 @router.get("/available-models", response_model=Dict[str, List[str]])
@@ -388,14 +382,74 @@ async def get_available_models(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return LLM models available based on the user's active API keys."""
-    api_keys = await api_key_service.get_all_for_user(db, current_user.id)
-    active_providers = {key.provider.lower() for key in api_keys if key.is_valid}
+    """Return live LLM models available from the user's actual API keys by querying each provider endpoint."""
+    from app.core.security import encryption_service
+    import litellm
+    import asyncio
+    import logging as _logging
+    logger = _logging.getLogger(__name__)
 
-    available = {}
-    for provider, models in PROVIDER_MODELS.items():
-        if provider in active_providers:
-            available[provider] = models
+    api_keys_list = await api_key_service.get_all_for_user(db, current_user.id)
+    # Build a dict of provider -> decrypted api key (valid keys only)
+    provider_keys: Dict[str, str] = {}
+    for key_obj in api_keys_list:
+        if key_obj.is_valid:
+            try:
+                provider_keys[key_obj.provider.lower()] = encryption_service.decrypt(key_obj.encrypted_key)
+            except Exception:
+                pass
+    # Map app provider names → litellm custom_llm_provider strings
+    litellm_provider_map = {
+        "gemini": "gemini",
+        "openai": "openai",
+        "anthropic": "anthropic",
+        "deepseek": "deepseek",
+        "groq": "groq",
+        "grok": "xai",
+    }
+
+    # Terms that identify non-chat models or unstable/preview models
+    exclusions = [
+        # Media & specific modalities
+        "dall-e", "whisper", "embedding", "tts", "veo", "imagen", "lyria",
+        "moderation", "speech", "audio", "video", "clip", "rerank", "vision",
+        "1024-x", "1536-x", "512-x", "image-generation", "image-preview",
+        # Unstable / Preview / Experimental versions
+        "preview", "exp-", "latest", "rc", "beta", "alpha", 
+        # Exclude raw version numbers if they are redundant (optional, but helps clean Gemini)
+        "-001", "-002", "-0613", "-0314", "-0125"
+    ]
+
+    available: Dict[str, List[str]] = {}
+
+    for provider, raw_key in provider_keys.items():
+        litellm_prov = litellm_provider_map.get(provider)
+        if not litellm_prov:
+            continue
+
+        live_models: List[str] = []
+
+        try:
+            # Query the provider's actual API endpoint for the live model list
+            live_models = await asyncio.to_thread(
+                litellm.get_valid_models,
+                check_provider_endpoint=True,
+                custom_llm_provider=litellm_prov,
+                api_key=raw_key,
+            )
+        except Exception as e:
+            logger.warning(f"Live model fetch failed for provider '{provider}': {e}")
+            continue
+
+        # Filter out non-chat, preview, and experimental models
+        filtered = []
+        for m in live_models:
+            m_lower = m.lower()
+            if not any(ex in m_lower for ex in exclusions):
+                filtered.append(m)
+
+        if filtered:
+            available[provider] = sorted(list(set(filtered)))
 
     return available
 

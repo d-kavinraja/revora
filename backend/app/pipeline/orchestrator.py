@@ -1,3 +1,9 @@
+"""Review pipeline orchestrator.
+
+Orchestrates the full Context Engineering review pipeline with
+per-stage error handling and graceful degradation.
+"""
+
 import time
 import uuid
 import logging
@@ -27,7 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 class ReviewPipeline:
-    """Orchestrates the full Context Engineering review pipeline."""
+    """Orchestrates the full Context Engineering review pipeline.
+
+    Each stage has independent error handling. A failure in one stage
+    causes graceful degradation rather than pipeline failure.
+    """
 
     async def execute(
         self,
@@ -46,9 +56,31 @@ class ReviewPipeline:
         clone_url: str = None,
         token: str = None,
     ) -> dict:
+        """Execute the full review pipeline.
+
+        Args:
+            review_id: Review UUID.
+            installation_id: GitHub installation ID.
+            owner: Repository owner.
+            repo_name: Repository name.
+            pr_number: Pull request number.
+            pr_title: PR title.
+            pr_description: PR description.
+            head_sha: HEAD commit SHA.
+            diff_content: PR diff content.
+            user_id: User UUID.
+            provider: LLM provider name.
+            model: Optional model override.
+            clone_url: Optional clone URL for the repository.
+            token: Optional GitHub token for cloning.
+
+        Returns:
+            Dict with status and metrics.
+        """
         start = time.time()
         emitter = SSEEmitter(str(review_id))
         metrics = {}
+        repo_path = None
 
         try:
             # Stage 1: Prepare
@@ -56,87 +88,216 @@ class ReviewPipeline:
             await emitter.emit_log("preparing_review", f"Starting review for PR #{pr_number}")
 
             # Stage 2: Clone repository
-            await emitter.emit("cloning_repository", "running", EventType.STAGE_START)
-            repo_path = None
-            if clone_url and token:
-                try:
-                    repo_path = GitService.clone_repository(clone_url, token)
-                    await emitter.emit("cloning_repository", "completed", EventType.STAGE_COMPLETE)
-                except Exception as e:
-                    await emitter.emit("cloning_repository", "failed", EventType.STAGE_FAILED, message=str(e))
-                    repo_path = None
-            else:
-                await emitter.emit("cloning_repository", "skipped", EventType.STAGE_SKIPPED, message="No clone URL provided")
+            repo_path = await self._stage_clone(emitter, clone_url, token)
 
-            # Stage 3: Analyze repository (if cloned)
-            intelligence_data = {}
-            index = None
+            # Stage 3: Intelligence analysis (if cloned)
+            intelligence_data = await self._stage_intelligence(emitter, repo_path)
+
+            # Stage 4: Indexing (if cloned)
+            index = await self._stage_indexing(emitter, repo_path)
+
+            # Cleanup cloned repo immediately after indexing
             if repo_path:
-                await emitter.emit("analyzing_repository", "running", EventType.STAGE_START)
-
-                # Phase 1: Intelligence
-                await emitter.emit("detecting_languages", "running")
-                intelligence = await intelligence_engine.analyze(repo_path)
-                intelligence_data = intelligence.to_dict()
-                await emitter.emit("detecting_languages", "completed", metrics={"languages": len(intelligence.languages)})
-                await emitter.emit("detecting_frameworks", "completed", metrics={"frameworks": len(intelligence.frameworks)})
-                await emitter.emit("analyzing_architecture", "completed", metrics={"pattern": intelligence.architecture.pattern if intelligence.architecture else "unknown"})
-                await emitter.emit("analyzing_repository", "completed", EventType.STAGE_COMPLETE, metrics=intelligence_data)
-
-                # Phase 2: Indexing
-                await emitter.emit("indexing_repository", "running", EventType.STAGE_START)
-                index = await repository_indexer.build_index(repo_path)
-                metrics["graph_stats"] = index.metadata.get("graph_stats", {})
-                await emitter.emit("building_dependency_graph", "completed")
-                await emitter.emit("building_call_graph", "completed")
-                await emitter.emit("building_import_graph", "completed")
-                await emitter.emit("building_ast", "completed")
-                await emitter.emit("indexing_repository", "completed", EventType.STAGE_COMPLETE)
-
-                # Cleanup cloned repo
                 GitService.cleanup_repository(repo_path)
-            else:
-                await emitter.emit("analyzing_repository", "skipped", EventType.STAGE_SKIPPED)
-                await emitter.emit("indexing_repository", "skipped", EventType.STAGE_SKIPPED)
+                repo_path = None
 
-            # Phase 4: Context Retrieval
-            changed_files = []
-            if index:
-                await emitter.emit("finding_related_files", "running", EventType.STAGE_START)
-                # Extract changed file paths from diff
-                import re
-                changed_files = list(set(re.findall(r"diff --git a/(.*?) b/", diff_content)))
-                retrieval_result = await retrieval_engine.retrieve(changed_files, repo_path or ".", index, diff_content)
-                metrics["files_retrieved"] = len(retrieval_result.related_files)
-                metrics["total_tokens"] = retrieval_result.total_tokens
-                await emitter.emit("finding_related_files", "completed")
-                await emitter.emit("ranking_context", "completed")
-                await emitter.emit("compressing_context", "completed")
-            else:
-                retrieval_result = None
-                await emitter.emit("finding_related_files", "skipped", EventType.STAGE_SKIPPED)
+            # Stage 5: Knowledge retrieval
+            conventions, rules = await self._stage_knowledge(
+                emitter, owner, repo_name
+            )
 
-            # Phase 3: Knowledge
-            await emitter.emit("retrieving_repository_knowledge", "running", EventType.STAGE_START)
-            repo_id = None
+            # Stage 6: Context retrieval
+            retrieval_result = await self._stage_retrieval(
+                emitter, index, diff_content
+            )
+
+            # Stage 7: Build prompt
+            prompt = await self._stage_prompt(
+                emitter, intelligence_data, conventions, rules,
+                diff_content, retrieval_result
+            )
+
+            # Stage 8: LLM call
+            llm_response = await self._stage_llm(
+                emitter, prompt, user_id, provider, model
+            )
+            metrics.update({
+                "provider": llm_response.provider,
+                "model": llm_response.model,
+                "input_tokens": llm_response.input_tokens,
+                "output_tokens": llm_response.output_tokens,
+                "estimated_cost": llm_response.estimated_cost_usd,
+            })
+
+            # Stage 9: Verification
+            verified = await self._stage_verification(
+                emitter, llm_response.content, repo_path or ".", diff_content
+            )
+
+            # Stage 10: Generate and publish review
+            await self._stage_publish(
+                emitter, verified, pr_title, installation_id,
+                owner, repo_name, pr_number, intelligence_data,
+                llm_response, start
+            )
+
+            # Save to DB
+            await self._save_completed(
+                review_id, verified, llm_response, metrics, start
+            )
+
+            # Complete
+            duration_ms = (time.time() - start) * 1000
+            await emitter.emit("completed", "completed", EventType.REVIEW_COMPLETE, metrics={
+                "duration_ms": duration_ms,
+                **metrics,
+            })
+
+            return {"status": "success", "duration_ms": duration_ms, "metrics": metrics}
+
+        except Exception as e:
+            logger.error(f"Pipeline error: {e}", exc_info=True)
+            await emitter.emit_error("pipeline", str(e))
+
+            # Mark review as failed
+            await self._save_failed(review_id, str(e))
+
+            return {"status": "failed", "error": str(e)}
+
+        finally:
+            # Ensure repo cleanup
+            if repo_path:
+                try:
+                    GitService.cleanup_repository(repo_path)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup repo: {e}")
+
+    async def _stage_clone(self, emitter, clone_url, token):
+        """Stage: Clone repository."""
+        await emitter.emit("cloning_repository", "running", EventType.STAGE_START)
+
+        if not clone_url or not token:
+            await emitter.emit("cloning_repository", "skipped", EventType.STAGE_SKIPPED,
+                             message="No clone URL provided")
+            return None
+
+        try:
+            repo_path = GitService.clone_repository(clone_url, token)
+            await emitter.emit("cloning_repository", "completed", EventType.STAGE_COMPLETE)
+            return repo_path
+        except Exception as e:
+            logger.warning(f"Clone failed: {e}")
+            await emitter.emit("cloning_repository", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            return None
+
+    async def _stage_intelligence(self, emitter, repo_path):
+        """Stage: Repository intelligence analysis."""
+        if not repo_path:
+            await emitter.emit("analyzing_repository", "skipped", EventType.STAGE_SKIPPED)
+            return {}
+
+        await emitter.emit("analyzing_repository", "running", EventType.STAGE_START)
+
+        try:
+            intelligence = await intelligence_engine.analyze(repo_path)
+            intelligence_data = intelligence.to_dict()
+            await emitter.emit("detecting_languages", "completed",
+                             metrics={"languages": len(intelligence.languages)})
+            await emitter.emit("detecting_frameworks", "completed",
+                             metrics={"frameworks": len(intelligence.frameworks)})
+            await emitter.emit("analyzing_architecture", "completed",
+                             metrics={"pattern": intelligence.architecture.pattern
+                                     if intelligence.architecture else "unknown"})
+            await emitter.emit("analyzing_repository", "completed",
+                             EventType.STAGE_COMPLETE, metrics=intelligence_data)
+            return intelligence_data
+        except Exception as e:
+            logger.warning(f"Intelligence analysis failed: {e}")
+            await emitter.emit("analyzing_repository", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            return {}
+
+    async def _stage_indexing(self, emitter, repo_path):
+        """Stage: Code graph indexing."""
+        if not repo_path:
+            await emitter.emit("indexing_repository", "skipped", EventType.STAGE_SKIPPED)
+            return None
+
+        await emitter.emit("indexing_repository", "running", EventType.STAGE_START)
+
+        try:
+            index = await repository_indexer.build_index(repo_path)
+            await emitter.emit("building_dependency_graph", "completed")
+            await emitter.emit("building_call_graph", "completed")
+            await emitter.emit("building_import_graph", "completed")
+            await emitter.emit("building_ast", "completed")
+            await emitter.emit("indexing_repository", "completed", EventType.STAGE_COMPLETE)
+            return index
+        except Exception as e:
+            logger.warning(f"Indexing failed: {e}")
+            await emitter.emit("indexing_repository", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            return None
+
+    async def _stage_knowledge(self, emitter, owner, repo_name):
+        """Stage: Knowledge retrieval."""
+        await emitter.emit("retrieving_repository_knowledge", "running", EventType.STAGE_START)
+
+        conventions = ""
+        rules = []
+
+        try:
             async with AsyncSessionLocal() as db:
                 repo_result = await db.execute(
                     select(Repository).where(Repository.full_name == f"{owner}/{repo_name}")
                 )
                 repo = repo_result.scalars().first()
                 if repo:
-                    repo_id = repo.id
+                    conventions = await knowledge_store.load_or_generate_conventions(
+                        repo.id, "."
+                    )
+                    rules = await knowledge_store.load_rules(repo.id)
 
-            conventions = ""
-            rules = []
-            if repo_id:
-                conventions = await knowledge_store.load_or_generate_conventions(repo_id, repo_path or ".")
-                rules = await knowledge_store.load_rules(repo_id)
             await emitter.emit("retrieving_repository_knowledge", "completed")
             await emitter.emit("loading_repository_rules", "completed")
+        except Exception as e:
+            logger.warning(f"Knowledge retrieval failed: {e}")
+            await emitter.emit("retrieving_repository_knowledge", "failed",
+                             EventType.STAGE_FAILED, message=str(e))
 
-            # Phase 5: Build Prompt
-            await emitter.emit("building_prompt", "running", EventType.STAGE_START)
+        return conventions, rules
+
+    async def _stage_retrieval(self, emitter, index, diff_content):
+        """Stage: Context retrieval."""
+        await emitter.emit("finding_related_files", "running", EventType.STAGE_START)
+
+        if not index:
+            await emitter.emit("finding_related_files", "skipped", EventType.STAGE_SKIPPED)
+            return None
+
+        try:
+            import re
+            changed_files = list(set(re.findall(r"diff --git a/(.*?) b/", diff_content)))
+            retrieval_result = await retrieval_engine.retrieve(
+                changed_files, ".", index, diff_content
+            )
+            await emitter.emit("finding_related_files", "completed")
+            await emitter.emit("ranking_context", "completed")
+            await emitter.emit("compressing_context", "completed")
+            return retrieval_result
+        except Exception as e:
+            logger.warning(f"Context retrieval failed: {e}")
+            await emitter.emit("finding_related_files", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            return None
+
+    async def _stage_prompt(self, emitter, intelligence_data, conventions, rules,
+                           diff_content, retrieval_result):
+        """Stage: Prompt building."""
+        await emitter.emit("building_prompt", "running", EventType.STAGE_START)
+
+        try:
             related_files_data = []
             if retrieval_result:
                 related_files_data = [
@@ -146,47 +307,75 @@ class ReviewPipeline:
 
             prompt = await prompt_builder.compile(
                 repo_summary=str(intelligence_data),
-                architecture_summary=intelligence_data.get("architecture", {}).get("pattern", "") if intelligence_data else "",
+                architecture_summary=intelligence_data.get("architecture", {}).get("pattern", "")
+                    if intelligence_data else "",
                 conventions=conventions,
                 rules=rules,
                 diff_content=sanitize_content(diff_content),
                 related_files=related_files_data,
             )
-            metrics["prompt_tokens"] = prompt.total_tokens
-            await emitter.emit("building_prompt", "completed", metrics={"tokens": prompt.total_tokens})
 
-            # Phase 6: LLM Call
-            await emitter.emit("selecting_ai_provider", "running", EventType.STAGE_START)
+            await emitter.emit("building_prompt", "completed",
+                             metrics={"tokens": prompt.total_tokens})
+            return prompt
+        except Exception as e:
+            logger.warning(f"Prompt building failed: {e}")
+            await emitter.emit("building_prompt", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            raise  # This is critical - cannot proceed without prompt
+
+    async def _stage_llm(self, emitter, prompt, user_id, provider, model):
+        """Stage: LLM call."""
+        await emitter.emit("selecting_ai_provider", "running", EventType.STAGE_START)
+
+        try:
             llm_response = await llm_orchestrator.complete(
                 prompt=prompt,
                 user_id=user_id,
                 preferred_provider=provider,
                 callback=emitter.emit,
             )
-            metrics["provider"] = llm_response.provider
-            metrics["model"] = llm_response.model
-            metrics["input_tokens"] = llm_response.input_tokens
-            metrics["output_tokens"] = llm_response.output_tokens
-            metrics["estimated_cost"] = llm_response.estimated_cost_usd
-
             await emitter.emit("receiving_ai_response", "completed", metrics={
                 "provider": llm_response.provider,
                 "model": llm_response.model,
                 "tokens": llm_response.input_tokens + llm_response.output_tokens,
             })
+            return llm_response
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            await emitter.emit("selecting_ai_provider", "failed", EventType.STAGE_FAILED,
+                             message=str(e))
+            raise  # This is critical - cannot proceed without LLM response
 
-            # Phase 7: Verification
-            await emitter.emit("running_verification_agent", "running", EventType.STAGE_START)
-            verified = await verification_engine.verify(llm_response.content, repo_path or ".", changed_files)
-            metrics["verified_findings"] = verified.verified_count
-            metrics["rejected_findings"] = verified.rejected_count
+    async def _stage_verification(self, emitter, ai_response, repo_path, diff_content):
+        """Stage: Verification."""
+        await emitter.emit("running_verification_agent", "running", EventType.STAGE_START)
+
+        try:
+            import re
+            changed_files = list(set(re.findall(r"diff --git a/(.*?) b/", diff_content)))
+            verified = await verification_engine.verify(ai_response, repo_path, changed_files)
             await emitter.emit("removing_hallucinations", "completed")
             await emitter.emit("deduplicating_findings", "completed")
             await emitter.emit("ranking_severity", "completed")
-            await emitter.emit("running_verification_agent", "completed", metrics=verified.to_dict())
+            await emitter.emit("running_verification_agent", "completed",
+                             metrics=verified.to_dict())
+            return verified
+        except Exception as e:
+            logger.warning(f"Verification failed: {e}")
+            await emitter.emit("running_verification_agent", "failed",
+                             EventType.STAGE_FAILED, message=str(e))
+            # Return a minimal verification result
+            from app.verification.models import VerificationResult
+            return VerificationResult(findings=[], verified_count=0, rejected_count=0)
 
-            # Phase 8: Generate GitHub Review
-            await emitter.emit("generating_review_summary", "running", EventType.STAGE_START)
+    async def _stage_publish(self, emitter, verified, pr_title, installation_id,
+                            owner, repo_name, pr_number, intelligence_data,
+                            llm_response, start):
+        """Stage: Generate and publish review."""
+        await emitter.emit("generating_review_summary", "running", EventType.STAGE_START)
+
+        try:
             usage_stats = llm_orchestrator.get_total_usage()
             review_summary = await github_review_generator.generate(
                 verified=verified,
@@ -217,49 +406,46 @@ class ReviewPipeline:
                 await emitter.emit("publishing_review", "completed")
             except Exception as e:
                 logger.error(f"Failed to publish review to GitHub: {e}")
-                await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(e))
+                await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED,
+                                 message=str(e))
 
-            # Save to DB
+        except Exception as e:
+            logger.warning(f"Review generation failed: {e}")
+            await emitter.emit("generating_review_summary", "failed",
+                             EventType.STAGE_FAILED, message=str(e))
+
+    async def _save_completed(self, review_id, verified, llm_response, metrics, start):
+        """Save completed review to database."""
+        try:
             async with AsyncSessionLocal() as db:
                 res = await db.execute(select(Review).where(Review.id == review_id))
                 db_review = res.scalars().first()
                 if db_review:
                     db_review.status = "completed"
-                    db_review.summary = review_summary.body
                     db_review.completed_at = datetime.now(timezone.utc)
                     db_review.stats = {
                         "provider": llm_response.provider,
                         "model": llm_response.model,
-                        "risk_score": review_summary.risk_score,
                         "verified_findings": verified.verified_count,
                         **metrics,
                     }
                     await db.commit()
-
-            # Complete
-            duration_ms = (time.time() - start) * 1000
-            await emitter.emit("completed", "completed", EventType.REVIEW_COMPLETE, metrics={
-                "duration_ms": duration_ms,
-                **metrics,
-            })
-
-            return {"status": "success", "duration_ms": duration_ms, "metrics": metrics}
-
         except Exception as e:
-            logger.error(f"Pipeline error: {e}", exc_info=True)
-            await emitter.emit_error("pipeline", str(e))
+            logger.error(f"Failed to save review: {e}")
 
-            # Mark review as failed
+    async def _save_failed(self, review_id, error_message):
+        """Save failed review to database."""
+        try:
             async with AsyncSessionLocal() as db:
                 res = await db.execute(select(Review).where(Review.id == review_id))
                 db_review = res.scalars().first()
                 if db_review:
                     db_review.status = "failed"
-                    db_review.error_message = str(e)
+                    db_review.error_message = error_message
                     db_review.completed_at = datetime.now(timezone.utc)
                     await db.commit()
-
-            return {"status": "failed", "error": str(e)}
+        except Exception as e:
+            logger.error(f"Failed to save failed review: {e}")
 
 
 review_pipeline = ReviewPipeline()

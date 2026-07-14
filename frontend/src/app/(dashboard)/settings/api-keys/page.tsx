@@ -135,7 +135,8 @@ export default function ApiKeysSettingsPage() {
       anthropic: 'Anthropic',
       gemini: 'Gemini',
       groq: 'Groq',
-      deepseek: 'DeepSeek'
+      deepseek: 'DeepSeek',
+      grok: 'Grok'
     };
     return names[prov.toLowerCase()] || prov;
   };
@@ -159,7 +160,7 @@ export default function ApiKeysSettingsPage() {
             API Keys Settings
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
-            Manage credentials for multi-provider LLM support (OpenAI, Claude, Groq, DeepSeek, and Gemini).
+            Manage credentials for multi-provider LLM support (OpenAI, Claude, Groq, DeepSeek, Gemini, and Grok).
           </p>
         </div>
         <button
@@ -193,6 +194,7 @@ export default function ApiKeysSettingsPage() {
                   <option value="gemini">Gemini</option>
                   <option value="groq">Groq</option>
                   <option value="deepseek">DeepSeek</option>
+                  <option value="grok">Grok</option>
                 </select>
               </div>
               

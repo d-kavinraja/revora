@@ -26,6 +26,8 @@ async def validate_form_payload(payload: Dict[str, Any]):
         return {"valid": False, "errors": {"api_key": "OpenAI keys must start with sk-"}}
     if provider == "anthropic" and not api_key.startswith("sk-ant-"):
         return {"valid": False, "errors": {"api_key": "Anthropic keys must start with sk-ant-"}}
+    if provider == "grok" and not api_key.startswith("xai-"):
+        return {"valid": False, "errors": {"api_key": "Grok keys must start with xai-"}}
     if len(api_key) < 15:
         return {"valid": False, "errors": {"api_key": "API Key is too short"}}
         
