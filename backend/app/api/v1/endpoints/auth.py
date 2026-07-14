@@ -182,3 +182,9 @@ async def github_login(
             "image": user.avatar_url
         }
     }
+
+
+@router.get("/config", response_model=dict)
+async def get_auth_config():
+    """Returns public authentication configurations, like the GitHub Client ID."""
+    return {"github_client_id": settings.GITHUB_CLIENT_ID}
