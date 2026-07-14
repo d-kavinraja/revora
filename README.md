@@ -1500,7 +1500,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <div align="center">
 
-**Built with care by [Kavinraja.D](https://github.com/d-kavinraja)**
+**Built with care by [Revora-Team](https://github.com/d-kavinraja)**
 
 <img src="https://img.shields.io/badge/Revora-Context%20Engineering%20Platform-6366f1?style=for-the-badge&logo=github&logoColor=white" />
 
