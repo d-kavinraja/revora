@@ -133,23 +133,26 @@ async def github_login(
 
         # 3. Fetch user email if not public in profile
         if not email:
-            emails_res = await client.get(
-                "https://api.github.com/user/emails",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json"
-                }
-            )
-            if emails_res.is_success:
-                emails_list = emails_res.json()
-                # Find primary email
-                primary_email = next((e["email"] for e in emails_list if e.get("primary")), None)
-                if not primary_email and emails_list:
-                    primary_email = emails_list[0]["email"]
-                email = primary_email
+            try:
+                emails_res = await client.get(
+                    "https://api.github.com/user/emails",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/json"
+                    }
+                )
+                if emails_res.is_success:
+                    emails_list = emails_res.json()
+                    # Find primary email
+                    primary_email = next((e["email"] for e in emails_list if e.get("primary")), None)
+                    if not primary_email and emails_list:
+                        primary_email = emails_list[0]["email"]
+                    email = primary_email
+            except Exception:
+                pass
 
         if not email:
-            raise HTTPException(status_code=400, detail="Unable to retrieve user email from GitHub.")
+            email = f"{github_id}+{github_username}@users.noreply.github.com"
 
     # 4. Authenticate, link, or register user in DB
     # Check by github_id
