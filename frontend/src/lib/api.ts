@@ -128,4 +128,5 @@ export const api = {
   getAvailableModels: () => apiClient.get<Record<string, string[]>>('/repositories/available-models').then((r) => r.data),
   updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
+  getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
 };
