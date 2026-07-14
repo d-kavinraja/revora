@@ -90,11 +90,21 @@ async def github_login(
             }
         )
         if not token_res.is_success:
-            raise HTTPException(status_code=400, detail="Failed to exchange GitHub authorization code.")
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to exchange GitHub authorization code. Please verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in backend/.env match your GitHub App."
+            )
         
         token_data = token_res.json()
         access_token = token_data.get("access_token")
         if not access_token:
+            err_desc = token_data.get("error_description") or ""
+            err_code = token_data.get("error") or ""
+            if "incorrect or expired" in err_desc.lower() or "bad_verification_code" in err_code.lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail="GitHub returned: Invalid or expired code. This usually happens because GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET in your backend/.env does not match the GitHub App you are authorizing with, or because you need to restart uvicorn after modifying the .env file."
+                )
             raise HTTPException(status_code=400, detail=token_data.get("error_description", "Invalid GitHub authorization code."))
 
         # 2. Fetch GitHub user profile
