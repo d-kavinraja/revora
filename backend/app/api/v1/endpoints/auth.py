@@ -5,6 +5,7 @@ from sqlalchemy import select
 from datetime import timedelta
 from pydantic import BaseModel
 import httpx
+from typing import Optional
 
 from app.core.config import settings
 from app.core.auth import verify_password, create_access_token
@@ -18,6 +19,7 @@ router = APIRouter()
 
 class GitHubLoginRequest(BaseModel):
     code: str
+    redirect_uri: Optional[str] = None
 
 
 @router.post("/login", response_model=dict)
@@ -80,14 +82,18 @@ async def github_login(
 
     # 1. Exchange code for access token
     async with httpx.AsyncClient() as client:
+        exchange_data = {
+            "client_id": settings.GITHUB_CLIENT_ID,
+            "client_secret": settings.GITHUB_CLIENT_SECRET,
+            "code": payload.code
+        }
+        if payload.redirect_uri:
+            exchange_data["redirect_uri"] = payload.redirect_uri
+
         token_res = await client.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
-            data={
-                "client_id": settings.GITHUB_CLIENT_ID,
-                "client_secret": settings.GITHUB_CLIENT_SECRET,
-                "code": payload.code
-            }
+            data=exchange_data
         )
         if not token_res.is_success:
             raise HTTPException(
