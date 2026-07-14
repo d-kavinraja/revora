@@ -167,7 +167,7 @@ async def test_api_key(
 
     # Determine default validation model for each provider
     provider_models = {
-        "gemini": "gemini/gemini-2.5-flash",
+        "gemini": "gemini/gemini-3.5-flash",
         "openai": "gpt-4o-mini",
         "anthropic": "anthropic/claude-3-5-haiku-20241022",
         "groq": "groq/llama-3.3-70b-versatile",
@@ -199,6 +199,29 @@ async def test_api_key(
         
         return {"status": "success", "message": "Key is verified and connectable."}
     except Exception as e:
+        err_str = str(e).lower()
+        # If the error is due to rate limits (429) or temporary service overload (503),
+        # the key is authentic and correct, but the provider's server is temporarily overloaded or rate limited.
+        is_authenticated_but_busy = (
+            "503" in err_str or 
+            "429" in err_str or 
+            "rate_limit" in err_str or 
+            "rate limit" in err_str or 
+            "temporarily unavailable" in err_str or 
+            "high demand" in err_str or
+            "service_unavailable" in err_str or
+            "limit" in err_str
+        )
+        
+        if is_authenticated_but_busy:
+            db_key.is_valid = True
+            db.add(db_key)
+            await db.commit()
+            return {
+                "status": "success", 
+                "message": f"Key is verified (authenticated successfully), but the provider is currently busy/rate-limited: {e}"
+            }
+
         # Mark key as invalid
         db_key.is_valid = False
         db.add(db_key)

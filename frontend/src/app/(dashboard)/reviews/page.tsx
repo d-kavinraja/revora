@@ -105,7 +105,7 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     fetchReviews();
-    const interval = setInterval(fetchReviews, 10_000);
+    const interval = setInterval(fetchReviews, 3_000);
     return () => clearInterval(interval);
   }, [fetchReviews]);
 

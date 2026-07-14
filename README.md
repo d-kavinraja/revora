@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="banner/revora-banner.png" alt="Revora Banner" width="100%" />
+<img src="https://img.shields.io/badge/Revora-AI%20Code%20Review-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="Revora Banner" />
 
 # **Revora**
- 
-### The Open-Source AI Agent Code Reviewer for Modern Software Engineering
+
+### The Open-Source AI Code Review Platform
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -18,13 +18,44 @@
 
 ---
 
-**Revora** is an open-source AI Agent Code Reviewer built for modern software engineering teams.
+**Revora** is an **Open-Source AI Code Review Platform** built to deliver intelligent, repository-aware code reviews. Instead of reviewing only pull request diffs, Revora understands the repository by analyzing its architecture, dependencies, code relationships, conventions, and developer intent before generating AI-powered feedback.
 
-Unlike traditional AI code review tools that analyze only pull request diffs, Revora employs a repository-aware Context Engineering architecture to understand the entire codebase before generating reviews.
-
-By combining Repository Intelligence, Context Engineering, Multi-Agent AI, Verification, and Bring Your Own API Key (BYOK), Revora delivers explainable, high-confidence, enterprise-grade code reviews while giving developers complete control over their AI providers and costs.
+Designed with enterprise-grade engineering in mind, Revora combines repository intelligence, code graph indexing, smart context retrieval, multi-LLM orchestration, and a verification engine to produce accurate, explainable, and trustworthy code reviews.
 
 </div>
+
+---
+
+## Table of Contents
+
+- [Why Revora?](#why-revora)
+- [Architecture Overview](#architecture-overview)
+- [Review Pipeline Flow](#review-pipeline-flow)
+- [Feature Status](#feature-status)
+- [Supported LLM Providers](#supported-llm-providers)
+- [Context Engineering Modules](#context-engineering-modules)
+- [Technology Stack](#technology-stack)
+- [Folder Structure](#folder-structure)
+- [Quick Start](#quick-start)
+- [Local Development Guide](#local-development-guide)
+- [Environment Variables](#environment-variables)
+- [GitHub OAuth Setup](#github-oauth-setup)
+- [GitHub App Setup](#github-app-setup)
+- [GitHub Permissions](#github-permissions)
+- [Webhook Configuration](#webhook-configuration)
+- [Database Setup](#database-setup)
+- [Redis Setup](#redis-setup)
+- [Docker Setup](#docker-setup)
+- [Running the Application](#running-the-application)
+- [Authentication Flow](#authentication-flow)
+- [Review Workflow](#review-workflow)
+- [API Documentation](#api-documentation)
+- [Contributing](#contributing)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Development Best Practices](#development-best-practices)
+- [License](#license)
 
 ---
 
@@ -50,10 +81,10 @@ Current AI code review tools:
 
 Revora's Context Engineering Engine:
 - Analyzes the **entire repository** structure
-- Builds **code graphs** (imports, calls, modules)
+- Builds **code graphs** (imports, calls, modules, APIs)
 - Retrieves **only relevant context** for each change
 - **Verifies every finding** against actual code
-- Streams the full pipeline in **real-time**
+- Supports **per-repository model configuration**
 
 </td>
 </tr>
@@ -65,47 +96,52 @@ Revora's Context Engineering Engine:
 
 ```mermaid
 graph TB
-    subgraph Frontend["Frontend - Next.js 16"]
-        UI[Dashboard & Review UI]
-        SSE[Real-Time SSE Stream]
+    subgraph Frontend["Frontend - Next.js 16 + Tailwind CSS"]
+        UI[Dashboard, Repos, Reviews]
+        ConfigModal[Repository Model Config]
     end
 
-    subgraph Backend["Backend - FastAPI"]
+    subgraph Backend["Backend - FastAPI + SQLAlchemy"]
         WH[Webhook Receiver]
-        PIPE[Review Pipeline Orchestrator]
+        API[REST API Endpoints]
     end
 
     subgraph ContextEngine["Context Engineering Engine"]
         direction TB
-        I1["Repository Intelligence - Languages, Frameworks, Architecture"]
-        I2["Repository Indexing - AST, Import Graph, Call Graph"]
-        I3["Knowledge Base - Conventions, Rules, Summaries"]
-        I4["Context Retrieval - RAG, Ranking, Compression"]
+        I1["Repository Intelligence - Language, Framework, Architecture, DB, CI/CD Detection"]
+        I2["Repository Indexing - Import Graph, Call Graph, Module Graph, API Graph, DB Graph"]
+        I3["Knowledge Base - Conventions, Rules, Summaries (PostgreSQL)"]
+        I4["Context Retrieval - RAG, Ranking, Compression, Token Budgeting"]
         I5["Prompt Builder - Modular, Versioned Prompts"]
-        I6["LLM Orchestrator - Multi-Provider with Fallbacks"]
-        I7["Verification Engine - File/Line/Hallucination Checks"]
-        I8["Review Generator - GitHub API Format"]
+        I6["LLM Orchestrator - Multi-Provider with Fallbacks, Retries, Cost Tracking"]
+        I7["Verification Engine - File/Line Existence, Hallucination Detection, Confidence Scoring"]
+        I8["GitHub Review Generator - Risk Scoring, Inline Comments, PR Summary"]
+    end
+
+    subgraph Security["Security Layer"]
+        SEC[Secret Redaction]
+        INJ[Prompt Injection Detection]
     end
 
     subgraph Data["Data Layer"]
-        PG[(PostgreSQL)]
-        RD[(Redis)]
+        PG[(PostgreSQL 15)]
+        RD[(Redis 7)]
     end
 
-    subgraph External["External"]
-        GH[GitHub API]
-        LLM[LLM Providers]
+    subgraph External["External Services"]
+        GH[GitHub API - Webhooks, PR Reviews, Check Runs]
+        LLM[Gemini / OpenAI / Claude / Groq / DeepSeek]
     end
 
-    UI <--> SSE
-    SSE <--> PIPE
-    WH --> PIPE
-    PIPE --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
-    PIPE <--> PG
-    PIPE <--> RD
+    UI <--> API
+    ConfigModal --> API
+    WH --> I1
+    I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
+    SEC --> I4
+    INJ --> I4
+    API <--> PG
     I8 <--> GH
     I6 <--> LLM
-    SSE <--> UI
 ```
 
 ---
@@ -116,125 +152,130 @@ graph TB
 sequenceDiagram
     participant GH as GitHub
     participant WH as Webhook
-    participant PIPE as Pipeline
-    participant INT as Intelligence
+    participant INT as Intelligence Engine
     participant IDX as Indexer
+    participant KB as Knowledge Base
     participant RET as Retriever
-    participant LLM as LLM Provider
+    participant PROM as Prompt Builder
+    participant ORCH as LLM Orchestrator
     participant VER as Verifier
     participant GEN as Review Generator
-    participant UI as Frontend (SSE)
+    participant SEC as Security Layer
 
-    GH->>WH: PR Opened/Reopened
-    WH->>PIPE: Trigger Review
-    PIPE->>UI: SSE: Pipeline Started
+    GH->>WH: PR Opened / Reopened
+    WH->>WH: Verify HMAC Signature
+    WH->>INT: Phase 1: Analyze Repository
 
-    PIPE->>INT: Phase 1: Analyze Repo
-    INT-->>PIPE: Languages, Frameworks, Architecture
+    Note over INT: Detect languages, frameworks,<br/>architecture, DB, CI/CD, security patterns
 
-    PIPE->>IDX: Phase 2: Build Code Graphs
-    IDX-->>PIPE: Import/Call/Module/API Graphs
+    INT->>IDX: Phase 2: Build Code Graphs
 
-    PIPE->>PIPE: Phase 3: Load Knowledge Base
-    PIPE->>RET: Phase 4: Retrieve Context
-    RET-->>PIPE: Ranked, Compressed Context
+    Note over IDX: Import graph, call graph,<br/>module graph, API graph,<br/>DB models, config, tests
 
-    PIPE->>PIPE: Phase 5: Build Prompt
-    PIPE->>LLM: Phase 6: Send to LLM
-    LLM-->>PIPE: AI Review Response
+    IDX->>KB: Phase 3: Load Knowledge Base
 
-    PIPE->>VER: Phase 7: Verify Findings
-    VER-->>PIPE: Verified, Confidence-Scored
+    Note over KB: Conventions, review rules,<br/>cached summaries
 
-    PIPE->>GEN: Phase 8: Generate GitHub Review
-    GEN-->>PIPE: PR Comment + Inline Notes
+    KB->>RET: Phase 4: Retrieve Relevant Context
 
-    PIPE->>GH: Publish Review
-    PIPE->>UI: SSE: Review Complete
+    Note over RET: RAG retrieval from graphs,<br/>ranking, compression,<br/>token budgeting (5k-12k)
+
+    RET->>SEC: Sanitize Content
+    SEC->>SEC: Redact secrets, detect injection
+    SEC->>PROM: Phase 5: Build Prompt
+
+    Note over PROM: System prompt + repo context<br/>+ diff + related files<br/>+ analysis instructions
+
+    PROM->>ORCH: Phase 6: Call LLM Provider
+
+    Note over ORCH: Multi-provider fallback,<br/>retries, cost tracking
+
+    ORCH->>VER: Phase 7: Verify Findings
+
+    Note over VER: File exists? Line exists?<br/>Hallucination check?<br/>Confidence scoring
+
+    VER->>GEN: Phase 8: Generate GitHub Review
+
+    Note over GEN: Risk scoring, inline comments,<br/>PR summary, suggested fixes
+
+    GEN->>GH: Publish Review via API
 ```
 
 ---
 
-## Features
+## Feature Status
 
 <table>
 <tr>
-<td align="center" width="33%">
+<td width="50%" valign="top">
 
-<img src="https://img.shields.io/badge/Repository%20Intelligence-6366f1?style=for-the-badge" /><br/>
+### Completed
 
-**Repository Intelligence**
-<br/><sub>Languages, frameworks, architecture, database, CI/CD, security patterns — all detected without LLM</sub>
+**Backend - Context Engineering Engine:**
+- Repository Intelligence Engine (13 detectors)
+- Repository Indexing (7 code graphs)
+- Knowledge Base with PostgreSQL persistence
+- Context Retrieval with RAG and token budgeting
+- Modular Prompt Builder
+- Multi-Provider LLM Orchestrator (Gemini, OpenAI, Claude, Groq, DeepSeek)
+- Verification Engine (file/line checks, hallucination detection)
+- GitHub Review Generator (inline comments, risk scoring)
+- Security layer (secret redaction, prompt injection detection)
+- SSE real-time event emitter
+- Repository-level model configuration
 
-</td>
-<td align="center" width="33%">
+**Backend - Core:**
+- GitHub App authentication (JWT + installation tokens)
+- GitHub OAuth login flow
+- Webhook receiver with HMAC verification
+- Review pipeline with 8-phase execution
+- Celery worker configuration
+- Alembic migrations (4 migrations, 17 tables)
 
-<img src="https://img.shields.io/badge/Code%20Graphs-06b6d4?style=for-the-badge" /><br/>
-
-**Code Graph Indexing**
-<br/><sub>Import graphs, call graphs, module graphs, API graphs, DB models, test coverage maps</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Context%20Retrieval-10b981?style=for-the-badge" /><br/>
-
-**Smart Context Retrieval**
-<br/><sub>Only relevant files retrieved. Token-budgeted, compressed, deduplicated context</sub>
-
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Multi-Provider%20LLM-f59e0b?style=for-the-badge" /><br/>
-
-**Multi-Provider LLM** `In Development`
-<br/><sub>Gemini, OpenAI, Claude, Groq, DeepSeek — with fallbacks, retries, cost tracking</sub>
-<br/><sub>Currently only **Gemini** is available. Other providers coming soon.</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Verification%20Engine-22c55e?style=for-the-badge" /><br/>
-
-**Verification Engine**
-<br/><sub>Every finding verified: file exists, line exists, not hallucinated, confidence-scored</sub>
+**Frontend:**
+- Landing page with hero and features
+- GitHub OAuth login
+- Dashboard with stats and recent reviews
+- Repositories page with model configuration modal
+- Reviews list with status filters
+- Review detail with markdown rendering
+- Settings page (API keys management)
+- Light/dark mode toggle
+- Responsive sidebar with collapse
+- Shared components (StatusBadge, Skeleton, EmptyState)
 
 </td>
-<td align="center" width="33%">
+<td width="50%" valign="top">
 
-<img src="https://img.shields.io/badge/Real-Time%20SSE-8b5cf6?style=for-the-badge" /><br/>
+### In Development 
 
-**Real-Time Pipeline**
-<br/><sub>Watch every stage execute live — no black boxes, full transparency and explainability</sub>
+**AI Capabilities:**
+- Multi-provider LLM support (only Gemini available now)
+- Auto-remediation (generating fix commits)
+- Conversational PR interface (Chat with PR)
+- PR description auto-generation
 
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
+**GitHub Integration:**
+- GitHub Checks API (pass/fail status checks)
+- Inline code annotations on PR diffs
 
-<img src="https://img.shields.io/badge/Security%20%26%20Sanitization-ef4444?style=for-the-badge" /><br/>
+**Context Engineering:**
+- Cross-repository context (microservices)
+- Historical PR context understanding
+- Tree-sitter based AST parsing (currently regex-based)
 
-**Security & Sanitization**
-<br/><sub>Secret redaction, prompt injection detection, sandboxed repo cloning</sub>
+**Review Quality:**
+- Developer feedback loop (upvote/downvote comments)
+- Review accuracy improvement from feedback
 
-</td>
-<td align="center" width="33%">
+**Enterprise:**
+- Role-Based Access Control (RBAC)
+- SSO/SAML integration
+- Audit logging
 
-<img src="https://img.shields.io/badge/BYOK%20Cost%20Control-f97316?style=for-the-badge" /><br/>
-
-**Bring Your Own Key** `In Development`
-<br/><sub>Users provide their own API keys. Full cost transparency with token dashboards</sub>
-<br/><sub>API Keys UI page and backend management coming soon.</sub>
-
-</td>
-<td align="center" width="33%">
-
-<img src="https://img.shields.io/badge/Enterprise%20Ready-6366f1?style=for-the-badge" /><br/>
-
-**Enterprise Ready**
-<br/><sub>Clean Architecture, SOLID principles, async workers, Docker deployment</sub>
+**Frontend:**
+- Real-time SSE execution dashboard on review detail page
+- API keys settings page (route exists, needs full UI)
 
 </td>
 </tr>
@@ -242,7 +283,7 @@ sequenceDiagram
 
 ---
 
-## LLM Provider Support
+## Supported LLM Providers
 
 <table>
 <tr>
@@ -254,26 +295,40 @@ sequenceDiagram
 </tr>
 </table>
 
-> **Note:** Currently only **Google Gemini** is fully integrated and available for use. Multi-provider support (OpenAI, Claude, Groq, DeepSeek) is actively being developed. See [Issue #1](https://github.com/d-kavinraja/revora/issues/1) for progress.
+> Currently only **Google Gemini** is fully integrated. Multi-provider support is actively being developed.
 
 ---
 
-## Roadmap & In Development
+## Context Engineering Modules
 
-The following features are actively being developed. Contributions are welcome — check the [Issues](https://github.com/d-kavinraja/revora/issues) tab to see what is being worked on:
+<table>
+<tr>
+<td align="center" width="25%">
 
-| Feature | Status | Issue |
-|---------|--------|-------|
-| Multi-Provider LLM Support (OpenAI, Claude, Groq, DeepSeek) | In Development | [#1](https://github.com/d-kavinraja/revora/issues/1) |
-| API Keys UI Page (Settings) | In Development | [#2](https://github.com/d-kavinraja/revora/issues/2) |
-| API Keys Backend Management | In Development | [#3](https://github.com/d-kavinraja/revora/issues/3) |
-| Repository Chat (AI Assistant) | Planned | [#4](https://github.com/d-kavinraja/revora/issues/4) |
-| Automatic Unit Test Generation | Planned | [#5](https://github.com/d-kavinraja/revora/issues/5) |
-| AI Documentation Generation | Planned | [#6](https://github.com/d-kavinraja/revora/issues/6) |
-| Automatic Patch Generation | Planned | [#7](https://github.com/d-kavinraja/revora/issues/7) |
-| Engineering Analytics Dashboard | Planned | [#8](https://github.com/d-kavinraja/revora/issues/8) |
-| CLI Tool | Planned | [#9](https://github.com/d-kavinraja/revora/issues/9) |
-| IDE Plugins (VS Code, JetBrains) | Planned | [#10](https://github.com/d-kavinraja/revora/issues/10) |
+**Repository Intelligence**
+<br/><sub>13 detectors analyzing languages, frameworks, architecture pattern, database, package manager, testing, build tools, CI/CD, security auth, cloud provider, caching, queues, repo type — all without LLM</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Code Graph Indexing**
+<br/><sub>7 graph types: import graph, call graph, module graph, API endpoint graph, database model graph, configuration graph, test graph — built via regex-based code parsing</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Context Retrieval**
+<br/><sub>RAG-based retrieval from code graphs, hybrid ranking, context compression, token budgeting (5k-12k per review), deduplication</sub>
+
+</td>
+<td align="center" width="25%">
+
+**Verification Engine**
+<br/><sub>Every AI finding verified: file exists in repo, line number valid, not duplicate, not hallucinated, confidence-scored above threshold</sub>
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -312,46 +367,10 @@ The following features are actively being developed. Contributions are welcome �
 ![Redis](https://img.shields.io/badge/Redis-7-dc382d?style=flat-square&logo=redis)
 ![Celery](https://img.shields.io/badge/Celery-5-9ddc10?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker)
-![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Ready-2088ff?style=flat-square&logo=githubactions)
 
 </td>
 </tr>
 </table>
-
----
-
-## Context Engineering Flow
-
-```
-+-----------------------------------------------------------------------+
-|                    REVORA CONTEXT ENGINEERING FLOW                     |
-+-----------------------------------------------------------------------+
-|                                                                       |
-|  +----------+    +----------+    +----------+    +----------+         |
-|  | Repo     |--->| Index    |--->| Know     |--->| RAG      |         |
-|  | Intelligence|  | Graphs   |   | Base     |   | Retrieve |         |
-|  +----------+    +----------+    +----------+    +----------+         |
-|       |               |              |              |                  |
-|       v               v              v              v                  |
-|  Languages       Import Graph   Conventions    Ranked Files           |
-|  Frameworks      Call Graph     Rules          Compressed             |
-|  Architecture    Module Graph   Summaries      Token-Budgeted         |
-|  Database        API Graph      ADRs           Deduplicated           |
-|  CI/CD           DB Graph       Learnings                             |
-|                                                                       |
-|  +----------+    +----------+    +----------+    +----------+         |
-|  | Prompt   |--->| LLM      |--->| Verify   |--->| GitHub   |         |
-|  | Builder  |    |Orchestr. |    | Engine   |    | Review   |         |
-|  +----------+    +----------+    +----------+    +----------+         |
-|       |               |              |              |                  |
-|       v               v              v              v                  |
-|  System Prompt   Multi-Provider File Exists    PR Comments            |
-|  Repo Context    Fallbacks      Line Exists    Risk Score             |
-|  Diff Content    Retries        Not Duplicate  Suggestions            |
-|  Related Files   Cost Tracking  Confidence     Summary                |
-|                                                                       |
-+-----------------------------------------------------------------------+
-```
 
 ---
 
@@ -361,58 +380,42 @@ The following features are actively being developed. Contributions are welcome �
 revora/
 ├── backend/
 │   ├── app/
-│   │   ├── ai/                  # Core AI pipeline (LLM, graph, prompts)
-│   │   ├── api/v1/endpoints/    # FastAPI route handlers
-│   │   ├── core/                # Auth, config, security, dependencies
-│   │   ├── db/                  # SQLAlchemy engine & session
-│   │   ├── github/              # GitHub App auth, client, webhooks
-│   │   ├── intelligence/        # Repository Intelligence Engine
-│   │   ├── indexing/            # Code Graph Indexing
-│   │   ├── knowledge/           # Knowledge Base
-│   │   ├── models/              # SQLAlchemy ORM models
-│   │   ├── orchestrator/        # LLM Orchestrator
-│   │   ├── pipeline/            # Review Pipeline Orchestrator
-│   │   ├── prompt_engine/       # Prompt Builder
-│   │   ├── retrieval/           # Context Retrieval Engine
-│   │   ├── security/            # Sanitization & injection detection
-│   │   ├── schemas/             # Pydantic request/response schemas
-│   │   ├── services/            # Business logic services
-│   │   ├── sse/                 # Server-Sent Events
-│   │   ├── verification/        # Finding Verification Engine
-│   │   ├── github_review/       # GitHub Review Generator
-│   │   └── worker/              # Celery background tasks
-│   ├── alembic/                 # Database migrations
+│   │   ├── ai/                    # LLM service, LangGraph agents, prompts, state
+│   │   ├── api/v1/endpoints/      # FastAPI routes (auth, repos, reviews, dashboard, webhooks)
+│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet encryption)
+│   │   ├── db/                    # SQLAlchemy async engine and session
+│   │   ├── github/                # GitHub App auth, API client, webhook handler
+│   │   ├── github_review/         # GitHub PR review format generator
+│   │   ├── indexing/              # Code graph builders (import, call, module, API, DB, config, test)
+│   │   ├── intelligence/          # Repository analysis (13 detectors, no LLM)
+│   │   ├── knowledge/             # Knowledge base with DB persistence and caching
+│   │   ├── models/                # SQLAlchemy ORM models (17 tables)
+│   │   ├── orchestrator/          # Multi-provider LLM with fallbacks and cost tracking
+│   │   ├── pipeline/              # 8-phase review pipeline orchestrator
+│   │   ├── prompt_engine/         # Modular prompt builder with templates
+│   │   ├── retrieval/             # RAG context retrieval with ranking and compression
+│   │   ├── schemas/               # Pydantic request/response schemas
+│   │   ├── security/              # Secret redaction, prompt injection detection
+│   │   ├── services/              # Business logic (user, API key management)
+│   │   ├── sse/                   # Server-Sent Events emitter
+│   │   ├── verification/          # AI finding verification engine
+│   │   └── worker/                # Celery background tasks
+│   ├── alembic/                   # Database migrations (4 migrations)
 │   └── requirements.txt
 │
 ├── frontend/
 │   └── src/
-│       ├── app/                 # Next.js App Router pages
-│       ├── components/          # React components
-│       │   ├── layout/          # Sidebar, ThemeProvider
-│       │   ├── shared/          # StatusBadge, Skeleton, EmptyState
-│       │   └── ui/              # shadcn/ui primitives
-│       ├── lib/                 # API client, utilities
-│       └── store/               # Zustand state stores
+│       ├── app/                   # Next.js App Router (9 pages)
+│       ├── components/            # React components
+│       │   ├── layout/            # Sidebar, ThemeProvider
+│       │   ├── shared/            # StatusBadge, Skeleton, EmptyState
+│       │   └── ui/                # shadcn/ui primitives, Button, LoaderIcon, ThemeToggle
+│       ├── lib/                   # Axios API client, utilities
+│       └── store/                 # Zustand stores (auth, theme)
 │
-├── docker-compose.yml           # Full stack deployment
+├── docker-compose.yml
 └── README.md
 ```
-
----
-
-## Real-Time Execution Dashboard
-
-Revora does not show a loading spinner. Users watch every pipeline stage execute live:
-
-- **Pipeline Timeline** — 30+ stages with status indicators
-- **Live Log Stream** — Real-time SSE event streaming
-- **Token Dashboard** — Input/output tokens, cost, latency
-
-Each stage exposes:
-- **Status** — Waiting / Running / Completed / Failed / Skipped
-- **Duration** — Execution time per stage
-- **Metrics** — Files scanned, tokens used, context size
-- **Logs** — Detailed execution logs
 
 ---
 
@@ -457,15 +460,1037 @@ npm run dev
 
 ---
 
+## Local Development Guide
+
+This guide walks you through setting up Revora on your local machine from scratch.
+
+### Prerequisites
+
+- **Python 3.11+** — [Download](https://python.org)
+- **Node.js 18+** — [Download](https://nodejs.org)
+- **PostgreSQL 15+** — [Download](https://postgresql.org) or use Docker
+- **Redis 7+** — [Download](https://redis.io) or use Docker
+- **Docker & Docker Compose** (optional) — [Download](https://docker.com)
+- **Git** — [Download](https://git-scm.com)
+
+### Step-by-Step Setup
+
+#### 1. Clone the Repository
+
+```bash
+git clone https://github.com/d-kavinraja/revora.git
+cd revora
+```
+
+#### 2. Start Database Services (Docker)
+
+```bash
+# Start PostgreSQL and Redis
+docker run -d --name revora-postgres -p 5432:5432 -e POSTGRES_USER=revora -e POSTGRES_PASSWORD=revora_pass -e POSTGRES_DB=revora_db postgres:15-alpine
+docker run -d --name revora-redis -p 6379:6379 redis:7-alpine
+```
+
+Or use the full Docker Compose setup:
+
+```bash
+docker-compose up -d db
+```
+
+#### 3. Configure Environment Variables
+
+```bash
+cd backend
+copy .env.example .env  # Windows
+# or
+cp .env.example .env    # Linux/Mac
+```
+
+Edit `.env` with your values (see [Environment Variables](#environment-variables) section).
+
+#### 4. Run Database Migrations
+
+```bash
+cd backend
+set PYTHONPATH=.  # Windows
+export PYTHONPATH=.  # Linux/Mac
+
+# Activate virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+```
+
+#### 5. Start Backend Server
+
+```bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The backend API will be available at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+
+#### 6. Start Frontend Server
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:3000`.
+
+#### 7. Verify Application
+
+1. Open `http://localhost:3000` in your browser
+2. Click "Sign in with GitHub"
+3. Complete GitHub OAuth flow
+4. You should see the dashboard
+
+#### 8. Connect GitHub
+
+1. Go to GitHub Settings > Developer settings > GitHub Apps
+2. Create a new GitHub App (see [GitHub App Setup](#github-app-setup))
+3. Install the app on your repositories
+4. Return to Revora and click "Sync Repositories"
+
+#### 9. Trigger First Review
+
+1. Open a Pull Request in a connected repository
+2. Revora will automatically receive the webhook
+3. The AI review will appear on the PR within minutes
+
+---
+
+## Environment Variables
+
+### Backend Variables
+
+| Variable | Purpose | Required | Example | Service |
+|----------|---------|----------|---------|---------|
+| `APP_NAME` | Application name | No | `Revora` | Backend |
+| `APP_ENV` | Environment mode | No | `development` | Backend |
+| `SECRET_KEY` | Application secret key | **Yes** | `your-secret-key-here` | Backend |
+| `JWT_SECRET_KEY` | JWT signing key | **Yes** | `your-jwt-secret-here` | Backend |
+| `ENCRYPTION_KEY` | Fernet encryption key (32 bytes, base64) | **Yes** | `CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=` | Backend |
+| `DATABASE_URL` | PostgreSQL connection string | **Yes** | `postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db` | Backend |
+| `REDIS_URL` | Redis connection string | No | `redis://localhost:6379/0` | Backend |
+| `CORS_ORIGINS` | Allowed CORS origins | No | `["http://localhost:3000"]` | Backend |
+
+### GitHub OAuth Variables
+
+| Variable | Purpose | Required | Example | Service |
+|----------|---------|----------|---------|---------|
+| `GITHUB_CLIENT_ID` | GitHub OAuth App Client ID | **Yes** | `Iv23lix4UrdcNq2hoWol` | Backend + Frontend |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret | **Yes** | `your-client-secret` | Backend |
+
+### GitHub App Variables
+
+| Variable | Purpose | Required | Example | Service |
+|----------|---------|----------|---------|---------|
+| `GITHUB_APP_ID` | GitHub App ID | **Yes** | `4265854` | Backend |
+| `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (PEM format) | **Yes** | `-----BEGIN RSA PRIVATE KEY-----\n...` | Backend |
+| `GITHUB_WEBHOOK_SECRET` | Webhook signature verification secret | **Yes** | `your-webhook-secret` | Backend |
+
+### LLM API Keys
+
+| Variable | Purpose | Required | Example | Service |
+|----------|---------|----------|---------|---------|
+| `GEMINI_API_KEY` | Google Gemini API key | Conditional* | `your-gemini-api-key` | Backend |
+| `OPENAI_API_KEY` | OpenAI API key | Conditional* | `sk-...` | Backend |
+
+*At least one LLM provider API key is required for AI reviews.
+
+### Frontend Variables
+
+| Variable | Purpose | Required | Example | Service |
+|----------|---------|----------|---------|---------|
+| `NEXT_PUBLIC_API_URL` | Backend API base URL | **Yes** | `http://localhost:8000/api/v1` | Frontend |
+| `NEXT_PUBLIC_GITHUB_CLIENT_ID` | GitHub OAuth Client ID (for login button) | **Yes** | `Iv23lix4UrdcNq2hoWol` | Frontend |
+
+### Security Notes
+
+> **Never commit `.env` files or PEM keys to version control.**
+
+- Generate a strong `SECRET_KEY` and `JWT_SECRET_KEY` (use `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- Generate `ENCRYPTION_KEY` with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- Use different secrets for development and production
+- Rotate secrets regularly in production
+
+---
+
+## GitHub OAuth Setup
+
+This section explains how to create a GitHub OAuth App for user authentication.
+
+### Creating a GitHub OAuth App
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click **OAuth Apps** in the left sidebar
+3. Click **New OAuth App**
+4. Fill in the form:
+   - **Application name**: `Revora Development`
+   - **Homepage URL**: `http://localhost:3000`
+   - **Authorization callback URL**: `http://localhost:3000/auth/callback`
+5. Click **Register application**
+6. Copy the **Client ID**
+7. Click **Generate a new client secret**
+8. Copy the **Client Secret** (shown only once)
+
+### Configuring Environment Variables
+
+Add to your `backend/.env`:
+
+```env
+GITHUB_CLIENT_ID=your_client_id_here
+GITHUB_CLIENT_SECRET=your_client_secret_here
+```
+
+Add to your `frontend/.env.local` (or set in Next.js config):
+
+```env
+NEXT_PUBLIC_GITHUB_CLIENT_ID=your_client_id_here
+```
+
+### OAuth Login Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant G as GitHub
+    participant B as Backend
+
+    U->>F: Click "Sign in with GitHub"
+    F->>G: Redirect to GitHub OAuth
+    G->>U: User authorizes app
+    G->>F: Redirect with code
+    F->>B: POST /api/v1/auth/github {code}
+    B->>G: Exchange code for access token
+    G->>B: Return access token
+    B->>G: Fetch user profile
+    G->>B: Return user data
+    B->>B: Create/update user in DB
+    B->>F: Return JWT token + user data
+    F->>F: Store token in localStorage
+    F->>U: Redirect to dashboard
+```
+
+### Common Mistakes
+
+- **Callback URL mismatch**: The callback URL must exactly match what's configured in GitHub (including `http://` vs `https://`)
+- **Missing scopes**: Ensure `read:user` and `user:email` scopes are requested
+- **Client Secret exposed**: Never expose the client secret in frontend code
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Invalid redirect URI" | Verify callback URL matches GitHub settings exactly |
+| "Bad credentials" | Regenerate client secret in GitHub settings |
+| "Email not found" | Ensure user has a public email on GitHub or grant `user:email` scope |
+
+---
+
+## GitHub App Setup
+
+This section explains how to create a GitHub App for repository access and webhook handling.
+
+### Creating a GitHub App
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click **GitHub Apps** in the left sidebar
+3. Click **New GitHub App**
+4. Fill in the form:
+
+   - **GitHub App name**: `Revora AI Review`
+   - **Homepage URL**: `http://localhost:3000`
+   - **Webhook URL**: `http://your-public-url/api/v1/webhooks/github`
+   - **Webhook secret**: Generate a strong secret (use `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+
+5. Set permissions (see [GitHub Permissions](#github-permissions))
+6. Set event subscriptions:
+   - Pull requests
+   - Installation
+   - Installation repositories
+7. Click **Create GitHub App**
+8. On the app settings page:
+   - Note the **App ID**
+   - Click **Generate a private key**
+   - Download the `.pem` file
+9. Click **Install App** to install on your account/organization
+10. Note the **Installation ID** from the URL after installation
+
+### Configuring Environment Variables
+
+Add to your `backend/.env`:
+
+```env
+GITHUB_APP_ID=your_app_id_here
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nYOUR_KEY_HERE\n-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
+```
+
+### Where Each Value Goes
+
+| Value | Location | Description |
+|-------|----------|-------------|
+| App ID | `GITHUB_APP_ID` | Numeric ID from GitHub App settings |
+| Client ID | `GITHUB_CLIENT_ID` | From OAuth App (for user login) |
+| Client Secret | `GITHUB_CLIENT_SECRET` | From OAuth App (for user login) |
+| Private Key | `GITHUB_APP_PRIVATE_KEY` | PEM file contents (for API access) |
+| Webhook Secret | `GITHUB_WEBHOOK_SECRET` | Secret you defined in webhook settings |
+| Installation ID | Stored in database | Obtained after installing the app |
+
+### Installation Process
+
+1. After creating the GitHub App, click **Install App**
+2. Choose your personal account or organization
+3. Select repositories to grant access to
+4. Click **Install**
+5. The Installation ID is in the URL: `https://github.com/settings/installations/{INSTALLATION_ID}`
+6. Revora automatically captures this via the `installation.created` webhook
+
+### Local Testing
+
+For local development, use a tunneling service:
+
+**ngrok:**
+```bash
+ngrok http 8000
+# Use the HTTPS URL as your webhook URL
+```
+
+**Cloudflare Tunnel:**
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+---
+
+## GitHub Permissions
+
+The GitHub App requires the following permissions:
+
+### Repository Permissions
+
+| Permission | Access | Why It's Needed |
+|------------|--------|-----------------|
+| **Contents** | Read | Fetch repository files for context analysis |
+| **Pull Requests** | Read & Write | Read PR diffs, post review comments |
+| **Metadata** | Read | Access repository metadata |
+| **Checks** | Read & Write | Create check runs for review status |
+| **Commit Status** | Read & Write | Set commit status based on review |
+| **Issues** | Read | Read issues for context |
+| **Actions** | Read | Understand CI/CD workflows |
+| **Administration** | Read | Access repository settings for context |
+
+### Organization Permissions
+
+| Permission | Access | Why It's Needed |
+|------------|--------|-----------------|
+| **Members** | Read | Identify team members |
+| **Repositories** | Read | List organization repositories |
+
+### Event Subscriptions
+
+| Event | Why It's Needed |
+|-------|-----------------|
+| **pull_request** | Trigger reviews on PR open/reopen/sync |
+| **installation** | Track app installations |
+| **installation_repositories** | Track repository access changes |
+
+---
+
+## Webhook Configuration
+
+### Setting Up Webhooks
+
+1. In your GitHub App settings, go to **Webhooks**
+2. Set **Payload URL**: `https://your-public-url/api/v1/webhooks/github`
+3. Set **Content type**: `application/json`
+4. Set **Secret**: Same as `GITHUB_WEBHOOK_SECRET` in your `.env`
+5. Select events: **Pull requests**, **Installation**, **Installation repositories**
+
+### Localhost Testing
+
+For local development, you need a public URL to receive webhooks:
+
+**Using ngrok:**
+```bash
+ngrok http 8000
+# Copy the https://xxxx.ngrok.io URL
+# Set as webhook URL: https://xxxx.ngrok.io/api/v1/webhooks/github
+```
+
+**Using Cloudflare Tunnel:**
+```bash
+cloudflared tunnel --url http://localhost:8000
+# Copy the https://xxxx.trycloudflare.com URL
+```
+
+### Signature Verification
+
+Revora verifies webhook signatures using HMAC-SHA256:
+
+```python
+# In backend/app/github/webhooks.py
+expected = "sha256=" + hmac.new(
+    secret.encode(),
+    payload,
+    hashlib.sha256,
+).hexdigest()
+return hmac.compare_digest(expected, signature)
+```
+
+### Webhook Events Handled
+
+| Event | Action | Handler |
+|-------|--------|---------|
+| `pull_request` | `opened` | Triggers AI review pipeline |
+| `pull_request` | `reopened` | Triggers AI review pipeline |
+| `pull_request` | `synchronize` | Triggers AI review pipeline |
+| `installation` | `created` | Links installation to user |
+| `installation` | `deleted` | Removes installation and repos |
+| `installation_repositories` | `added` | Adds repositories to database |
+| `installation_repositories` | `removed` | Removes repositories from database |
+
+---
+
+## Database Setup
+
+### PostgreSQL Installation
+
+**Docker (Recommended):**
+```bash
+docker run -d --name revora-postgres \
+  -p 5432:5432 \
+  -e POSTGRES_USER=revora \
+  -e POSTGRES_PASSWORD=revora_pass \
+  -e POSTGRES_DB=revora_db \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:15-alpine
+```
+
+**Manual Installation:**
+1. Download PostgreSQL 15+ from [postgresql.org](https://postgresql.org)
+2. Install and start the service
+3. Create database and user:
+```sql
+CREATE USER revora WITH PASSWORD 'revora_pass';
+CREATE DATABASE revora_db OWNER revora;
+```
+
+### Running Migrations
+
+```bash
+cd backend
+set PYTHONPATH=.  # Windows
+export PYTHONPATH=.  # Linux/Mac
+
+# Install Alembic if not installed
+pip install alembic
+
+# Run all migrations
+alembic upgrade head
+
+# Check current migration version
+alembic current
+
+# Rollback one migration
+alembic downgrade -1
+```
+
+### Database Schema
+
+Revora uses 17 tables across these domains:
+
+- **Users & Auth**: `users`, `api_keys`
+- **Organizations**: `organizations`, `org_members`, `teams`, `team_members`
+- **GitHub**: `installations`, `repositories`, `pull_requests`
+- **Reviews**: `reviews`, `review_comments`
+- **Knowledge**: `repository_knowledge`, `repository_rules`, `repository_indexes`, `repository_intelligence`
+- **Analytics**: `review_events`, `review_metrics`
+
+### Resetting Database
+
+```bash
+# Drop and recreate database
+docker exec -it revora-postgres psql -U revora -c "DROP DATABASE revora_db;"
+docker exec -it revora-postgres psql -U revora -c "CREATE DATABASE revora_db OWNER revora;"
+
+# Run migrations again
+alembic upgrade head
+```
+
+---
+
+## Redis Setup
+
+### Installation
+
+**Docker (Recommended):**
+```bash
+docker run -d --name revora-redis -p 6379:6379 redis:7-alpine
+```
+
+**Manual Installation:**
+1. Download Redis from [redis.io](https://redis.io)
+2. Install and start the service
+
+### Purpose
+
+Redis is used for:
+- Celery task queue backend
+- Caching frequently accessed data
+- Session storage (future)
+- Rate limiting (future)
+
+### Troubleshooting
+
+```bash
+# Test Redis connection
+redis-cli ping
+# Should return: PONG
+
+# Check Redis status
+redis-cli info server
+```
+
+---
+
+## Docker Setup
+
+### Docker Compose Services
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `db` | `postgres:15-alpine` | 5432 | PostgreSQL database |
+| `backend` | Custom build | 8000 | FastAPI backend |
+| `frontend` | Custom build | 3000 | Next.js frontend |
+
+### Docker Commands
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Start only database
+docker-compose up -d db
+
+# View logs
+docker-compose logs -f
+
+# View specific service logs
+docker-compose logs -f backend
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (fresh start)
+docker-compose down -v
+
+# Rebuild after changes
+docker-compose up -d --build
+
+# Check running containers
+docker-compose ps
+```
+
+### Volumes
+
+| Volume | Purpose |
+|--------|---------|
+| `postgres_data` | Persistent PostgreSQL data |
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Port already in use | Change port mapping in `docker-compose.yml` or stop conflicting service |
+| Database connection failed | Ensure `db` service is healthy: `docker-compose ps` |
+| Backend can't connect to DB | Check `DATABASE_URL` uses `db` as hostname (not `localhost`) |
+
+---
+
+## Running the Application
+
+### Expected Startup Order
+
+1. **PostgreSQL** — Database must be running first
+2. **Redis** — Required for Celery workers
+3. **Backend** — FastAPI server on port 8000
+4. **Frontend** — Next.js dev server on port 3000
+
+### Health Checks
+
+```bash
+# Backend health check
+curl http://localhost:8000/api/v1/health
+# Expected: {"status":"healthy","service":"revora-api"}
+
+# Database health check
+docker exec -it revora-postgres pg_isready -U revora
+
+# Redis health check
+redis-cli ping
+```
+
+### Verifying Everything Works
+
+1. **Backend API**: Open `http://localhost:8000/docs` — you should see the FastAPI documentation
+2. **Frontend**: Open `http://localhost:3000` — you should see the Revora landing page
+3. **GitHub Login**: Click "Sign in with GitHub" — should redirect to GitHub OAuth
+4. **Dashboard**: After login, you should see the dashboard with stats
+5. **Repositories**: Go to Repositories page — should show connected repos after sync
+
+### Common Startup Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `ModuleNotFoundError` | PYTHONPATH not set | Run `set PYTHONPATH=.` (Windows) or `export PYTHONPATH=.` (Linux/Mac) |
+| `Connection refused` | Database not running | Start PostgreSQL: `docker-compose up -d db` |
+| `JWT decode error` | Invalid JWT_SECRET_KEY | Generate new key and update `.env` |
+| `GitHub OAuth error` | Invalid credentials | Verify `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` |
+
+---
+
+## Authentication Flow
+
+### GitHub Login
+
+1. User clicks "Sign in with GitHub" on login page
+2. Frontend redirects to GitHub OAuth authorization URL
+3. User authorizes the application on GitHub
+4. GitHub redirects back to `/auth/callback` with authorization code
+5. Frontend sends code to backend `/api/v1/auth/github`
+6. Backend exchanges code for GitHub access token
+7. Backend fetches user profile from GitHub API
+8. Backend creates/updates user in database
+9. Backend generates JWT token
+10. Frontend stores token in localStorage
+11. User is redirected to dashboard
+
+### JWT Token
+
+- **Algorithm**: HS256
+- **Expiration**: 24 hours (development)
+- **Payload**: `{"exp": timestamp, "sub": "user_id"}`
+- **Storage**: localStorage (client-side)
+
+### Session Management
+
+- Tokens are stored in localStorage via Zustand persist middleware
+- Tokens are sent in `Authorization: Bearer <token>` header
+- Backend validates token on each authenticated request
+
+### GitHub App Installation
+
+1. User installs GitHub App on their account/organization
+2. GitHub sends `installation.created` webhook
+3. Backend links installation to authenticated user
+4. Repository access is granted based on installation permissions
+
+---
+
+## Review Workflow
+
+```mermaid
+flowchart TD
+    A[User Opens PR] --> B[GitHub Sends Webhook]
+    B --> C[Revora Verifies Signature]
+    C --> D[Create Review Record]
+    D --> E[Phase 1: Repository Intelligence]
+    E --> F[Phase 2: Code Graph Indexing]
+    F --> G[Phase 3: Knowledge Base]
+    G --> H[Phase 4: Context Retrieval]
+    H --> I[Phase 5: Security Sanitization]
+    I --> J[Phase 6: Prompt Building]
+    J --> K[Phase 7: LLM Orchestration]
+    K --> L[Phase 8: Verification]
+    L --> M[Phase 9: GitHub Review Generation]
+    M --> N[Post Review to GitHub]
+    N --> O[Update Check Run Status]
+```
+
+### Complete Lifecycle
+
+1. **GitHub OAuth** — User authenticates with GitHub
+2. **Install GitHub App** — User installs Revora on repositories
+3. **Repository Sync** — Revora syncs repository metadata
+4. **Open Pull Request** — Developer opens a PR
+5. **Webhook Received** — GitHub sends PR event to Revora
+6. **Context Engineering** — Revora analyzes the repository
+7. **AI Review** — LLM generates review comments
+8. **Verification** — Findings are verified against actual code
+9. **GitHub Review** — Review is posted as PR comment
+
+---
+
+## API Documentation
+
+### Authentication Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/auth/login` | Email/password login |
+| `POST` | `/api/v1/auth/register` | Register new user |
+| `POST` | `/api/v1/auth/github` | GitHub OAuth login |
+
+### Repository Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/repositories` | List connected repositories |
+| `POST` | `/api/v1/repositories/sync-all` | Sync all repositories from GitHub |
+| `POST` | `/api/v1/repositories/{id}/sync` | Sync specific repository PRs |
+| `GET` | `/api/v1/repositories/available-models` | Get available LLM models |
+| `PATCH` | `/api/v1/repositories/{id}/config` | Update repository model config |
+
+### Review Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/reviews` | List all reviews |
+| `GET` | `/api/v1/reviews/{id}` | Get review details |
+
+### Dashboard Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/dashboard/stats` | Get dashboard statistics |
+
+### API Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/api-keys` | List API keys |
+| `POST` | `/api/v1/api-keys` | Create API key |
+| `PUT` | `/api/v1/api-keys/{id}` | Update API key |
+| `DELETE` | `/api/v1/api-keys/{id}` | Delete API key |
+| `POST` | `/api/v1/api-keys/{id}/test` | Test API key connection |
+
+### Webhook Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/webhooks/github` | GitHub webhook receiver |
+
+### Health Check
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/health` | Health check |
+
+---
+
 ## Contributing
 
-We welcome contributions! Check the [Issues](https://github.com/d-kavinraja/revora/issues) tab for open tasks.
+We welcome contributions! This section explains how to contribute to Revora.
 
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
+### Getting Started
+
+1. **Fork** the repository on GitHub
+2. **Clone** your fork locally:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/revora.git
+   cd revora
+   ```
+3. **Add upstream remote**:
+   ```bash
+   git remote add upstream https://github.com/d-kavinraja/revora.git
+   ```
+
+### Branch Naming Conventions
+
+Use descriptive branch names with prefixes:
+
+| Prefix | Purpose | Example |
+|--------|---------|---------|
+| `feature/` | New features | `feature/add-inline-comments` |
+| `fix/` | Bug fixes | `fix/webhook-signature-verification` |
+| `docs/` | Documentation | `docs/update-readme` |
+| `refactor/` | Code refactoring | `refactor/extract-review-engine` |
+| `test/` | Adding tests | `test/add-webhook-tests` |
+
+### Commit Message Conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, no logic change)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+**Examples:**
+```
+feat(reviews): add inline code comments
+fix(webhook): handle missing signature header
+docs(readme): add environment variables section
+```
+
+### Pull Request Workflow
+
+1. **Create a branch** from `main`:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes** and commit:
+   ```bash
+   git add .
+   git commit -m "feat(module): add description"
+   ```
+
+3. **Push to your fork**:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+4. **Open a Pull Request** on GitHub:
+   - Use a descriptive title
+   - Fill in the PR template
+   - Link related issues
+
+5. **Wait for review** and address feedback
+
+### Code Review Process
+
+- All PRs require at least one review
+- Maintainers may request changes
+- Address feedback promptly
+- Once approved, a maintainer will merge your PR
+
+### Coding Standards
+
+**Python (Backend):**
+- Follow PEP 8 style guide
+- Use type hints for all functions
+- Keep functions focused and small
+- Write docstrings for public functions
+- Use async/await for database operations
+
+**TypeScript (Frontend):**
+- Follow ESLint configuration
+- Use TypeScript strict mode
+- Prefer functional components with hooks
+- Use Zustand for state management
+- Keep components focused and reusable
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+pytest
+
+# Frontend lint
+cd frontend
+npm run lint
+```
+
+### Development Guidelines
+
+- **Keep PRs small**: Focus on one change per PR
+- **Write tests**: Add tests for new features
+- **Update documentation**: Keep README and docs up to date
+- **Follow conventions**: Match existing code style
+- **Test locally**: Ensure everything works before pushing
+
+---
+
+## Security
+
+### Never Commit
+
+- `.env` files
+- PEM private keys
+- API keys or secrets
+- Database passwords
+- JWT secrets
+
+### Use GitHub Secrets
+
+For CI/CD, use GitHub Secrets to store sensitive values:
+1. Go to repository Settings > Secrets and variables > Actions
+2. Add secrets for: `DATABASE_URL`, `JWT_SECRET_KEY`, etc.
+
+### Generate Secure Secrets
+
+```bash
+# Generate SECRET_KEY
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Generate ENCRYPTION_KEY
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+### Rotate Secrets
+
+- Rotate secrets regularly in production
+- Update all environments when rotating
+- Document when secrets were last rotated
+
+### Report Vulnerabilities
+
+If you discover a security vulnerability:
+1. **Do NOT** open a public issue
+2. Email the maintainer directly
+3. Include details about the vulnerability
+4. Allow time for a fix before disclosure
+
+---
+
+## Troubleshooting
+
+### OAuth Issues
+
+| Issue | Solution |
+|-------|----------|
+| OAuth callback mismatch | Ensure `http://localhost:3000/auth/callback` matches GitHub OAuth settings |
+| Invalid redirect URI | Check for trailing slashes or protocol mismatch |
+| "Bad credentials" error | Regenerate client secret in GitHub settings |
+
+### Database Issues
+
+| Issue | Solution |
+|-------|----------|
+| Connection refused | Ensure PostgreSQL is running: `docker-compose up -d db` |
+| Authentication failed | Verify `DATABASE_URL` credentials in `.env` |
+| Migration failed | Check Alembic version: `alembic current` |
+| Reset database | Drop and recreate: see [Database Setup](#database-setup) |
+
+### Webhook Issues
+
+| Issue | Solution |
+|-------|----------|
+| Webhook not received | Verify webhook URL is publicly accessible |
+| Signature verification failed | Ensure `GITHUB_WEBHOOK_SECRET` matches GitHub App settings |
+| Payload too large | Check GitHub's webhook payload size limits |
+
+### GitHub App Issues
+
+| Issue | Solution |
+|-------|----------|
+| PEM errors | Ensure private key is properly formatted with `\n` newlines |
+| Installation not found | Reinstall the GitHub App |
+| Token expired | Revora automatically refreshes tokens |
+
+### Docker Issues
+
+| Issue | Solution |
+|-------|----------|
+| Port already in use | Stop conflicting services or change ports in `docker-compose.yml` |
+| Container won't start | Check logs: `docker-compose logs <service>` |
+| Build failed | Clear Docker cache: `docker-compose build --no-cache` |
+
+### Frontend Issues
+
+| Issue | Solution |
+|-------|----------|
+| API connection failed | Verify `NEXT_PUBLIC_API_URL` in `.env.local` |
+| CORS errors | Check `CORS_ORIGINS` in backend `.env` |
+| Module not found | Run `npm install` in frontend directory |
+
+---
+
+## FAQ
+
+### General
+
+**Q: Why isn't GitHub login working?**
+A: Verify your `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are correct. Check that the callback URL in GitHub OAuth settings matches `http://localhost:3000/auth/callback`.
+
+**Q: Where do I get the Client ID?**
+A: Go to GitHub Settings > Developer settings > OAuth Apps > Your App > General tab.
+
+**Q: Where do I put the Private Key?**
+A: In `backend/.env` as `GITHUB_APP_PRIVATE_KEY`. The entire PEM content should be on one line with `\n` for newlines.
+
+### Setup
+
+**Q: How do I create a GitHub App?**
+A: See [GitHub App Setup](#github-app-setup) section above.
+
+**Q: How do I reset my database?**
+A: Run: `docker exec -it revora-postgres psql -U revora -c "DROP DATABASE revora_db;"` then recreate and run migrations.
+
+**Q: Why is the webhook failing?**
+A: Ensure your webhook URL is publicly accessible (use ngrok for local dev). Verify the webhook secret matches your `.env`.
+
+### Development
+
+**Q: Can I use SQLite instead of PostgreSQL?**
+A: Yes, for development. Alembic will fall back to SQLite if PostgreSQL is unavailable. However, PostgreSQL is recommended for production.
+
+**Q: How do I add a new LLM provider?**
+A: Add the provider to `PROVIDER_MODELS` in `backend/app/api/v1/endpoints/repositories.py` and implement the provider in the orchestrator.
+
+**Q: How do I run tests?**
+A: Backend: `cd backend && pytest`. Frontend: `cd frontend && npm run lint`.
+
+---
+
+## Development Best Practices
+
+### Branch Strategy
+
+- `main` — Production-ready code
+- `develop` — Integration branch (future)
+- `feature/*` — Feature branches
+- `fix/*` — Bug fix branches
+- `docs/*` — Documentation branches
+
+### Code Style
+
+**Python:**
+- Use Black for formatting
+- Use isort for import sorting
+- Follow PEP 8 guidelines
+- Use type hints consistently
+
+**TypeScript:**
+- Use ESLint and Prettier
+- Follow the existing code style
+- Use functional components
+- Keep components small and focused
+
+### Architecture Principles
+
+- **Separation of Concerns**: Each module has a single responsibility
+- **Async First**: Use async/await for I/O operations
+- **Type Safety**: Use type hints and TypeScript strictly
+- **Testability**: Write testable code with clear interfaces
+
+### Pull Requests
+
+- Keep PRs small and focused
+- Write descriptive titles and descriptions
+- Link related issues
+- Add screenshots for UI changes
+- Ensure tests pass before requesting review
+
+### Documentation
+
+- Update README for new features
+- Add docstrings to public functions
+- Keep API documentation current
+- Document environment variable changes
 
 ---
 
@@ -477,7 +1502,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 <div align="center">
 
-**Built with care by [Revora-Team](https://github.com/Revora-PR)**
+**Built with care by [Revora-Team](https://github.com/d-kavinraja)**
 
 <img src="https://img.shields.io/badge/Revora-Context%20Engineering%20Platform-6366f1?style=for-the-badge&logo=github&logoColor=white" />
 

@@ -6,12 +6,27 @@ from app.services.api_key_service import api_key_service
 from app.db.session import AsyncSessionLocal
 
 class LLMService:
-    async def get_completion(self, user_id: uuid.UUID, provider: str, messages: list, model: str = None) -> Optional[str]:
+    async def get_completion(
+        self,
+        user_id: uuid.UUID,
+        provider: str,
+        messages: list,
+        model: str = None,
+        api_key_id: Optional[str] = None,
+    ) -> Optional[str]:
         """
         Fetch the user's API key and call LiteLLM.
         """
         async with AsyncSessionLocal() as db:
-            api_key = await api_key_service.get_decrypted_key(db, user_id, provider)
+            if api_key_id:
+                from app.core.security import encryption_service
+                db_key = await api_key_service.get_by_id(db, uuid.UUID(api_key_id))
+                if db_key and db_key.user_id == user_id and db_key.is_valid:
+                    api_key = encryption_service.decrypt(db_key.encrypted_key)
+                else:
+                    api_key = None
+            else:
+                api_key = await api_key_service.get_decrypted_key(db, user_id, provider)
             
         if not api_key:
             from app.core.config import settings

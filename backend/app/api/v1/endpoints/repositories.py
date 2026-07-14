@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 import uuid
 import httpx
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
@@ -12,6 +13,7 @@ from app.models.user import User
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
 from app.github.auth import github_app_auth
+from app.services.api_key_service import api_key_service
 
 router = APIRouter()
 
@@ -63,6 +65,7 @@ async def list_repositories(
             "reviews_enabled": repo.reviews_enabled,
             "total_reviews": total_reviews,
             "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
+            "settings": repo.settings or {},
         })
 
     return result
@@ -359,3 +362,111 @@ async def sync_repository(
     except Exception as e:
         print(f"Error syncing repository: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to sync repository: {e}")
+
+
+# --- Repository Model Configuration ---
+
+
+class RepoConfigUpdate(BaseModel):
+    assigned_provider: Optional[str] = None
+    assigned_model: Optional[str] = None
+    assigned_key_id: Optional[str] = None
+    reviews_enabled: Optional[bool] = None
+
+
+PROVIDER_MODELS = {
+    "gemini": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-3.1-flash-lite"],
+    "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+    "anthropic": ["anthropic/claude-sonnet-4-20250514", "anthropic/claude-3-5-haiku-20241022"],
+    "deepseek": ["deepseek/deepseek-chat", "deepseek/deepseek-coder"],
+    "groq": ["groq/llama-3.3-70b-versatile"],
+}
+
+
+@router.get("/available-models", response_model=Dict[str, List[str]])
+async def get_available_models(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return LLM models available based on the user's active API keys."""
+    api_keys = await api_key_service.get_all_for_user(db, current_user.id)
+    active_providers = {key.provider.lower() for key in api_keys if key.is_valid}
+
+    available = {}
+    for provider, models in PROVIDER_MODELS.items():
+        if provider in active_providers:
+            available[provider] = models
+
+    return available
+
+
+@router.patch("/{repo_id}/config", response_model=Dict[str, Any])
+async def update_repository_config(
+    repo_id: str,
+    config: RepoConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update repository model configuration and review settings."""
+    try:
+        rid = uuid.UUID(repo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid repository ID")
+
+    # Verify repo belongs to user's installations
+    installations_result = await db.execute(
+        select(Installation).where(Installation.user_id == current_user.id)
+    )
+    installation_ids = [i.id for i in installations_result.scalars().all()]
+
+    repo_result = await db.execute(
+        select(Repository).where(
+            Repository.id == rid,
+            Repository.installation_id.in_(installation_ids),
+        )
+    )
+    repo = repo_result.scalars().first()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    # Update fields
+    if config.reviews_enabled is not None:
+        repo.reviews_enabled = config.reviews_enabled
+
+    settings = dict(repo.settings or {})
+    if config.assigned_provider is not None:
+        settings["assigned_provider"] = config.assigned_provider
+    if config.assigned_model is not None:
+        settings["assigned_model"] = config.assigned_model
+    if config.assigned_key_id is not None:
+        settings["assigned_key_id"] = config.assigned_key_id
+    repo.settings = settings
+
+    db.add(repo)
+    await db.commit()
+    await db.refresh(repo)
+
+    # Count reviews
+    pr_ids_result = await db.execute(
+        select(PullRequest.id).where(PullRequest.repo_id == repo.id)
+    )
+    pr_ids = [r[0] for r in pr_ids_result.all()]
+    total_reviews = 0
+    if pr_ids:
+        count_result = await db.execute(
+            select(func.count(Review.id)).where(Review.pr_id.in_(pr_ids))
+        )
+        total_reviews = count_result.scalar() or 0
+
+    return {
+        "id": str(repo.id),
+        "name": repo.name,
+        "full_name": repo.full_name,
+        "description": repo.description,
+        "language": repo.language,
+        "is_private": repo.is_private,
+        "reviews_enabled": repo.reviews_enabled,
+        "total_reviews": total_reviews,
+        "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
+        "settings": repo.settings or {},
+    }

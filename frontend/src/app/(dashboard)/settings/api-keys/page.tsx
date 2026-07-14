@@ -6,7 +6,7 @@ import {
   KeyIcon, 
   TrashIcon, 
   PlusIcon, 
-  RefreshCwIcon, 
+  LoaderCircleIcon, 
   CircleCheckIcon, 
   TriangleAlertIcon, 
   EyeIcon, 
@@ -133,8 +133,8 @@ export default function ApiKeysSettingsPage() {
     const names: Record<string, string> = {
       openai: 'OpenAI',
       anthropic: 'Anthropic',
-      gemini: 'Google Gemini',
-      groq: 'Groq Llama',
+      gemini: 'Gemini',
+      groq: 'Groq',
       deepseek: 'DeepSeek'
     };
     return names[prov.toLowerCase()] || prov;
@@ -188,11 +188,11 @@ export default function ApiKeysSettingsPage() {
                   onChange={(e) => setProvider(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
                 >
-                  <option value="openai">OpenAI (gpt-4o-mini)</option>
-                  <option value="anthropic">Anthropic (claude-3-5-haiku)</option>
-                  <option value="gemini">Google Gemini (gemini-2.5-flash)</option>
-                  <option value="groq">Groq (llama-3.3-70b)</option>
-                  <option value="deepseek">DeepSeek (deepseek-chat)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="gemini">Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="deepseek">DeepSeek</option>
                 </select>
               </div>
               
@@ -290,7 +290,7 @@ export default function ApiKeysSettingsPage() {
                             ) : (
                               <TriangleAlertIcon size={12} />
                             )}
-                            {key.is_valid ? 'Valid' : 'Invalid'}
+                            {key.is_valid ? 'Active' : 'Inactive'}
                           </span>
                         )}
                       </div>
@@ -312,7 +312,7 @@ export default function ApiKeysSettingsPage() {
                         className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
                         title="Test key connectivity"
                       >
-                        <RefreshCwIcon 
+                        <LoaderCircleIcon 
                           ref={(el) => { refreshIconRefs.current[key.id] = el; }} 
                           size={14} 
                           isAnimated={false} 

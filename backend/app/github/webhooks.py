@@ -29,11 +29,27 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
     permissions = installation_payload.get("permissions", {})
     events = installation_payload.get("events", [])
 
+    # Match the installation to the user who authorized it via the webhook sender.
+    sender = payload.get("sender", {})
+    sender_github_id = sender.get("id")
+    sender_login = sender.get("login")
+
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).order_by(User.created_at))
-        user = res.scalars().first()
+        # Find the user who authorized this installation by GitHub ID first,
+        # then by username.
+        user = None
+        if sender_github_id:
+            result = await db.execute(select(User).where(User.github_id == sender_github_id))
+            user = result.scalars().first()
+        if not user and sender_login:
+            result = await db.execute(select(User).where(User.github_username == sender_login))
+            user = result.scalars().first()
+
         if not user:
-            print("No user found to link installation to.")
+            print(
+                f"[{delivery_id}] Sender '{sender_login}' (github_id={sender_github_id}) "
+                f"is not a registered Revora user. Installation {inst_id} will not be linked."
+            )
             return
 
         res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
@@ -52,7 +68,7 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
             db.add(db_inst)
             await db.commit()
             await db.refresh(db_inst)
-            print(f"Stored installation {inst_id} for user {user.email}")
+            print(f"Stored installation {inst_id} for user {user.email} (sender={sender_login})")
 
         # Add repositories in payload
         for r in payload.get("repositories", []):
@@ -260,17 +276,28 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
         )
         check_run_id = check_run.get("id")
 
-        # Determine AI provider
-        from app.core.config import settings
-        if settings.GEMINI_API_KEY:
-            provider = "gemini"
-            model = "gemini-3.1-flash-lite"
-        elif settings.OPENAI_API_KEY:
-            provider = "openai"
-            model = "gpt-4o"
-        else:
-            provider = "gemini"
-            model = "gemini-3.1-flash-lite"
+        # Determine AI provider/model — repo config takes priority
+        provider = None
+        model = None
+        api_key_id = None
+
+        if db_repo and db_repo.settings:
+            provider = db_repo.settings.get("assigned_provider")
+            model = db_repo.settings.get("assigned_model")
+            api_key_id = db_repo.settings.get("assigned_key_id")
+
+        # Fallback to env defaults
+        if not provider or not model:
+            from app.core.config import settings
+            if settings.GEMINI_API_KEY:
+                provider = "gemini"
+                model = "gemini-3.5-flash"
+            elif settings.OPENAI_API_KEY:
+                provider = "openai"
+                model = "gpt-4o"
+            else:
+                provider = "gemini"
+                model = "gemini-3.5-flash"
 
         # Run AI graph
         initial_state = ReviewState(
@@ -282,6 +309,7 @@ async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
             user_id=str(user_id),
             provider=provider,
             model=model,
+            api_key_id=api_key_id,
             bug_analysis=[],
             security_analysis=[],
             performance_analysis=[],
@@ -397,6 +425,7 @@ class GitHubWebhookService:
         handlers = {
             ("pull_request", "opened"): handle_pr_opened,
             ("pull_request", "reopened"): handle_pr_opened,
+            ("pull_request", "synchronize"): handle_pr_opened,
             ("installation", "created"): handle_installation_created,
             ("installation", "deleted"): handle_installation_deleted,
             ("installation_repositories", "added"): handle_installation_repositories,
