@@ -29,11 +29,27 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
     permissions = installation_payload.get("permissions", {})
     events = installation_payload.get("events", [])
 
+    # Match the installation to the user who authorized it via the webhook sender.
+    sender = payload.get("sender", {})
+    sender_github_id = sender.get("id")
+    sender_login = sender.get("login")
+
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).order_by(User.created_at))
-        user = res.scalars().first()
+        # Find the user who authorized this installation by GitHub ID first,
+        # then by username.
+        user = None
+        if sender_github_id:
+            result = await db.execute(select(User).where(User.github_id == sender_github_id))
+            user = result.scalars().first()
+        if not user and sender_login:
+            result = await db.execute(select(User).where(User.github_username == sender_login))
+            user = result.scalars().first()
+
         if not user:
-            print("No user found to link installation to.")
+            print(
+                f"[{delivery_id}] Sender '{sender_login}' (github_id={sender_github_id}) "
+                f"is not a registered Revora user. Installation {inst_id} will not be linked."
+            )
             return
 
         res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
@@ -52,7 +68,7 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
             db.add(db_inst)
             await db.commit()
             await db.refresh(db_inst)
-            print(f"Stored installation {inst_id} for user {user.email}")
+            print(f"Stored installation {inst_id} for user {user.email} (sender={sender_login})")
 
         # Add repositories in payload
         for r in payload.get("repositories", []):
