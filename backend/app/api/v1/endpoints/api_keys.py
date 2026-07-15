@@ -2,7 +2,7 @@ import uuid
 import asyncio
 import litellm
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
@@ -33,6 +33,7 @@ async def list_api_keys(
 @router.post("", response_model=ApiKeySchema, status_code=status.HTTP_201_CREATED)
 async def create_api_key(
     key_in: ApiKeyCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -69,12 +70,18 @@ async def create_api_key(
         )
 
     db_key = await api_key_service.create(db, current_user.id, key_in)
+    
+    # Pre-warm the cache and run quota tests in the background
+    from app.services.model_discovery import model_discovery_engine
+    background_tasks.add_task(model_discovery_engine.get_available_models, provider, key_in.api_key)
+    
     return ApiKeySchema.from_orm_with_mask(db_key, key_in.api_key)
 
 @router.put("/{key_id}", response_model=ApiKeySchema)
 async def update_api_key(
     key_id: uuid.UUID,
     key_in: ApiKeyUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -128,6 +135,10 @@ async def update_api_key(
             raw_key = encryption_service.decrypt(db_key.encrypted_key)
         except Exception:
             raw_key = "***"
+            
+    if raw_key != "***":
+        from app.services.model_discovery import model_discovery_engine
+        background_tasks.add_task(model_discovery_engine.get_available_models, db_key.provider, raw_key)
             
     return ApiKeySchema.from_orm_with_mask(db_key, raw_key)
 
@@ -188,14 +199,10 @@ async def test_api_key(
         )
 
     try:
-        # Use the provider's model list endpoint to validate the key.
-        # This is a lightweight, read-only call — no LLM completion, no quota used.
-        models = await asyncio.to_thread(
-            litellm.get_valid_models,
-            check_provider_endpoint=True,
-            custom_llm_provider=litellm_prov,
-            api_key=raw_key,
-        )
+        from app.services.model_discovery import model_discovery_engine
+        # This will run the quota checks for all discovered models and cache the result.
+        # This is a bit slow (5-10s) but correctly pre-warms the cache and accurately tests.
+        models = await model_discovery_engine.get_available_models(db_key.provider, raw_key)
 
         if not models:
             raise ValueError("Provider returned an empty model list. The key may be invalid.")
@@ -205,7 +212,7 @@ async def test_api_key(
         await db.commit()
         return {
             "status": "success",
-            "message": f"Key verified — {len(models)} model(s) accessible.",
+            "message": f"Key verified — {len(models)} model(s) accessible and quota verified.",
         }
 
     except Exception as e:

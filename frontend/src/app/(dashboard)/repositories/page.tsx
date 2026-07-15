@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, Repository, ApiKey } from '@/lib/api';
+import { api, Repository, ApiKey, ModelMetadata } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon } from '@animateicons/react/lucide';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -31,7 +31,7 @@ function ConfigModal({
   onSave,
 }: {
   repo: Repository;
-  availableModels: Record<string, string[]>;
+  availableModels: Record<string, ModelMetadata[]>;
   apiKeys: ApiKey[];
   onClose: () => void;
   onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => void;
@@ -56,14 +56,26 @@ function ConfigModal({
     return providerKeys[0]?.id ?? '';
   });
 
-  const models = availableModels[selectedProvider] || [];
+  const allModels = availableModels[selectedProvider] || [];
+
+  const [showDeprecated, setShowDeprecated] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showUnavailable, setShowUnavailable] = useState(false);
+
+  const models = allModels.filter((m) => {
+    if (!showUnavailable && !m.accessible) return false;
+    if (!showDeprecated && m.deprecated) return false;
+    if (!showPreview && (m.preview || m.experimental)) return false;
+    return true;
+  });
 
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = repo.settings?.assigned_model;
-    if (saved && models.includes(saved)) {
+    if (saved && models.some(m => m.model_name === saved)) {
       return saved;
     }
-    return models[0] || '';
+    const firstAccessible = models.find(m => m.accessible);
+    return firstAccessible?.model_name || '';
   });
 
   const [reviewsEnabled, setReviewsEnabled] = useState(repo.reviews_enabled);
@@ -80,8 +92,11 @@ function ConfigModal({
   }, [selectedProvider, apiKeys, selectedKeyId]);
 
   useEffect(() => {
-    if (selectedProvider && models.length > 0 && !models.includes(selectedModel)) {
-      setSelectedModel(models[0]);
+    if (selectedProvider && models.length > 0 && !models.some(m => m.model_name === selectedModel)) {
+      const firstAccessible = models.find(m => m.accessible);
+      if (firstAccessible) {
+        setSelectedModel(firstAccessible.model_name);
+      }
     }
   }, [selectedProvider, models, selectedModel]);
 
@@ -158,15 +173,38 @@ function ConfigModal({
 
             {/* Model Selector */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
+                <div className="flex gap-2">
+                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                    <input type="checkbox" checked={showPreview} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                    <input type="checkbox" checked={showDeprecated} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                    <input type="checkbox" checked={showUnavailable} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
+                  </label>
+                </div>
+              </div>
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
               >
-                {models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {models.map((m) => {
+                  let badge = '';
+                  if (!m.accessible) badge = ' [Unavailable]';
+                  else if (m.deprecated) badge = ' [Deprecated]';
+                  else if (m.preview || m.experimental) badge = ' [Preview]';
+                  else if (m.enterprise_only) badge = ' [Enterprise]';
+                  
+                  return (
+                    <option key={m.model_name} value={m.model_name} disabled={!m.accessible} title={!m.accessible ? 'This model is inaccessible with your current API key permissions.' : ''}>
+                      {m.model_name}{badge}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -320,7 +358,7 @@ export default function RepositoriesPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [configRepo, setConfigRepo] = useState<Repository | null>(null);
-  const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({});
+  const [availableModels, setAvailableModels] = useState<Record<string, ModelMetadata[]>>({});
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
 
   const fetchRepos = () => {

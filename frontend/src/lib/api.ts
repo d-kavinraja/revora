@@ -110,6 +110,26 @@ export interface ThemeConfig {
   border_opacity: number;
 }
 
+export interface ModelMetadata {
+  model_name: string;
+  provider: string;
+  accessible: boolean;
+  deprecated: boolean;
+  preview: boolean;
+  experimental: boolean;
+  enterprise_only: boolean;
+  region_supported: boolean;
+  context_window?: number;
+  input_cost?: number;
+  output_cost?: number;
+  supports_streaming: boolean;
+  supports_function_calling: boolean;
+  supports_vision: boolean;
+  supports_reasoning: boolean;
+  status: string;
+  validation_timestamp: string;
+}
+
 export const api = {
   getStats: () => apiClient.get<DashboardStats>('/dashboard/stats').then((r) => r.data),
   getReviews: (limit = 20) => apiClient.get<Review[]>(`/reviews?limit=${limit}`).then((r) => r.data),
@@ -125,7 +145,7 @@ export const api = {
   getThemeConfig: () => apiClient.get<ThemeConfig>('/ui/settings/theme').then((r) => r.data),
   validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
-  getAvailableModels: () => apiClient.get<Record<string, string[]>>('/repositories/available-models').then((r) => r.data),
+  getAvailableModels: () => apiClient.get<Record<string, ModelMetadata[]>>('/repositories/available-models').then((r) => r.data),
   updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
   getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
