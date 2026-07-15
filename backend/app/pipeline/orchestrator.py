@@ -21,6 +21,9 @@ from app.intelligence.engine import intelligence_engine
 from app.indexing.indexer import repository_indexer
 from app.knowledge.knowledge_store import knowledge_store
 from app.retrieval.engine import retrieval_engine
+from app.retrieval.models import RetrievalConfig
+from app.retrieval.init import initialize_retrieval_engine
+from app.retrieval.token_budget_engine import token_budget_engine
 from app.prompt_engine.builder import prompt_builder
 from app.orchestrator.orchestrator import llm_orchestrator
 from app.verification.engine import verification_engine
@@ -30,6 +33,9 @@ from app.github.client import github_client
 from app.ai.git_utils import GitService
 
 logger = logging.getLogger(__name__)
+
+# Initialize the retrieval engine with all retrievers, scorers, and strategies
+initialize_retrieval_engine()
 
 
 class ReviewPipeline:
@@ -102,13 +108,13 @@ class ReviewPipeline:
                 repo_path = None
 
             # Stage 5: Knowledge retrieval
-            conventions, rules = await self._stage_knowledge(
+            conventions, rules, repo_id = await self._stage_knowledge(
                 emitter, owner, repo_name
             )
 
             # Stage 6: Context retrieval
             retrieval_result = await self._stage_retrieval(
-                emitter, index, diff_content
+                emitter, index, diff_content, repo_id=repo_id
             )
 
             # Stage 7: Build prompt
@@ -266,9 +272,9 @@ class ReviewPipeline:
             await emitter.emit("retrieving_repository_knowledge", "failed",
                              EventType.STAGE_FAILED, message=str(e))
 
-        return conventions, rules
+        return conventions, rules, repo.id if repo else None
 
-    async def _stage_retrieval(self, emitter, index, diff_content):
+    async def _stage_retrieval(self, emitter, index, diff_content, repo_id=None, budget=16000):
         """Stage: Context retrieval."""
         await emitter.emit("finding_related_files", "running", EventType.STAGE_START)
 
@@ -279,10 +285,18 @@ class ReviewPipeline:
         try:
             import re
             changed_files = list(set(re.findall(r"diff --git a/(.*?) b/", diff_content)))
+
+            config = RetrievalConfig(budget=budget)
+            retrieval_engine.configure(config)
+
             retrieval_result = await retrieval_engine.retrieve(
                 changed_files, ".", index, diff_content
             )
-            await emitter.emit("finding_related_files", "completed")
+            retrieval_result._repo_id = repo_id
+
+            await emitter.emit("finding_related_files", "completed",
+                             metrics={"total_tokens": retrieval_result.total_tokens,
+                                      "fallback": retrieval_result.fallback_used})
             await emitter.emit("ranking_context", "completed")
             await emitter.emit("compressing_context", "completed")
             return retrieval_result

@@ -35,6 +35,7 @@ Designed with enterprise-grade engineering in mind, Revora combines repository i
 - [Supported LLM Providers](#supported-llm-providers)
 - [Context Engineering Modules](#context-engineering-modules)
 - [Repository Intelligence Engine](#repository-intelligence-engine)
+- [Context Retrieval Documentation](#context-retrieval-documentation)
 - [Technology Stack](#technology-stack)
 - [Folder Structure](#folder-structure)
 - [Quick Start](#quick-start)
@@ -213,10 +214,10 @@ sequenceDiagram
 ### Completed
 
 **Backend - Context Engineering Engine:**
-- Repository Intelligence Engine (13 detectors)
+- Repository Intelligence Engine (17 detectors)
 - Repository Indexing (7 code graphs)
 - Knowledge Base with PostgreSQL persistence
-- Context Retrieval with RAG and token budgeting
+- Context Retrieval Engine — 13 specialized retrievers, 6-factor ranking, 5-stage compression pipeline, configurable token budgets (4K–128K), multi-layer caching, 5-stage fallback chain, graph traversal (BFS/DFS/k-hop/shortest path)
 - Modular Prompt Builder
 - Multi-Provider LLM Orchestrator (Gemini, OpenAI, Claude, Groq, DeepSeek)
 - Verification Engine (file/line checks, hallucination detection)
@@ -262,7 +263,6 @@ sequenceDiagram
 
 **Context Engineering:**
 - Cross-repository context (microservices)
-- Historical PR context understanding
 - Tree-sitter based AST parsing (currently regex-based)
 
 **Review Quality:**
@@ -451,7 +451,7 @@ class IntelligenceEngine:
 <td align="center" width="25%">
 
 **Context Retrieval**
-<br/><sub>RAG-based retrieval from code graphs, hybrid ranking, context compression, token budgeting (5k-12k per review), deduplication</sub>
+<br/><sub>13 specialized retrievers, 6-factor ranking engine, 5-stage compression pipeline, configurable token budgets (4K–128K), multi-layer cache, 5-stage fallback chain, graph traversal (BFS/DFS/k-hop/shortest path)</sub>
 
 </td>
 <td align="center" width="25%">
@@ -554,7 +554,57 @@ revora/
 │   │   ├── orchestrator/          # Multi-provider LLM with fallbacks and cost tracking
 │   │   ├── pipeline/              # Review pipeline with per-stage error handling
 │   │   ├── prompt_engine/         # Modular prompt builder with templates
-│   │   ├── retrieval/             # RAG context retrieval with ranking and compression
+│   │   ├── cache/                 # Multi-layer caching (memory, Redis, graph, retrieval)
+│   │   │   ├── base_cache.py      # Abstract cache interface
+│   │   │   ├── memory_cache.py    # LRU in-process cache
+│   │   │   ├── redis_cache.py     # Redis-backed distributed cache
+│   │   │   ├── graph_cache.py     # Graph traversal result cache
+│   │   │   ├── retrieval_cache.py # Retrieval result cache
+│   │   │   └── metrics.py         # Cache hit/miss/eviction tracking
+│   │   ├── retrieval/             # Context Retrieval Engine
+│   │   │   ├── __init__.py        # Module exports
+│   │   │   ├── models.py          # RetrievedContext, RetrievalResult, RetrievalConfig
+│   │   │   ├── engine.py          # Core orchestrator with async, cache, fallback
+│   │   │   ├── graph_traversal.py # BFS, DFS, k-hop, shortest path, transitive closure
+│   │   │   ├── fallback.py        # 5-stage fallback chain (graph→KB→static→diff→graceful)
+│   │   │   ├── token_budget_engine.py # 4K–128K presets, custom budgets, section allocation
+│   │   │   ├── init.py            # Engine initialization wiring
+│   │   │   ├── rankers/           # Ranking engine
+│   │   │   │   ├── engine.py      # Multi-factor ranking pipeline
+│   │   │   │   ├── base_scorer.py # Scorer interface
+│   │   │   │   ├── normalizer.py  # Min-max score normalization
+│   │   │   │   └── scorers/       # 6 specialized scorers
+│   │   │   │       ├── graph_distance.py
+│   │   │   │       ├── file_importance.py
+│   │   │   │       ├── dependency_weight.py
+│   │   │   │       ├── change_frequency.py
+│   │   │   │       ├── security_impact.py
+│   │   │   │       └── test_coverage.py
+│   │   │   ├── compression/       # Compression engine
+│   │   │   │   ├── engine.py      # Compression pipeline orchestrator
+│   │   │   │   ├── base_strategy.py # Strategy interface
+│   │   │   │   ├── budget_allocator.py # Token budget distribution
+│   │   │   │   └── strategies/    # 5 compression strategies
+│   │   │   │       ├── dedup.py
+│   │   │   │       ├── truncation.py
+│   │   │   │       ├── import_prune.py
+│   │   │   │       ├── symbol_merge.py
+│   │   │   │       └── summarize.py
+│   │   │   └── retrievers/        # 13 specialized retrievers
+│   │   │       ├── base_retriever.py
+│   │   │       ├── changed_file_retriever.py
+│   │   │       ├── import_retriever.py
+│   │   │       ├── dependency_retriever.py
+│   │   │       ├── call_graph_retriever.py
+│   │   │       ├── module_retriever.py
+│   │   │       ├── api_retriever.py
+│   │   │       ├── db_retriever.py
+│   │   │       ├── security_retriever.py
+│   │   │       ├── impact_retriever.py
+│   │   │       ├── historical_retriever.py
+│   │   │       ├── documentation_retriever.py
+│   │   │       ├── test_retriever.py
+│   │   │       └── rule_retriever.py
 │   │   ├── schemas/               # Pydantic request/response schemas
 │   │   ├── security/              # Secret redaction, prompt injection detection
 │   │   ├── services/              # Business logic (user, API key management)
@@ -564,7 +614,15 @@ revora/
 │   ├── alembic/                   # Database migrations (4 migrations)
 │   ├── tests/                     # Test suite
 │   │   ├── test_repo_walker.py    # RepoWalker tests
-│   │   └── test_intelligence_engine.py # Intelligence engine tests
+│   │   ├── test_intelligence_engine.py # Intelligence engine tests
+│   │   ├── test_graph_traversal.py     # 14 graph traversal tests
+│   │   ├── test_ranking_engine.py      # 13 ranking engine tests
+│   │   ├── test_compression_engine.py  # 10 compression tests
+│   │   ├── test_token_budget.py        # 11 token budget tests
+│   │   ├── test_cache.py               # 13 cache layer tests
+│   │   ├── test_retrievers.py          # 8 retriever tests
+│   │   ├── test_retrieval_engine.py    # 18 retrieval engine tests
+│   │   └── test_fallback.py           # 10 fallback chain tests
 │   ├── .env.example               # Environment variable template
 │   └── requirements.txt
 │
@@ -579,6 +637,12 @@ revora/
 │       ├── lib/                   # Axios API client, utilities
 │       └── store/                 # Zustand stores (auth, theme)
 │
+├── docs/                        # Documentation
+│   ├── context-retrieval.md     # Context Retrieval Engine overview
+│   ├── token-budget.md          # Token budget configuration guide
+│   ├── ranking.md               # Ranking engine documentation
+│   ├── compression.md           # Compression strategies guide
+│   └── cache-strategy.md        # Caching layer documentation
 ├── docker-compose.yml
 └── README.md
 ```
@@ -1657,6 +1721,20 @@ A: Backend: `cd backend && pytest`. Frontend: `cd frontend && npm run lint`.
 - Add docstrings to public functions
 - Keep API documentation current
 - Document environment variable changes
+
+---
+
+## Context Retrieval Documentation
+
+Detailed documentation for the Context Retrieval Engine is available in the `docs/` directory:
+
+| Document | Description |
+|----------|-------------|
+| [context-retrieval.md](docs/context-retrieval.md) | Architecture, flow, retriever overview, API, configuration |
+| [token-budget.md](docs/token-budget.md) | Presets (4K–128K), section allocation, custom budgets |
+| [ranking.md](docs/ranking.md) | 6 scorers, scoring formula, custom weights, adding scorers |
+| [compression.md](docs/compression.md) | 5 strategies, pipeline, deduplication, summarization |
+| [cache-strategy.md](docs/cache-strategy.md) | 5 cache layers, memory/Redis backends, metrics |
 
 ---
 
