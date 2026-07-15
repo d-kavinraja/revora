@@ -10,7 +10,7 @@ import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide'
 import { StatusBadge } from '@/components/shared/status-badge';
 import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
-import { Gemini } from '@lobehub/icons';
+import { Gemini, Claude, OpenAI, Grok, Groq, DeepSeek } from '@lobehub/icons';
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -62,6 +62,17 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   }
 
   const pr = review.pull_request;
+  const reviewProvider = ((review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
+
+  const providerMeta: Record<string, { label: string; icon: React.ReactNode; gradient: string }> = {
+    gemini: { label: 'Gemini AI Review', icon: <Gemini size={14} />, gradient: 'from-blue-500 to-brand' },
+    openai: { label: 'OpenAI Review', icon: <OpenAI size={14} />, gradient: 'from-green-500 to-teal-500' },
+    anthropic: { label: 'Claude AI Review', icon: <Claude size={14} />, gradient: 'from-orange-500 to-amber-500' },
+    grok: { label: 'Grok AI Review', icon: <Grok size={14} />, gradient: 'from-gray-600 to-gray-800' },
+    groq: { label: 'Groq Review', icon: <Groq size={14} />, gradient: 'from-pink-500 to-red-500' },
+    deepseek: { label: 'DeepSeek Review', icon: <DeepSeek size={14} />, gradient: 'from-sky-500 to-blue-600' },
+  };
+  const meta = providerMeta[reviewProvider] ?? providerMeta['gemini'];
   const repo = review.repository;
   const duration =
     review.started_at && review.completed_at
@@ -190,11 +201,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       {review.status === 'completed' && review.summary && (
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-brand flex items-center justify-center shrink-0 text-white p-1">
-              <Gemini size={14} />
+            <div className={`w-6 h-6 rounded-md bg-gradient-to-br ${meta.gradient} flex items-center justify-center shrink-0 text-white p-1`}>
+              {meta.icon}
             </div>
             <div>
-              <span className="text-sm font-semibold text-foreground">Gemini AI Review</span>
+              <span className="text-sm font-semibold text-foreground">{meta.label}</span>
               <span className="text-xs text-muted-foreground ml-2">
                 {(review.stats as Record<string, string>)?.provider} · {(review.stats as Record<string, string>)?.model}
               </span>

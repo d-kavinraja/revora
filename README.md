@@ -34,6 +34,7 @@ Designed with enterprise-grade engineering in mind, Revora combines repository i
 - [Feature Status](#feature-status)
 - [Supported LLM Providers](#supported-llm-providers)
 - [Context Engineering Modules](#context-engineering-modules)
+- [Repository Intelligence Engine](#repository-intelligence-engine)
 - [Technology Stack](#technology-stack)
 - [Folder Structure](#folder-structure)
 - [Quick Start](#quick-start)
@@ -283,6 +284,119 @@ sequenceDiagram
 
 ---
 
+## Repository Intelligence Engine
+
+The Repository Intelligence Engine analyzes repositories deterministically before any LLM invocation. It runs **zero LLM tokens** during analysis and provides comprehensive repository understanding to the review pipeline.
+
+### Architecture
+
+```
+Repository
+    │
+    ▼
+┌─────────────────┐
+│   RepoWalker    │  Single-pass filesystem traversal (cached)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Intelligence    │  17 detectors running in parallel
+│ Engine          │  Each with independent error handling
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Code Graph      │  7 graph builders running in parallel
+│ Indexing        │  Import, Call, Module, API, DB, Config, Test
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Context         │  RAG-based retrieval with token budgeting
+│ Retrieval       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ LLM             │  Only receives compressed, ranked context
+│ Orchestrator    │
+└─────────────────┘
+```
+
+### Intelligence Detectors
+
+| Detector | Purpose | Zero-LLM |
+|----------|---------|----------|
+| `LanguageDetector` | Detects programming languages by file extension | Yes |
+| `FrameworkDetector` | Detects frameworks from config files and content | Yes |
+| `ArchitectureDetector` | Detects DDD, Clean, Hexagonal, MVC, Microservices, Monorepo | Yes |
+| `DatabaseDetector` | Detects databases and ORMs | Yes |
+| `DependencyAnalyzer` | Detects package managers | Yes |
+| `TestingDetector` | Detects test frameworks and counts test files | Yes |
+| `BuildDetector` | Detects build tools and Docker presence | Yes |
+| `CICDDetector` | Detects CI/CD providers (GitHub Actions, GitLab CI, etc.) | Yes |
+| `SecurityDetector` | Detects auth patterns, CORS, rate limiting | Yes |
+| `CloudDetector` | Detects cloud providers (AWS, GCP, Azure, etc.) | Yes |
+| `QueueDetector` | Detects message queues and caching solutions | Yes |
+| `SecretDetector` | Detects hardcoded credentials and API keys | Yes |
+| `ComplexityAnalyzer` | Analyzes cyclomatic complexity | Yes |
+| `DeadCodeDetector` | Detects potentially unused code | Yes |
+| `DuplicateDetector` | Detects copy-paste code blocks | Yes |
+| `HealthEngine` | Calculates repository health score | Yes |
+| `MetricsEngine` | Collects repository metrics | Yes |
+
+### Adding a New Detector
+
+To add a new detector, implement the `BaseDetector` interface:
+
+```python
+from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+class MyDetector(BaseDetector):
+    @property
+    def name(self) -> str:
+        return "my_detector"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+        # Your detection logic here
+        return DetectorResult(
+            success=True,
+            data={"findings": [...]},
+            confidence=0.8,
+        )
+```
+
+Register the detector in `intelligence/engine.py`:
+
+```python
+from app.intelligence.my_detector import MyDetector
+
+class IntelligenceEngine:
+    def __init__(self):
+        self._detectors = [
+            # ... existing detectors ...
+            MyDetector(),  # Add your detector
+        ]
+```
+
+### Code Graph Types
+
+| Graph | Purpose | Nodes | Edges |
+|-------|---------|-------|-------|
+| Import Graph | Import/dependency relationships | Files/Modules | imports |
+| Call Graph | Function call relationships | Functions | calls |
+| Module Graph | Directory/module hierarchy | Directories | contains |
+| API Graph | API endpoint definitions | Endpoints | handlers |
+| DB Graph | Database model relationships | Tables/Models | references |
+| Config Graph | Configuration file relationships | Configs | declares |
+| Test Graph | Test-to-source mapping | Tests | tests |
+
+---
+
 ## Supported LLM Providers
 
 <table>
@@ -382,16 +496,44 @@ revora/
 │   ├── app/
 │   │   ├── ai/                    # LLM service, LangGraph agents, prompts, state
 │   │   ├── api/v1/endpoints/      # FastAPI routes (auth, repos, reviews, dashboard, webhooks)
-│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet encryption)
+│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet encryption), constants
 │   │   ├── db/                    # SQLAlchemy async engine and session
 │   │   ├── github/                # GitHub App auth, API client, webhook handler
 │   │   ├── github_review/         # GitHub PR review format generator
-│   │   ├── indexing/              # Code graph builders (import, call, module, API, DB, config, test)
-│   │   ├── intelligence/          # Repository analysis (13 detectors, no LLM)
+│   │   ├── indexing/              # Code graph builders with BaseGraphBuilder interface
+│   │   │   ├── base_graph.py      # Graph builder interface
+│   │   │   ├── dependency_graph.py # Import dependency graph
+│   │   │   ├── call_graph.py      # Function call graph
+│   │   │   ├── module_graph.py    # Module hierarchy graph
+│   │   │   ├── api_graph.py       # API endpoint graph
+│   │   │   ├── db_graph.py        # Database model graph
+│   │   │   ├── config_graph.py    # Configuration file graph
+│   │   │   └── test_graph.py      # Test-to-source mapping graph
+│   │   ├── intelligence/          # Repository Intelligence Engine (17 detectors, zero-LLM)
+│   │   │   ├── base_detector.py   # Detector interface
+│   │   │   ├── repo_walker.py     # Single-pass filesystem traversal
+│   │   │   ├── engine.py          # Parallel detector orchestrator
+│   │   │   ├── language_detector.py
+│   │   │   ├── framework_detector.py
+│   │   │   ├── architecture_detector.py
+│   │   │   ├── database_detector.py
+│   │   │   ├── dependency_analyzer.py
+│   │   │   ├── testing_detector.py
+│   │   │   ├── build_detector.py
+│   │   │   ├── cicd_detector.py
+│   │   │   ├── security_detector.py
+│   │   │   ├── cloud_detector.py
+│   │   │   ├── queue_detector.py
+│   │   │   ├── secret_detector.py    # NEW: Hardcoded credential detection
+│   │   │   ├── complexity_analyzer.py # NEW: Cyclomatic complexity
+│   │   │   ├── dead_code_detector.py  # NEW: Unused code detection
+│   │   │   ├── duplicate_detector.py  # NEW: Copy-paste detection
+│   │   │   ├── health_engine.py       # NEW: Repository health scoring
+│   │   │   └── metrics_engine.py      # NEW: Repository metrics
 │   │   ├── knowledge/             # Knowledge base with DB persistence and caching
 │   │   ├── models/                # SQLAlchemy ORM models (17 tables)
 │   │   ├── orchestrator/          # Multi-provider LLM with fallbacks and cost tracking
-│   │   ├── pipeline/              # 8-phase review pipeline orchestrator
+│   │   ├── pipeline/              # Review pipeline with per-stage error handling
 │   │   ├── prompt_engine/         # Modular prompt builder with templates
 │   │   ├── retrieval/             # RAG context retrieval with ranking and compression
 │   │   ├── schemas/               # Pydantic request/response schemas
@@ -401,9 +543,14 @@ revora/
 │   │   ├── verification/          # AI finding verification engine
 │   │   └── worker/                # Celery background tasks
 │   ├── alembic/                   # Database migrations (4 migrations)
+│   ├── tests/                     # Test suite
+│   │   ├── test_repo_walker.py    # RepoWalker tests
+│   │   └── test_intelligence_engine.py # Intelligence engine tests
+│   ├── .env.example               # Environment variable template
 │   └── requirements.txt
 │
 ├── frontend/
+│   ├── .env.example               # Frontend environment template
 │   └── src/
 │       ├── app/                   # Next.js App Router (9 pages)
 │       ├── components/            # React components

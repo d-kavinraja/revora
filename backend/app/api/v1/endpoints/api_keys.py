@@ -1,8 +1,9 @@
 import uuid
+import asyncio
+import litellm
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from litellm import acompletion
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
@@ -37,7 +38,7 @@ async def create_api_key(
 ):
     """Add a new encrypted API key for the current user."""
     provider = key_in.provider.lower()
-    if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek"]:
+    if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek", "grok"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid LLM provider",
@@ -53,6 +54,12 @@ async def create_api_key(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Anthropic keys must start with sk-ant-",
+        )
+
+    if provider == "grok" and not key_in.api_key.startswith("xai-"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Grok keys must start with xai-",
         )
         
     if len(key_in.api_key) < 15:
@@ -81,7 +88,7 @@ async def update_api_key(
     
     if key_in.api_key:
         provider = db_key.provider.lower()
-        if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek"]:
+        if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek", "grok"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid LLM provider",
@@ -97,6 +104,12 @@ async def update_api_key(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Anthropic keys must start with sk-ant-",
+            )
+
+        if provider == "grok" and not key_in.api_key.startswith("xai-"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Grok keys must start with xai-",
             )
             
         if len(key_in.api_key) < 15:
@@ -140,14 +153,14 @@ async def test_api_key(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Test connection with the API key provider using a dummy completion."""
+    """Test connection with the API key provider by calling the provider's model list endpoint."""
     db_key = await api_key_service.get_by_id(db, key_id)
     if not db_key or db_key.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API key not found or not owned by user",
         )
-    
+
     try:
         raw_key = encryption_service.decrypt(db_key.encrypted_key)
     except Exception as e:
@@ -156,77 +169,71 @@ async def test_api_key(
             detail=f"Failed to decrypt stored key: {e}",
         )
 
-    if "fail" in raw_key.lower() or "invalid" in raw_key.lower():
-        db_key.is_valid = False
-        db.add(db_key)
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Connectivity test failed: Invalid API key format or connection refused.",
-        )
-
-    # Determine default validation model for each provider
-    provider_models = {
-        "gemini": "gemini/gemini-3.5-flash",
-        "openai": "gpt-4o-mini",
-        "anthropic": "anthropic/claude-3-5-haiku-20241022",
-        "groq": "groq/llama-3.3-70b-versatile",
-        "deepseek": "deepseek/deepseek-chat",
+    # Map app provider name → litellm provider identifier
+    litellm_provider_map = {
+        "gemini": "gemini",
+        "openai": "openai",
+        "anthropic": "anthropic",
+        "groq": "groq",
+        "deepseek": "deepseek",
+        "grok": "xai",
     }
-    
+
     provider = db_key.provider.lower()
-    model = provider_models.get(provider)
-    if not model:
+    litellm_prov = litellm_provider_map.get(provider)
+    if not litellm_prov:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported or unconfigured provider for testing: {db_key.provider}",
+            detail=f"Unsupported provider for testing: {db_key.provider}",
         )
 
     try:
-        # LiteLLM async test call
-        await acompletion(
-            model=model,
-            messages=[{"role": "user", "content": "ping"}],
+        # Use the provider's model list endpoint to validate the key.
+        # This is a lightweight, read-only call — no LLM completion, no quota used.
+        models = await asyncio.to_thread(
+            litellm.get_valid_models,
+            check_provider_endpoint=True,
+            custom_llm_provider=litellm_prov,
             api_key=raw_key,
-            max_tokens=2,
-            timeout=8.0,
         )
-        
-        # Mark key as valid
+
+        if not models:
+            raise ValueError("Provider returned an empty model list. The key may be invalid.")
+
         db_key.is_valid = True
         db.add(db_key)
         await db.commit()
-        
-        return {"status": "success", "message": "Key is verified and connectable."}
+        return {
+            "status": "success",
+            "message": f"Key verified — {len(models)} model(s) accessible.",
+        }
+
     except Exception as e:
         err_str = str(e).lower()
-        # If the error is due to rate limits (429) or temporary service overload (503),
-        # the key is authentic and correct, but the provider's server is temporarily overloaded or rate limited.
-        is_authenticated_but_busy = (
-            "503" in err_str or 
-            "429" in err_str or 
-            "rate_limit" in err_str or 
-            "rate limit" in err_str or 
-            "temporarily unavailable" in err_str or 
-            "high demand" in err_str or
-            "service_unavailable" in err_str or
-            "limit" in err_str
-        )
-        
-        if is_authenticated_but_busy:
+
+        # Treat authentication errors as a definitive failure
+        is_auth_error = any(k in err_str for k in [
+            "invalid_api_key", "invalid api key", "401", "403",
+            "permission", "unauthorized", "forbidden",
+        ])
+        # Treat rate limits / quota as "valid but busy" (key is authentic)
+        is_busy = any(k in err_str for k in [
+            "429", "rate_limit", "rate limit", "quota", "429",
+            "503", "service_unavailable", "temporarily unavailable",
+        ])
+
+        if is_busy:
             db_key.is_valid = True
             db.add(db_key)
             await db.commit()
             return {
-                "status": "success", 
-                "message": f"Key is verified (authenticated successfully), but the provider is currently busy/rate-limited: {e}"
+                "status": "success",
+                "message": "Key is authenticated but the provider is currently rate-limited or busy.",
             }
 
-        # Mark key as invalid
         db_key.is_valid = False
         db.add(db_key)
         await db.commit()
-        
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Connectivity test failed: {e}",

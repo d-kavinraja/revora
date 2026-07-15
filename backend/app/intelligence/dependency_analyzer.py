@@ -1,78 +1,116 @@
-import os
-import json
-from typing import Optional, Tuple
+"""Dependency analysis engine.
+
+Detects package managers and analyzes dependencies.
+Uses the shared RepoWalker for efficient filesystem access.
+"""
+
+from typing import Optional
 
 from app.intelligence.models import PackageManagerInfo
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 
+PACKAGE_MANAGERS = {
+    "npm": {"lock": "package-lock.json", "config": "package.json"},
+    "yarn": {"lock": "yarn.lock", "config": "package.json"},
+    "pnpm": {"lock": "pnpm-lock.yaml", "config": "package.json"},
+    "bun": {"lock": "bun.lockb", "config": "package.json"},
+    "pip": {"lock": "requirements.txt", "config": "requirements.txt"},
+    "poetry": {"lock": "poetry.lock", "config": "pyproject.toml"},
+    "uv": {"lock": "uv.lock", "config": "pyproject.toml"},
+    "pdm": {"lock": "pdm.lock", "config": "pyproject.toml"},
+    "cargo": {"lock": "Cargo.lock", "config": "Cargo.toml"},
+    "go": {"lock": "go.sum", "config": "go.mod"},
+    "maven": {"lock": None, "config": "pom.xml"},
+    "gradle": {"lock": None, "config": "build.gradle"},
+    "bundler": {"lock": "Gemfile.lock", "config": "Gemfile"},
+    "composer": {"lock": "composer.lock", "config": "composer.json"},
+    "mix": {"lock": "mix.lock", "config": "mix.exs"},
+}
+
+
+class DependencyAnalyzer(BaseDetector):
+    """Detects package managers and analyzes dependencies."""
+
+    @property
+    def name(self) -> str:
+        return "dependency_analyzer"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+        """Detect package managers using the RepoWalker cache.
+
+        Args:
+            walker: Initialized RepoWalker.
+
+        Returns:
+            DetectorResult with package manager info.
+        """
+        detected_pm: Optional[str] = None
+        lock_file: Optional[str] = None
+
+        for pm_name, pm_info in PACKAGE_MANAGERS.items():
+            # Check for lock file
+            if pm_info["lock"]:
+                lock_files = [
+                    fp for fp in walker.file_paths
+                    if fp.endswith("/" + pm_info["lock"]) or fp == pm_info["lock"]
+                ]
+                if lock_files:
+                    detected_pm = pm_name
+                    lock_file = pm_info["lock"]
+                    break
+
+            # Check for config file
+            if pm_info["config"]:
+                config_files = [
+                    fp for fp in walker.file_paths
+                    if fp.endswith("/" + pm_info["config"]) or fp == pm_info["config"]
+                ]
+                if config_files:
+                    detected_pm = pm_name
+                    lock_file = pm_info["lock"]
+                    break
+
+        return DetectorResult(
+            success=True,
+            data={
+                "name": detected_pm or "",
+                "lock_file": lock_file or "",
+            },
+            confidence=0.9 if detected_pm else 0.0,
+        )
+
+
+# Legacy function interface for backward compatibility
 def detect_package_manager(repo_path: str) -> Optional[PackageManagerInfo]:
-    lock_files = {
-        "package-lock.json": "npm",
-        "yarn.lock": "yarn",
-        "pnpm-lock.yaml": "pnpm",
-        "poetry.lock": "poetry",
-        "Pipfile.lock": "pipenv",
-        "uv.lock": "uv",
-        "Cargo.lock": "cargo",
-        "go.sum": "go",
-        "Gemfile.lock": "bundler",
-        "composer.lock": "composer",
-    }
+    """Detect package manager in a repository (legacy interface)."""
+    import asyncio
+    from app.intelligence.repo_walker import RepoWalker
 
-    config_files = {
-        "package.json": "npm",
-        "pyproject.toml": "python",
-        "Cargo.toml": "cargo",
-        "go.mod": "go",
-        "Gemfile": "bundler",
-        "composer.json": "composer",
-        "build.gradle": "gradle",
-        "build.gradle.kts": "gradle",
-        "pom.xml": "maven",
-    }
+    async def _detect():
+        walker = RepoWalker(repo_path)
+        await walker.walk()
+        detector = DependencyAnalyzer()
+        result = await detector.detect(walker)
+        data = result.data
+        if not data.get("name"):
+            return None
+        return PackageManagerInfo(
+            name=data["name"],
+            lock_file=data.get("lock_file", ""),
+        )
 
-    for lock_file, manager in lock_files.items():
-        if os.path.exists(os.path.join(repo_path, lock_file)):
-            config = config_files.get(lock_file.replace("lock", "json").replace("-lock", ""), lock_file)
-            return PackageManagerInfo(name=manager, lock_file=lock_file, config_file=config)
-
-    for config_file, manager in config_files.items():
-        if os.path.exists(os.path.join(repo_path, config_file)):
-            return PackageManagerInfo(name=manager, config_file=config_file)
-
-    return None
-
-
-def count_dependencies(repo_path: str, package_manager: Optional[PackageManagerInfo]) -> int:
-    if not package_manager:
-        return 0
-
-    count = 0
-
-    if package_manager.name == "npm" and package_manager.config_file:
-        pkg_path = os.path.join(repo_path, "package.json")
-        try:
-            with open(pkg_path, "r") as f:
-                pkg = json.load(f)
-            count = len(pkg.get("dependencies", {})) + len(pkg.get("devDependencies", {}))
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    elif package_manager.name in ("poetry", "uv") and os.path.exists(os.path.join(repo_path, "pyproject.toml")):
-        try:
-            with open(os.path.join(repo_path, "pyproject.toml"), "r") as f:
-                content = f.read()
-            count = content.count("\n") // 2  # rough estimate
-        except OSError:
-            pass
-
-    elif package_manager.name == "cargo":
-        cargo_path = os.path.join(repo_path, "Cargo.toml")
-        try:
-            with open(cargo_path, "r") as f:
-                content = f.read()
-            count = content.count('"') // 2
-        except OSError:
-            pass
-
-    return count
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, _detect()).result()
+        else:
+            return loop.run_until_complete(_detect())
+    except RuntimeError:
+        return asyncio.run(_detect())

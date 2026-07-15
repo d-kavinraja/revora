@@ -1,7 +1,14 @@
-import os
-from typing import Optional, List
+"""Database detection engine.
+
+Detects database types and ORMs by analyzing file content.
+Uses the shared RepoWalker for efficient filesystem access.
+"""
+
+from typing import List, Optional, Set
 
 from app.intelligence.models import DatabaseInfo
+from app.intelligence.base_detector import BaseDetector, DetectorResult
+from app.core.constants import MAX_FILES_PER_DETECTOR, MAX_FILE_READ_CHARS
 
 
 DB_SIGNATURES = {
@@ -23,7 +30,7 @@ ORM_SIGNATURES = {
     "sequelize": ["sequelize", "Sequelize"],
     "peewee": ["peewee"],
     "tortoise": ["tortoise-orm", "tortoise"],
-    "djang ORM": ["django.db.models"],
+    "django_orm": ["django.db.models"],
     "alembic": ["alembic"],
 }
 
@@ -35,65 +42,127 @@ CONFIG_INDICATORS = {
     "redis": ["REDIS"],
 }
 
+CHECK_EXTENSIONS = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
+    ".toml", ".yaml", ".yml", ".env", ".cfg", ".ini",
+}
 
-def detect_database(repo_path: str) -> Optional[DatabaseInfo]:
-    indicators: list[str] = []
-    db_type: Optional[str] = None
-    orm: Optional[str] = None
 
-    files_to_check = []
-    for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}]
-        for f in files:
-            if f.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".toml", ".yaml", ".yml", ".env", ".cfg", ".ini")):
-                files_to_check.append(os.path.join(root, f))
-        if len(files_to_check) > 200:
-            break
+class DatabaseDetector(BaseDetector):
+    """Detects database types and ORMs."""
 
-    all_content = ""
-    for fp in files_to_check[:200]:
-        try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                all_content += f.read()[:5000] + "\n"
-        except (OSError, IOError):
-            continue
+    @property
+    def name(self) -> str:
+        return "database_detector"
 
-    for db_name, keywords in DB_SIGNATURES.items():
-        for kw in keywords:
-            if kw in all_content:
-                db_type = db_name
-                indicators.append(f"Found {kw} reference")
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+        """Detect databases using the RepoWalker cache.
+
+        Args:
+            walker: Initialized RepoWalker.
+
+        Returns:
+            DetectorResult with database info.
+        """
+        indicators: List[str] = []
+        db_type: Optional[str] = None
+        orm: Optional[str] = None
+
+        # Collect files to check
+        files_to_check = []
+        for fp in walker.file_paths:
+            if any(fp.endswith(ext) for ext in CHECK_EXTENSIONS):
+                files_to_check.append(fp)
+            if len(files_to_check) >= MAX_FILES_PER_DETECTOR:
                 break
-        if db_type:
-            break
 
-    for orm_name, keywords in ORM_SIGNATURES.items():
-        for kw in keywords:
-            if kw in all_content:
-                orm = orm_name
-                indicators.append(f"Found {orm_name} usage")
+        # Read and concatenate file content
+        all_content = ""
+        for fp in files_to_check:
+            content = await walker.get_content(fp, max_chars=MAX_FILE_READ_CHARS)
+            if content:
+                all_content += content + "\n"
+
+        # Detect database type
+        for db_name, keywords in DB_SIGNATURES.items():
+            for kw in keywords:
+                if kw in all_content:
+                    db_type = db_name
+                    indicators.append(f"Found {kw} reference")
+                    break
+            if db_type:
                 break
-        if orm:
-            break
 
-    if not db_type:
-        env_file = os.path.join(repo_path, ".env")
-        if os.path.exists(env_file):
-            try:
-                with open(env_file, "r") as f:
-                    env_content = f.read()
-                for db_name, keywords in CONFIG_INDICATORS.items():
-                    for kw in keywords:
-                        if kw in env_content:
-                            db_type = db_name
-                            indicators.append(f"Found {db_name} in .env")
+        # Detect ORM
+        for orm_name, keywords in ORM_SIGNATURES.items():
+            for kw in keywords:
+                if kw in all_content:
+                    orm = orm_name
+                    indicators.append(f"Found {orm_name} usage")
+                    break
+            if orm:
+                break
+
+        # Check .env files if no database found
+        if not db_type:
+            env_files = [fp for fp in walker.file_paths if fp.endswith(".env")]
+            for env_file in env_files:
+                content = await walker.get_content(env_file)
+                if content:
+                    for db_name, keywords in CONFIG_INDICATORS.items():
+                        for kw in keywords:
+                            if kw in content:
+                                db_type = db_name
+                                indicators.append(f"Found {db_name} in .env")
+                                break
+                        if db_type:
                             break
-                    if db_type:
-                        break
-            except OSError:
-                pass
+                if db_type:
+                    break
 
-    if not db_type and not orm:
-        return None
+        return DetectorResult(
+            success=True,
+            data={
+                "databases": [db_type] if db_type else [],
+                "orms": [orm] if orm else [],
+                "drivers": [],
+                "indicators": indicators,
+            },
+            confidence=0.8 if db_type or orm else 0.0,
+        )
 
-    return DatabaseInfo(type=db_type, orm=orm, indicators=indicators)
+
+# Legacy function interface for backward compatibility
+def detect_database(repo_path: str) -> Optional[DatabaseInfo]:
+    """Detect databases in a repository (legacy interface)."""
+    import asyncio
+    from app.intelligence.repo_walker import RepoWalker
+
+    async def _detect():
+        walker = RepoWalker(repo_path)
+        await walker.walk()
+        detector = DatabaseDetector()
+        result = await detector.detect(walker)
+        data = result.data
+        if not data.get("databases") and not data.get("orms"):
+            return None
+        return DatabaseInfo(
+            type=data["databases"][0] if data.get("databases") else None,
+            orm=data["orms"][0] if data.get("orms") else None,
+            indicators=data.get("indicators", []),
+        )
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, _detect()).result()
+        else:
+            return loop.run_until_complete(_detect())
+    except RuntimeError:
+        return asyncio.run(_detect())

@@ -5,7 +5,7 @@ from typing import Dict
 from app.indexing.models import CodeGraph, GraphNode, GraphEdge
 
 
-CONFIG_EXTENSIONS = {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".config"}
+CONFIG_EXTENSIONS = (".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".config")
 CONFIG_NAMES = {
     "package.json", "tsconfig.json", "next.config.js", "next.config.ts",
     "vite.config.js", "vite.config.ts", "webpack.config.js",
@@ -26,9 +26,8 @@ def build_config_graph(repo_path: str) -> CodeGraph:
     for root, dirs, files in os.walk(repo_path):
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}]
         for f in files:
+            # Include if it's a known config file OR has a config extension
             if f not in CONFIG_NAMES and not f.endswith(CONFIG_EXTENSIONS):
-                continue
-            if f.endswith(CONFIG_EXTENSIONS) and f not in CONFIG_NAMES:
                 continue
 
             fp = os.path.join(root, f)
