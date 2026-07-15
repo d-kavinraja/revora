@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, use } from 'react';
+import { use } from 'react';
 import { api, Review } from '@/lib/api';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -8,39 +8,23 @@ import remarkGfm from 'remark-gfm';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
+import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
 import { Gemini, Claude, OpenAI, Grok, Groq, DeepSeek } from '@lobehub/icons';
+import { useQuery } from '@tanstack/react-query';
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [review, setReview] = useState<Review | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const fetchReview = useCallback(async () => {
-    try {
-      const data = await api.getReview(id);
-      setReview(data);
-    } catch (err) {
-      console.error('Failed to load review', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    fetchReview();
-    const interval = setInterval(async () => {
-      const data = await api.getReview(id).catch(() => null);
-      if (data) {
-        setReview(data);
-        if (data.status === 'completed' || data.status === 'failed') {
-          clearInterval(interval);
-        }
-      }
-    }, 5_000);
-    return () => clearInterval(interval);
-  }, [id, fetchReview]);
+  const { data: review, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['review', id],
+    queryFn: () => api.getReview(id),
+    refetchInterval: (query) => {
+      const data = query.state.data as Review | undefined;
+      return (data && (data.status === 'completed' || data.status === 'failed')) ? false : 5000;
+    },
+    retry: false, // Don't retry immediately so we can distinguish 404 from other errors quickly
+  });
 
   if (loading) {
     return (
@@ -52,14 +36,36 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  if (!review) {
+  if (error) {
+    const is404 = (error as any).response?.status === 404;
+    
+    if (is404) {
+      return (
+        <div className="p-6 md:p-8 max-w-5xl mx-auto text-center">
+          <p className="text-muted-foreground text-lg">Review not found.</p>
+          <Link href="/reviews" className="text-brand hover:underline mt-2 block">Back to Reviews</Link>
+        </div>
+      );
+    }
+    
     return (
       <div className="p-6 md:p-8 max-w-5xl mx-auto text-center">
-        <p className="text-muted-foreground text-lg">Review not found.</p>
-        <Link href="/reviews" className="text-brand hover:underline mt-2 block">Back to Reviews</Link>
+        <div className="p-6 bg-error/10 border border-error/20 rounded-xl max-w-md mx-auto">
+          <TriangleAlertIcon size={32} className="text-error mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-foreground">Failed to load review</h2>
+          <p className="text-muted-foreground text-sm mt-1 mb-4">{(error as any).message || 'An unexpected error occurred.'}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-brand hover:bg-brand-hover text-brand-foreground rounded-lg text-sm font-semibold transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
+
+  if (!review) return null;
 
   const pr = review.pull_request;
   const reviewProvider = ((review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
@@ -116,7 +122,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <div>
             <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Branch</div>
             <div className="text-sm font-semibold text-foreground truncate font-mono text-xs">
-              {pr?.head_branch} → {pr?.base_branch}
+              {pr?.head_branch} &rarr; {pr?.base_branch}
             </div>
           </div>
           <div>
@@ -143,11 +149,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <div className="w-12 h-12 mx-auto mb-4 relative">
             <div className="w-12 h-12 rounded-full border-2 border-info/20" />
             <div className="absolute inset-0 flex items-center justify-center text-info">
-              <LoaderIcon size={24} className="text-info" />
+              <LoaderIcon size={24} className="text-info" animate />
             </div>
           </div>
           <p className="text-info font-semibold text-lg">AI Review In Progress</p>
-          <p className="text-muted-foreground text-sm mt-1">Gemini is analyzing your code... This page will update automatically.</p>
+          <p className="text-muted-foreground text-sm mt-1">AI is analyzing your code... This page will update automatically.</p>
         </div>
       )}
 
@@ -168,7 +174,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <span className="text-sm font-semibold text-error">AI Review Failed</span>
               {review.stats && (review.stats as Record<string, string>).provider && (
                 <span className="text-xs text-muted-foreground ml-2">
-                  {(review.stats as Record<string, string>).provider} · {(review.stats as Record<string, string>).model}
+                  {(review.stats as Record<string, string>).provider} &middot; {(review.stats as Record<string, string>).model}
                 </span>
               )}
             </div>
@@ -207,7 +213,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             <div>
               <span className="text-sm font-semibold text-foreground">{meta.label}</span>
               <span className="text-xs text-muted-foreground ml-2">
-                {(review.stats as Record<string, string>)?.provider} · {(review.stats as Record<string, string>)?.model}
+                {(review.stats as Record<string, string>)?.provider} &middot; {(review.stats as Record<string, string>)?.model}
               </span>
             </div>
           </div>

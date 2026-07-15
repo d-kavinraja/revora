@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
@@ -77,6 +78,7 @@ export function Sidebar() {
   const logoutIconRef = useRef<any>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   // Auto-collapse on smaller screens
   useEffect(() => {
@@ -89,7 +91,12 @@ export function Sidebar() {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    dialogRef.current?.showModal();
+  };
+
+  const handleConfirmLogout = () => {
+    dialogRef.current?.close();
     logout();
     router.push('/login');
   };
@@ -127,10 +134,12 @@ export function Sidebar() {
         <div className={`p-4 border-b border-sidebar-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <div className="flex items-center gap-3 min-w-0">
-              <img
+              <Image
                 src="/revora-logo.png"
                 alt="Revora Logo"
-                className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+                width={32}
+                height={32}
+                className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
               />
               <div className="min-w-0">
                 <span className="font-bold text-lg tracking-tight text-foreground block leading-tight">Revora</span>
@@ -221,7 +230,7 @@ export function Sidebar() {
             )}
           </div>
           <button
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             onMouseEnter={() => logoutIconRef.current?.startAnimation()}
             onMouseLeave={() => logoutIconRef.current?.stopAnimation()}
             title={collapsed ? 'Sign out' : undefined}
@@ -234,6 +243,29 @@ export function Sidebar() {
           </button>
         </div>
       </aside>
+
+      {/* Native Dialog for Logout Confirmation */}
+      <dialog 
+        ref={dialogRef}
+        className="p-6 rounded-xl border border-border bg-surface-1 text-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm m-auto open:flex flex-col gap-4 max-w-sm w-full"
+      >
+        <h3 className="text-lg font-bold">Sign out</h3>
+        <p className="text-sm text-muted-foreground">Are you sure you want to sign out?</p>
+        <div className="flex justify-end gap-3 mt-4">
+          <button 
+            onClick={() => dialogRef.current?.close()}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleConfirmLogout}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
+      </dialog>
     </>
   );
 }

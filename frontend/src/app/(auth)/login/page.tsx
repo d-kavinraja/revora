@@ -3,13 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/ui/toaster';
+import { InfoIcon } from '@animateicons/react/lucide';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const { toast } = useToast();
 
   const handleGitHubLogin = async () => {
     setLoadingConfig(true);
@@ -17,7 +20,10 @@ export default function LoginPage() {
       const config = await api.getAuthConfig();
       const clientId = config.github_client_id;
       if (!clientId) {
-        alert("GitHub Client ID is not configured on the backend.");
+        toast({
+          title: "GitHub Client ID is not configured on the backend.",
+          type: "error"
+        });
         setLoadingConfig(false);
         return;
       }
@@ -25,7 +31,10 @@ export default function LoginPage() {
       window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user,user:email`;
     } catch (err) {
       console.error('Failed to get auth config', err);
-      alert("Failed to connect to the backend authorization service.");
+      toast({
+        title: "Failed to connect to the backend authorization service.",
+        type: "error"
+      });
       setLoadingConfig(false);
     }
   };
@@ -45,30 +54,32 @@ export default function LoginPage() {
         className="w-full max-w-md p-8 bg-surface-1/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/30 z-10"
       >
         <div className="text-center mb-8">
-          <img
+          <Image
             src="/revora-logo.png"
             alt="Revora Logo"
-            className="w-12 h-12 mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+            width={48}
+            height={48}
+            className="mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
           />
           <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
           <p className="text-muted-foreground mt-2">Sign in to your Revora account</p>
         </div>
 
-        <Button
+        <button
           type="button"
           onClick={handleGitHubLogin}
           disabled={loadingConfig}
           className="w-full h-12 bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10 rounded-lg flex items-center justify-center gap-2.5 font-semibold text-sm cursor-pointer shadow-lg transition-all duration-150 disabled:opacity-50"
         >
           {loadingConfig ? (
-            <LoaderIcon size={18} className="animate-spin" />
+            <LoaderIcon size={18} animate />
           ) : (
             <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
             </svg>
           )}
           Sign in with GitHub
-        </Button>
+        </button>
 
         <div className="overflow-hidden w-full mt-6 border-t border-border pt-4 relative h-8 flex items-center">
           <motion.div
@@ -79,9 +90,10 @@ export default function LoginPage() {
               ease: 'linear',
               duration: 8,
             }}
-            className="absolute whitespace-nowrap text-xs text-muted-foreground font-medium"
+            className="absolute whitespace-nowrap text-xs text-muted-foreground font-medium flex items-center gap-1.5"
           >
-            📢 Notice: Username and password login coming soon.
+            <InfoIcon size={14} className="text-info" />
+            Notice: Username and password login coming soon.
           </motion.div>
         </div>
       </motion.div>

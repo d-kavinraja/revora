@@ -24,7 +24,10 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       setAuth: (token, user) => set({ token, user, isAuthenticated: true }),
-      logout: () => set({ token: null, user: null, isAuthenticated: false }),
+      logout: () => {
+        document.cookie = 'revora_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        set({ token: null, user: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'revora-auth',

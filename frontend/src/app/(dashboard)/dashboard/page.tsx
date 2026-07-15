@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, Review, DashboardStats } from '@/lib/api';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonCard, SkeletonList } from '@/components/shared/skeleton';
+import { useQuery } from '@tanstack/react-query';
 
 function StatCard({ label, value, icon: Icon, accent }: { label: string; value: number | string; icon: any; accent: string }) {
   const iconRef = useRef<any>(null);
@@ -47,94 +48,35 @@ function ViewAllLink() {
   );
 }
 
-function ReviewItem({ review }: { review: Review }) {
-  const iconRef = useRef<any>(null);
-  const arrowRef = useRef<any>(null);
-  return (
-    <Link
-      href={`/reviews/${review.id}`}
-      onMouseEnter={() => {
-        iconRef.current?.startAnimation();
-        arrowRef.current?.startAnimation();
-      }}
-      onMouseLeave={() => {
-        iconRef.current?.stopAnimation();
-        arrowRef.current?.stopAnimation();
-      }}
-      className="block rounded-xl border border-border bg-surface-1 hover:border-brand/30 transition-all duration-150 p-4 group"
-    >
-      <div className="flex items-start gap-3">
-        <div className="shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-white/[0.04] flex items-center justify-center text-muted-foreground group-hover:text-brand transition-colors">
-            <MessageCircleIcon ref={iconRef} size={16} isAnimated={false} />
-          </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="font-semibold text-foreground truncate text-sm">
-              {review.pull_request?.title ?? 'Pull Request'}
-            </span>
-            <StatusBadge status={review.status} />
-          </div>
-          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span className="text-brand/80">{review.repository?.full_name}</span>
-            <span className="text-border">·</span>
-            <span>PR #{review.pull_request?.pr_number}</span>
-            <span className="text-border">·</span>
-            <span>@{review.pull_request?.author}</span>
-            <span className="text-border">·</span>
-            <span>{formatDateTimeWithRelative(review.created_at)}</span>
-          </div>
-          {review.status === 'failed' && review.error_message && (
-            <div className="mt-2 p-2.5 bg-error/5 border border-error/20 rounded-lg text-xs font-mono text-error/90 whitespace-pre-wrap break-all">
-              {review.error_message}
-            </div>
-          )}
-        </div>
-        <MoveRightIcon ref={arrowRef} size={16} isAnimated={false} className="text-border group-hover:text-brand transition-colors shrink-0 mt-2" />
-      </div>
-    </Link>
-  );
-}
+import { ReviewItem } from '@/components/shared/review-item';
+
 
 export default function Dashboard() {
   const { user } = useAuthStore();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [timeText, setTimeText] = useState('0s ago');
   const [searchQuery, setSearchQuery] = useState('');
+  const [timeText, setTimeText] = useState('just now');
+
+  const { data: stats, isLoading: statsLoading, error: statsError, dataUpdatedAt: statsUpdated } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: api.getStats,
+    refetchInterval: 5000,
+  });
+
+  const { data: reviews = [], isLoading: reviewsLoading, error: reviewsError } = useQuery({
+    queryKey: ['dashboard-reviews'],
+    queryFn: () => api.getReviews(10),
+    refetchInterval: 5000,
+  });
+
+  const loading = statsLoading || reviewsLoading;
 
   useEffect(() => {
-    setTimeText(timeAgo(lastRefresh.toISOString()));
-    const t = setInterval(() => {
-      setTimeText(timeAgo(lastRefresh.toISOString()));
-    }, 1000);
+    if (!statsUpdated) return;
+    const updateTime = () => setTimeText(timeAgo(new Date(statsUpdated).toISOString()));
+    updateTime();
+    const t = setInterval(updateTime, 10000);
     return () => clearInterval(t);
-  }, [lastRefresh]);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const [statsData, reviewsData] = await Promise.all([
-        api.getStats(),
-        api.getReviews(10),
-      ]);
-      setStats(statsData);
-      setReviews(reviewsData);
-      setLastRefresh(new Date());
-    } catch (err) {
-      console.error('Failed to load dashboard data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 3_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [statsUpdated]);
 
   const hasActiveReviews = reviews.some((r) => r.status === 'running' || r.status === 'pending');
 
@@ -161,8 +103,15 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {(statsError || reviewsError) && (
+        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg flex items-center gap-3">
+          <TriangleAlertIcon size={20} className="text-error" />
+          <p className="text-sm text-error">Failed to load some dashboard data. Retrying...</p>
+        </div>
+      )}
+
       {/* Stat Cards */}
-      {loading ? (
+      {statsLoading ? (
         <SkeletonCard count={4} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -198,7 +147,9 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <h2 className="text-lg font-bold text-foreground">Recent Reviews</h2>
           <div className="flex items-center gap-3 flex-1 sm:max-w-md w-full">
+            <label htmlFor="dashboard-search" className="sr-only">Search reviews</label>
             <input
+              id="dashboard-search"
               type="text"
               placeholder="Search reviews by PR title, repo, or author..."
               value={searchQuery}
@@ -209,7 +160,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {loading ? (
+        {reviewsLoading ? (
           <SkeletonList count={3} />
         ) : reviews.length === 0 ? (
           <EmptyState
