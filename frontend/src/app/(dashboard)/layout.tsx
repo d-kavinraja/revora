@@ -24,7 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!hasHydrated || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <LoaderIcon size={24} className="text-brand" />
+        <LoaderIcon size={24} className="text-brand" animate />
       </div>
     );
   }

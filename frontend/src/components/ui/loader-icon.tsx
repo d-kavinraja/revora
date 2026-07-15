@@ -35,6 +35,7 @@ interface LoaderIconProps extends Omit<
  duration?: number;
  isAnimated?: boolean;
  color?: string;
+ animate?: boolean;
 }
 
 const LoaderIcon = forwardRef<LoaderIconHandle, LoaderIconProps>(
@@ -47,6 +48,7 @@ const LoaderIcon = forwardRef<LoaderIconHandle, LoaderIconProps>(
    duration = 1,
    isAnimated = true,
    color,
+   animate = false,
    ...props
   },
   ref,
@@ -66,19 +68,20 @@ const LoaderIcon = forwardRef<LoaderIconHandle, LoaderIconProps>(
 
   const handleEnter = useCallback(
    (e?: React.MouseEvent<HTMLDivElement>) => {
-    if (!isAnimated || reduced) return;
+    if (!isAnimated || reduced || animate) return;
     if (!isControlled.current) controls.start("animate");
     else onMouseEnter?.(e as any);
    },
-   [controls, reduced, isAnimated, onMouseEnter],
+   [controls, reduced, isAnimated, onMouseEnter, animate],
   );
 
   const handleLeave = useCallback(
    (e?: React.MouseEvent<HTMLDivElement>) => {
+    if (animate) return;
     if (!isControlled.current) controls.start("normal");
     else onMouseLeave?.(e as any);
    },
-   [controls, onMouseLeave],
+   [controls, onMouseLeave, animate],
   );
 
   const wrapperVariants: Variants = {
@@ -117,7 +120,7 @@ const LoaderIcon = forwardRef<LoaderIconHandle, LoaderIconProps>(
       strokeLinecap="round"
       strokeLinejoin="round"
       variants={wrapperVariants}
-      animate={controls}
+      animate={animate ? "animate" : controls}
       initial="normal"
      >
       <m.path d="M12 2v4" />

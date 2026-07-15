@@ -143,7 +143,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <div className="w-12 h-12 mx-auto mb-4 relative">
             <div className="w-12 h-12 rounded-full border-2 border-info/20" />
             <div className="absolute inset-0 flex items-center justify-center text-info">
-              <LoaderIcon size={24} className="text-info" />
+              <LoaderIcon size={24} className="text-info" animate />
             </div>
           </div>
           <p className="text-info font-semibold text-lg">AI Review In Progress</p>

@@ -38,7 +38,7 @@ function ReviewListItem({ review }: { review: Review }) {
         {/* Icon */}
         <div className="w-9 h-9 rounded-lg bg-white/[0.04] flex items-center justify-center text-muted-foreground group-hover:text-brand transition-colors shrink-0">
           {review.status === 'running' ? (
-            <LoaderIcon size={18} className="text-brand" />
+            <LoaderIcon size={18} className="text-brand" animate />
           ) : review.status === 'completed' ? (
             <CircleCheckIcon ref={statusRef} size={18} isAnimated={false} className="text-success" />
           ) : review.status === 'failed' ? (

@@ -73,7 +73,7 @@ function CallbackHandler() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-center gap-2">
-            <LoaderIcon size={20} className="text-brand" />
+            <LoaderIcon size={20} className="text-brand" animate />
             <span className="font-semibold text-lg">Authenticating with GitHub...</span>
           </div>
           <p className="text-muted-foreground text-sm">Setting up your secure session.</p>
@@ -95,7 +95,7 @@ export default function AuthCallbackPage() {
           />
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
-              <LoaderIcon size={20} className="text-brand" />
+              <LoaderIcon size={20} className="text-brand" animate />
               <span className="font-semibold text-lg">Loading secure session...</span>
             </div>
           </div>

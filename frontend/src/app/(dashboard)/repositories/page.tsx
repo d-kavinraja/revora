@@ -240,12 +240,14 @@ function ConfigModal({
 function RepositoryCard({
   repo,
   syncingRepoId,
+  configuringRepoId,
   handleSync,
   onConfigure,
   apiKeys,
 }: {
   repo: Repository;
   syncingRepoId: string | null;
+  configuringRepoId: string | null;
   handleSync: (id: string) => void;
   onConfigure: (repo: Repository) => void;
   apiKeys: ApiKey[];
@@ -313,11 +315,16 @@ function RepositoryCard({
 
         <div className="flex items-center gap-2">
           <button
+            disabled={configuringRepoId === repo.id || syncingRepoId === repo.id}
             onClick={() => onConfigure(repo)}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer disabled:opacity-50"
             title="Configure model"
           >
-            <SettingsIcon ref={settingsRef} size={14} isAnimated={false} />
+            {configuringRepoId === repo.id ? (
+              <LoaderIcon size={14} className="text-muted-foreground" animate />
+            ) : (
+              <SettingsIcon ref={settingsRef} size={14} isAnimated={false} />
+            )}
           </button>
 
           <button
@@ -327,7 +334,7 @@ function RepositoryCard({
           >
             {syncingRepoId === repo.id ? (
               <>
-                <LoaderIcon size={12} className="text-muted-foreground" />
+                <LoaderIcon size={12} className="text-muted-foreground" animate />
                 Syncing...
               </>
             ) : (
@@ -354,6 +361,7 @@ export default function RepositoriesPage() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
+  const [configuringRepoId, setConfiguringRepoId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -373,6 +381,7 @@ export default function RepositoriesPage() {
   }, []);
 
   const handleConfigure = async (repo: Repository) => {
+    setConfiguringRepoId(repo.id);
     try {
       const [models, keys] = await Promise.all([
         api.getAvailableModels(),
@@ -385,6 +394,8 @@ export default function RepositoriesPage() {
       setAvailableModels({});
       setApiKeys([]);
       setConfigRepo(repo);
+    } finally {
+      setConfiguringRepoId(null);
     }
   };
 
@@ -457,7 +468,7 @@ export default function RepositoriesPage() {
           >
             {isSyncingAll ? (
               <>
-                <LoaderIcon size={14} className="text-brand-foreground" />
+                <LoaderIcon size={14} className="text-brand-foreground" animate />
                 Syncing...
               </>
             ) : (
@@ -529,6 +540,7 @@ export default function RepositoriesPage() {
                   key={repo.id}
                   repo={repo}
                   syncingRepoId={syncingRepoId}
+                  configuringRepoId={configuringRepoId}
                   handleSync={handleSync}
                   onConfigure={handleConfigure}
                   apiKeys={apiKeys}
