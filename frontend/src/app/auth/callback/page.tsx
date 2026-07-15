@@ -41,6 +41,7 @@ function CallbackHandler() {
 
         const data = await res.json();
         setAuth(data.access_token, data.user);
+        document.cookie = `revora_auth_token=${data.access_token}; path=/; max-age=86400; SameSite=Lax`;
         router.push('/dashboard');
       } catch (err: any) {
         console.error(err);

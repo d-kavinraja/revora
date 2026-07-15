@@ -84,7 +84,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  /* Brand — vibrant indigo */
+  /* Brand - vibrant indigo */
   --brand: oklch(0.55 0.2 265);
   --brand-hover: oklch(0.50 0.2 265);
   --brand-foreground: oklch(0.98 0 0);
@@ -125,7 +125,7 @@
 }
 
 .dark {
-  /* Base surfaces — subtle blue tint for depth */
+  /* Base surfaces - subtle blue tint for depth */
   --background: oklch(0.09 0.005 270);
   --foreground: oklch(0.95 0 0);
 
@@ -138,7 +138,7 @@
   --popover: oklch(0.16 0.008 270);
   --popover-foreground: oklch(0.95 0 0);
 
-  /* Brand — vibrant indigo */
+  /* Brand - vibrant indigo */
   --brand: oklch(0.62 0.2 265);
   --brand-hover: oklch(0.68 0.2 265);
   --brand-foreground: oklch(0.98 0 0);

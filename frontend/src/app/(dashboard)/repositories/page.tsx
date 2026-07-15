@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { api, Repository, ApiKey, ModelMetadata } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon } from '@animateicons/react/lucide';
+import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/components/ui/toaster';
 
 function LangBadge({ lang }: { lang: string | null }) {
   if (!lang) return null;
@@ -34,26 +36,21 @@ function ConfigModal({
   availableModels: Record<string, ModelMetadata[]>;
   apiKeys: ApiKey[];
   onClose: () => void;
-  onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => void;
+  onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => Promise<void>;
 }) {
   const providers = Object.keys(availableModels);
+  const dialogRef = useRef<HTMLDivElement>(null);
   
   const [selectedProvider, setSelectedProvider] = useState(() => {
     const saved = repo.settings?.assigned_provider;
-    if (saved && providers.includes(saved)) {
-      return saved;
-    }
-    return providers[0] ?? '';
+    return (saved && providers.includes(saved)) ? saved : (providers[0] ?? '');
   });
   
   const providerKeys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
   
   const [selectedKeyId, setSelectedKeyId] = useState(() => {
     const saved = repo.settings?.assigned_key_id;
-    if (saved && providerKeys.some(k => k.id === saved)) {
-      return saved;
-    }
-    return providerKeys[0]?.id ?? '';
+    return (saved && providerKeys.some(k => k.id === saved)) ? saved : (providerKeys[0]?.id ?? '');
   });
 
   const allModels = availableModels[selectedProvider] || [];
@@ -71,16 +68,14 @@ function ConfigModal({
 
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = repo.settings?.assigned_model;
-    if (saved && models.some(m => m.model_name === saved)) {
-      return saved;
-    }
-    const firstAccessible = models.find(m => m.accessible);
-    return firstAccessible?.model_name || '';
+    if (saved && models.some(m => m.model_name === saved)) return saved;
+    return models.find(m => m.accessible)?.model_name || '';
   });
 
   const [reviewsEnabled, setReviewsEnabled] = useState(repo.reviews_enabled);
   const [saving, setSaving] = useState(false);
   const settingsRef = useRef<any>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const keys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
@@ -104,30 +99,54 @@ function ConfigModal({
     settingsRef.current?.startAnimation?.();
   }, []);
 
+  // Trap focus & handle escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    dialogRef.current?.focus();
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleSave = async () => {
     setSaving(true);
-    await onSave({
-      assigned_provider: selectedProvider || undefined,
-      assigned_model: selectedModel || undefined,
-      assigned_key_id: selectedKeyId || undefined,
-      reviews_enabled: reviewsEnabled,
-    });
-    setSaving(false);
-    onClose();
+    try {
+      await onSave({
+        assigned_provider: selectedProvider || undefined,
+        assigned_model: selectedModel || undefined,
+        assigned_key_id: selectedKeyId || undefined,
+        reviews_enabled: reviewsEnabled,
+      });
+      onClose(); // Only close on success
+    } catch (err: any) {
+      toast({
+        title: 'Failed to save configuration',
+        description: err.response?.data?.detail || err.message,
+        type: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-md bg-surface-1 border border-border rounded-xl shadow-2xl p-6"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        tabIndex={-1}
+        className="w-full max-w-md bg-surface-1 border border-border rounded-xl shadow-2xl p-6 outline-none max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">Configure Model</h3>
+            <h3 id="modal-title" className="text-lg font-semibold text-foreground">Configure Model</h3>
             <p className="text-xs text-muted-foreground mt-0.5">{repo.full_name}</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer" aria-label="Close dialog">
             <XIcon size={18} />
           </button>
         </div>
@@ -141,8 +160,9 @@ function ConfigModal({
           <div className="space-y-4">
             {/* Provider Selector */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Provider</label>
+              <label htmlFor="provider-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Provider</label>
               <select
+                id="provider-select"
                 value={selectedProvider}
                 onChange={(e) => setSelectedProvider(e.target.value)}
                 className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
@@ -156,8 +176,9 @@ function ConfigModal({
             {/* API Key Selector */}
             {providerKeys.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
+                <label htmlFor="key-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
                 <select
+                  id="key-select"
                   value={selectedKeyId}
                   onChange={(e) => setSelectedKeyId(e.target.value)}
                   className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
@@ -174,7 +195,7 @@ function ConfigModal({
             {/* Model Selector */}
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
+                <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
                 <div className="flex gap-2">
                   <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
                     <input type="checkbox" checked={showPreview} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
@@ -188,6 +209,7 @@ function ConfigModal({
                 </div>
               </div>
               <select
+                id="model-select"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
@@ -211,10 +233,13 @@ function ConfigModal({
             {/* Reviews Toggle */}
             <div className="flex items-center justify-between py-2">
               <div>
-                <label className="text-sm font-medium text-foreground">Reviews Enabled</label>
+                <label id="reviews-label" className="text-sm font-medium text-foreground">Reviews Enabled</label>
                 <p className="text-xs text-muted-foreground">Automatically review pull requests</p>
               </div>
               <button
+                role="switch"
+                aria-checked={reviewsEnabled}
+                aria-labelledby="reviews-label"
                 onClick={() => setReviewsEnabled(!reviewsEnabled)}
                 className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${reviewsEnabled ? 'bg-brand' : 'bg-muted'}`}
               >
@@ -358,42 +383,39 @@ function RepositoryCard({
 }
 
 export default function RepositoriesPage() {
-  const [repos, setRepos] = useState<Repository[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   const [configuringRepoId, setConfiguringRepoId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [configRepo, setConfigRepo] = useState<Repository | null>(null);
   const [availableModels, setAvailableModels] = useState<Record<string, ModelMetadata[]>>({});
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  
+  const { data: repos = [], isLoading: reposLoading, error: reposError } = useQuery({
+    queryKey: ['repositories'],
+    queryFn: api.getRepositories,
+    refetchInterval: 5000,
+  });
 
-  const fetchRepos = () => {
-    api.getRepositories().then(setRepos).finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchRepos();
-    api.getApiKeys().then(setApiKeys).catch(() => {});
-    const interval = setInterval(fetchRepos, 3_000);
-    return () => clearInterval(interval);
-  }, []);
+  const { data: apiKeys = [] } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: api.getApiKeys,
+  });
 
   const handleConfigure = async (repo: Repository) => {
     setConfiguringRepoId(repo.id);
     try {
-      const [models, keys] = await Promise.all([
-        api.getAvailableModels(),
-        api.getApiKeys(),
-      ]);
+      const models = await api.getAvailableModels();
       setAvailableModels(models);
-      setApiKeys(keys);
       setConfigRepo(repo);
-    } catch {
-      setAvailableModels({});
-      setApiKeys([]);
-      setConfigRepo(repo);
+    } catch (err: any) {
+      toast({
+        title: 'Failed to load models',
+        description: err.response?.data?.detail || err.message,
+        type: 'error',
+      });
     } finally {
       setConfiguringRepoId(null);
     }
@@ -401,29 +423,26 @@ export default function RepositoriesPage() {
 
   const handleSaveConfig = async (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => {
     if (!configRepo) return;
-    try {
-      const updated = await api.updateRepositoryConfig(configRepo.id, config);
-      setRepos((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      setSyncMessage('Configuration saved');
-      setTimeout(() => setSyncMessage(null), 3000);
-    } catch (err: any) {
-      setSyncMessage(err.response?.data?.detail || 'Failed to save configuration');
-      setTimeout(() => setSyncMessage(null), 3000);
-    }
+    await api.updateRepositoryConfig(configRepo.id, config);
+    queryClient.invalidateQueries({ queryKey: ['repositories'] });
+    toast({
+      title: 'Configuration saved',
+      type: 'success',
+    });
   };
 
   const handleSync = async (id: string) => {
     setSyncingRepoId(id);
-    setSyncMessage(null);
     try {
       const result = await api.syncRepository(id);
-      setSyncMessage(result.message);
-      fetchRepos();
-      setTimeout(() => setSyncMessage(null), 5000);
+      toast({ title: 'Sync completed', description: result.message, type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['repositories'] });
     } catch (err: any) {
-      console.error(err);
-      setSyncMessage(err.response?.data?.detail || 'Sync failed.');
-      setTimeout(() => setSyncMessage(null), 5000);
+      toast({
+        title: 'Sync failed',
+        description: err.response?.data?.detail || err.message,
+        type: 'error',
+      });
     } finally {
       setSyncingRepoId(null);
     }
@@ -431,16 +450,16 @@ export default function RepositoriesPage() {
 
   const handleSyncAll = async () => {
     setIsSyncingAll(true);
-    setSyncMessage(null);
     try {
       const result = await api.syncAllRepositories();
-      setSyncMessage(result.message);
-      fetchRepos();
-      setTimeout(() => setSyncMessage(null), 5000);
+      toast({ title: 'Global sync completed', description: result.message, type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['repositories'] });
     } catch (err: any) {
-      console.error(err);
-      setSyncMessage(err.response?.data?.detail || 'Global sync failed.');
-      setTimeout(() => setSyncMessage(null), 5000);
+      toast({
+        title: 'Global sync failed',
+        description: err.response?.data?.detail || err.message,
+        type: 'error',
+      });
     } finally {
       setIsSyncingAll(false);
     }
@@ -455,12 +474,6 @@ export default function RepositoriesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {syncMessage && (
-            <div className="px-3 py-1.5 rounded-lg bg-brand/10 text-brand border border-brand/20 text-sm animate-fade-in">
-              {syncMessage}
-            </div>
-          )}
-
           <button
             onClick={handleSyncAll}
             disabled={isSyncingAll}
@@ -481,10 +494,19 @@ export default function RepositoriesPage() {
         </div>
       </div>
 
+      {reposError && (
+        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg flex items-center gap-3">
+          <TriangleAlertIcon size={20} className="text-error" />
+          <p className="text-sm text-error">Failed to load repositories.</p>
+        </div>
+      )}
+
       {/* Search Bar */}
       {repos.length > 0 && (
         <div className="mb-6 max-w-md">
+          <label htmlFor="repo-search" className="sr-only">Search repositories</label>
           <input
+            id="repo-search"
             type="text"
             placeholder="Search repositories by name, description, or language..."
             value={searchQuery}
@@ -494,7 +516,7 @@ export default function RepositoriesPage() {
         </div>
       )}
 
-      {loading ? (
+      {reposLoading ? (
         <SkeletonList count={2} height="h-28" />
       ) : repos.length === 0 ? (
         <EmptyState

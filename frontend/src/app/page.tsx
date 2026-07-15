@@ -2,10 +2,12 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
+import { buttonVariants } from "@/components/ui/button";
 import { GithubIcon, ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateicons/react/lucide";
 import { useRef } from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { cn } from "@/lib/utils";
 
 const features = [
   {
@@ -38,20 +40,28 @@ export default function LandingPage() {
 
       <header className="flex items-center justify-between p-6 z-10 border-b border-border bg-background/50 backdrop-blur-md sticky top-0">
         <div className="flex items-center gap-2.5">
-          <img
+          <Image
             src="/revora-logo.png"
             alt="Revora Logo"
-            className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+            width={32}
+            height={32}
+            className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
           />
           <span className="font-bold text-xl tracking-tight">Revora</span>
         </div>
         <nav className="flex items-center gap-3">
           <ThemeToggle />
-          <Link href="/login">
-            <Button variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-white/[0.04]">Sign In</Button>
+          <Link 
+            href="/login" 
+            className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]")}
+          >
+            Sign In
           </Link>
-          <Link href="/register">
-            <Button className="bg-foreground text-background hover:bg-foreground/90">Get Started</Button>
+          <Link 
+            href="/register" 
+            className={cn(buttonVariants({ variant: "default" }), "bg-foreground text-background hover:bg-foreground/90")}
+          >
+            Get Started
           </Link>
         </nav>
       </header>
@@ -72,16 +82,14 @@ export default function LandingPage() {
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
-              <Link href="/login">
-                <Button
-                  size="lg"
-                  onMouseEnter={() => githubIconRef.current?.startAnimation()}
-                  onMouseLeave={() => githubIconRef.current?.stopAnimation()}
-                  className="h-12 px-7 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_24px_rgba(147,51,234,0.3)] border-0 transition-all hover:scale-[1.02] gap-2"
-                >
-                  Install GitHub App
-                  <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
-                </Button>
+              <Link 
+                href="/login"
+                onMouseEnter={() => githubIconRef.current?.startAnimation()}
+                onMouseLeave={() => githubIconRef.current?.stopAnimation()}
+                className={cn(buttonVariants({ size: "lg" }), "h-12 px-7 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_24px_rgba(147,51,234,0.3)] border-0 transition-all hover:scale-[1.02] gap-2")}
+              >
+                Install GitHub App
+                <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
               </Link>
             </div>
           </motion.div>

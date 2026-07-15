@@ -3,13 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/ui/toaster';
+import { InfoIcon } from '@animateicons/react/lucide';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const { toast } = useToast();
 
   const handleGitHubLogin = async () => {
     setLoadingConfig(true);
@@ -17,7 +20,10 @@ export default function LoginPage() {
       const config = await api.getAuthConfig();
       const clientId = config.github_client_id;
       if (!clientId) {
-        alert("GitHub Client ID is not configured on the backend.");
+        toast({
+          title: "GitHub Client ID is not configured on the backend.",
+          type: "error"
+        });
         setLoadingConfig(false);
         return;
       }
@@ -25,7 +31,10 @@ export default function LoginPage() {
       window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user,user:email`;
     } catch (err) {
       console.error('Failed to get auth config', err);
-      alert("Failed to connect to the backend authorization service.");
+      toast({
+        title: "Failed to connect to the backend authorization service.",
+        type: "error"
+      });
       setLoadingConfig(false);
     }
   };
@@ -45,16 +54,18 @@ export default function LoginPage() {
         className="w-full max-w-md p-8 bg-surface-1/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/30 z-10"
       >
         <div className="text-center mb-8">
-          <img
+          <Image
             src="/revora-logo.png"
             alt="Revora Logo"
-            className="w-12 h-12 mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+            width={48}
+            height={48}
+            className="mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
           />
           <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
           <p className="text-muted-foreground mt-2">Sign in to your Revora account</p>
         </div>
 
-        <Button
+        <button
           type="button"
           onClick={handleGitHubLogin}
           disabled={loadingConfig}
@@ -68,7 +79,7 @@ export default function LoginPage() {
             </svg>
           )}
           Sign in with GitHub
-        </Button>
+        </button>
 
         <div className="overflow-hidden w-full mt-6 border-t border-border pt-4 relative h-8 flex items-center">
           <motion.div
@@ -79,9 +90,10 @@ export default function LoginPage() {
               ease: 'linear',
               duration: 8,
             }}
-            className="absolute whitespace-nowrap text-xs text-muted-foreground font-medium"
+            className="absolute whitespace-nowrap text-xs text-muted-foreground font-medium flex items-center gap-1.5"
           >
-            📢 Notice: Username and password login coming soon.
+            <InfoIcon size={14} className="text-info" />
+            Notice: Username and password login coming soon.
           </motion.div>
         </div>
       </motion.div>

@@ -13,11 +13,13 @@ import {
   EyeOffIcon 
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
+import { useToast } from '@/components/ui/toaster';
 
 export default function ApiKeysSettingsPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
+  const { toast } = useToast();
   
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -30,6 +32,9 @@ export default function ApiKeysSettingsPage() {
   // Test Key State
   const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { status: string; message: string }>>({});
+  
+  // Delete confirm state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const trashIconRefs = useRef<Record<string, any>>({});
   const refreshIconRefs = useRef<Record<string, any>>({});
@@ -46,12 +51,13 @@ export default function ApiKeysSettingsPage() {
         setThemeConfig(themeData);
       } catch (err) {
         console.error('Failed to load settings data', err);
+        toast({ title: 'Failed to load settings', type: 'error' });
       } finally {
         setLoading(false);
       }
     }
     loadData();
-  }, []);
+  }, [toast]);
 
   const handleValidateAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +86,8 @@ export default function ApiKeysSettingsPage() {
       const newKey = await api.createApiKey({ provider, label, api_key: apiKey });
       setKeys(prev => [newKey, ...prev]);
       
+      toast({ title: 'API Key added successfully', type: 'success' });
+
       // Reset form
       setLabel('');
       setApiKey('');
@@ -89,22 +97,24 @@ export default function ApiKeysSettingsPage() {
       console.error('Failed to add API key', err);
       const errMsg = err.response?.data?.detail || 'Failed to validate or save the API Key.';
       setFormErrors({ api_key: errMsg });
+      toast({ title: errMsg, type: 'error' });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this API Key?')) return;
-    
     trashIconRefs.current[id]?.startAnimation();
     try {
       await api.deleteApiKey(id);
       setKeys(prev => prev.filter(k => k.id !== id));
+      toast({ title: 'API Key deleted', type: 'success' });
     } catch (err) {
       console.error('Failed to delete key', err);
+      toast({ title: 'Failed to delete API Key', type: 'error' });
     } finally {
       trashIconRefs.current[id]?.stopAnimation();
+      setDeleteConfirmId(null);
     }
   };
 
@@ -118,11 +128,14 @@ export default function ApiKeysSettingsPage() {
       
       // Refresh the key validation status locally
       setKeys(prev => prev.map(k => k.id === id ? { ...k, is_valid: res.status === 'success' } : k));
+      
+      toast({ title: `Test ${res.status}`, description: res.message, type: res.status === 'success' ? 'success' : 'error' });
     } catch (err: any) {
       console.error('Failed to test key', err);
       const errMsg = err.response?.data?.detail || 'Connectivity test failed.';
       setTestResults(prev => ({ ...prev, [id]: { status: 'failed', message: errMsg } }));
       setKeys(prev => prev.map(k => k.id === id ? { ...k, is_valid: false } : k));
+      toast({ title: 'Test failed', description: errMsg, type: 'error' });
     } finally {
       setTestingKeyId(null);
       refreshIconRefs.current[id]?.stopAnimation();
@@ -299,43 +312,53 @@ export default function ApiKeysSettingsPage() {
                       
                       <div className="flex items-center gap-2 mt-2 text-xs font-mono text-muted-foreground">
                         <span>Masked Key: {key.masked_key}</span>
-                        <span className="text-border">·</span>
+                        <span className="text-border">&#183;</span>
                         <span>Added: {new Date(key.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleTestKey(key.id)}
-                        disabled={testingKeyId === key.id}
-                        onMouseEnter={() => refreshIconRefs.current[key.id]?.startAnimation()}
-                        onMouseLeave={() => refreshIconRefs.current[key.id]?.stopAnimation()}
-                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
-                        title="Test key connectivity"
-                      >
-                        <LoaderCircleIcon 
-                          ref={(el) => { refreshIconRefs.current[key.id] = el; }} 
-                          size={14} 
-                          isAnimated={false} 
-                          className={testingKeyId === key.id ? 'animate-spin text-brand' : ''}
-                        />
-                        {testingKeyId === key.id ? 'Testing...' : 'Test Key'}
-                      </button>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleTestKey(key.id)}
+                          disabled={testingKeyId === key.id}
+                          onMouseEnter={() => refreshIconRefs.current[key.id]?.startAnimation()}
+                          onMouseLeave={() => refreshIconRefs.current[key.id]?.stopAnimation()}
+                          className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
+                          title="Test key connectivity"
+                        >
+                          <LoaderCircleIcon 
+                            ref={(el) => { refreshIconRefs.current[key.id] = el; }} 
+                            size={14} 
+                            isAnimated={false} 
+                            className={testingKeyId === key.id ? 'animate-spin text-brand' : ''}
+                          />
+                          {testingKeyId === key.id ? 'Testing...' : 'Test Key'}
+                        </button>
+                        
+                        <button
+                          onClick={() => setDeleteConfirmId(key.id)}
+                          onMouseEnter={() => trashIconRefs.current[key.id]?.startAnimation()}
+                          onMouseLeave={() => trashIconRefs.current[key.id]?.stopAnimation()}
+                          className="p-2 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-colors border border-border"
+                          title="Delete key"
+                        >
+                          <TrashIcon 
+                            ref={(el) => { trashIconRefs.current[key.id] = el; }} 
+                            size={14} 
+                            isAnimated={false} 
+                          />
+                        </button>
+                      </div>
                       
-                      <button
-                        onClick={() => handleDelete(key.id)}
-                        onMouseEnter={() => trashIconRefs.current[key.id]?.startAnimation()}
-                        onMouseLeave={() => trashIconRefs.current[key.id]?.stopAnimation()}
-                        className="p-2 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-colors border border-border"
-                        title="Delete key"
-                      >
-                        <TrashIcon 
-                          ref={(el) => { trashIconRefs.current[key.id] = el; }} 
-                          size={14} 
-                          isAnimated={false} 
-                        />
-                      </button>
+                      {deleteConfirmId === key.id && (
+                        <div className="flex items-center gap-2 mt-2 animate-fade-in bg-error/10 border border-error/20 p-2 rounded-lg">
+                          <span className="text-xs text-error font-medium">Delete key?</span>
+                          <button onClick={() => handleDelete(key.id)} className="text-[10px] bg-error text-white px-2 py-1 rounded">Yes</button>
+                          <button onClick={() => setDeleteConfirmId(null)} className="text-[10px] bg-surface-2 text-foreground px-2 py-1 rounded">No</button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
