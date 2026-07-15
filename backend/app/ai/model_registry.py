@@ -1,0 +1,95 @@
+import logging
+from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+class CanonicalModel(BaseModel):
+    """
+    Unified Source of Truth for an LLM Model across the entire platform.
+    """
+    provider: str
+    provider_model_name: str
+    canonical_model_name: str
+    litellm_model_name: str
+    model_name: str  # alias for canonical_model_name for backward compatibility
+    
+    accessible: bool = True
+    deprecated: bool = False
+    preview: bool = False
+    experimental: bool = False
+    enterprise_only: bool = False
+    region_supported: bool = True
+    
+    context_window: Optional[int] = None
+    input_cost: float = 0.0
+    output_cost: float = 0.0
+    
+    supports_streaming: bool = True
+    supports_function_calling: bool = False
+    supports_vision: bool = False
+    supports_reasoning: bool = False
+    
+    status: str = "available"
+    validation_timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+class CanonicalModelRegistry:
+    """
+    In-memory singleton registry to store and resolve models.
+    Provides standard O(1) lookups by provider/canonical_name.
+    """
+    def __init__(self):
+        # Nested dictionary mapping: dict[provider][canonical_model_name] -> CanonicalModel
+        self._registry: Dict[str, Dict[str, CanonicalModel]] = {}
+
+    def register(self, model: CanonicalModel) -> None:
+        """Register a normalized model into the registry."""
+        provider = model.provider.lower()
+        if provider not in self._registry:
+            self._registry[provider] = {}
+        
+        self._registry[provider][model.canonical_model_name] = model
+
+    def resolve(self, provider: str, model_name: str) -> Optional[CanonicalModel]:
+        """
+        Resolve a model name to its CanonicalModel.
+        Tries canonical name first, then litellm name, then provider name.
+        """
+        provider = provider.lower()
+        if provider not in self._registry:
+            return None
+        
+        provider_models = self._registry[provider]
+        
+        # 1. Exact match on canonical name
+        if model_name in provider_models:
+            return provider_models[model_name]
+            
+        # 2. Match by litellm_model_name or provider_model_name
+        for canonical_name, m in provider_models.items():
+            if m.litellm_model_name == model_name or m.provider_model_name == model_name:
+                return m
+                
+        # 3. Handle prefix stripping explicitly (e.g. if the user assigned gemini/gemini-2.5-flash)
+        stripped_name = model_name
+        if stripped_name.startswith(f"{provider}/"):
+            stripped_name = stripped_name[len(f"{provider}/"):]
+            if stripped_name in provider_models:
+                return provider_models[stripped_name]
+                
+        return None
+        
+    def get_all_for_provider(self, provider: str) -> List[CanonicalModel]:
+        """Return all models currently registered for a given provider."""
+        provider = provider.lower()
+        if provider not in self._registry:
+            return []
+        return list(self._registry[provider].values())
+
+    def clear(self):
+        """Clear the registry."""
+        self._registry.clear()
+
+# Global Singleton
+canonical_registry = CanonicalModelRegistry()

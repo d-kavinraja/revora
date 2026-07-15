@@ -284,6 +284,25 @@ sequenceDiagram
 
 ---
 
+## Model Compatibility & Discovery Engine
+
+The **Model Compatibility & Discovery Engine** dynamically connects to LLM providers to fetch, validate, enrich, and normalize model lists for user selection across the entire platform.
+
+Features include:
+- **Canonical Model Registry**: Provides a single source of truth for model identifiers, normalizing inconsistencies between providers (e.g., Google Native API) and orchestration layers (e.g., LiteLLM).
+- **Dynamic Discovery**: Automatically fetches the live list of models your configured API keys have access to.
+- **Rich Metadata Extraction**: Detects context window sizes, cost estimations, and capabilities (vision, streaming, tool-calling).
+- **Status Classification**: Automatically categorizes models into:
+  - **Available**: General availability.
+  - **Deprecated**: Flagged legacy models.
+  - **Preview/Experimental**: Unstable or alpha models.
+  - **Enterprise Only**: Provisioned throughput endpoints.
+- **Compatibility Engine Verification**: Prevents users from assigning deprecated, unavailable, or unsupported models to their repositories during configuration.
+- **Fallback Adapters**: If the orchestration layer (LiteLLM) fails to execute a valid canonical model (e.g., due to mapping delays for newly released models like `gemini-2.5-flash-lite`), the engine automatically falls back to a Native Provider Adapter (via `httpx`).
+- **Caching**: Leverages an in-memory TTL caching mechanism to prevent excessive provider requests.
+
+---
+
 ## Repository Intelligence Engine
 
 The Repository Intelligence Engine analyzes repositories deterministically before any LLM invocation. It runs **zero LLM tokens** during analysis and provides comprehensive repository understanding to the review pipeline.
