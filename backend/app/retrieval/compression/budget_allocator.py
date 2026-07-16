@@ -33,13 +33,10 @@ class BudgetAllocator:
         result: RetrievalResult,
         total_budget: int,
     ) -> TokenBudget:
-        budget = token_budget_engine.get_budget(str(total_budget))
-
-        if not budget.allocations:
-            budget = TokenBudget(
-                total=total_budget,
-                allocations=dict(SECTION_TOKEN_LIMITS),
-            )
+        budget = TokenBudget(
+            total=total_budget,
+            allocations=dict(SECTION_TOKEN_LIMITS),
+        )
 
         for section, limit in self._custom_limits.items():
             budget.allocations[section] = limit

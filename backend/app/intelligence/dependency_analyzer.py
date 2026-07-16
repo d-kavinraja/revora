@@ -49,31 +49,34 @@ class DependencyAnalyzer(BaseDetector):
         Returns:
             DetectorResult with package manager info.
         """
+        import os as _os
         detected_pm: Optional[str] = None
         lock_file: Optional[str] = None
 
+        # First pass: check lock files only (lock files are more specific)
         for pm_name, pm_info in PACKAGE_MANAGERS.items():
-            # Check for lock file
             if pm_info["lock"]:
                 lock_files = [
                     fp for fp in walker.file_paths
-                    if fp.endswith("/" + pm_info["lock"]) or fp == pm_info["lock"]
+                    if fp.endswith("/" + pm_info["lock"]) or fp.endswith(_os.sep + pm_info["lock"]) or fp == pm_info["lock"]
                 ]
                 if lock_files:
                     detected_pm = pm_name
                     lock_file = pm_info["lock"]
                     break
 
-            # Check for config file
-            if pm_info["config"]:
-                config_files = [
-                    fp for fp in walker.file_paths
-                    if fp.endswith("/" + pm_info["config"]) or fp == pm_info["config"]
-                ]
-                if config_files:
-                    detected_pm = pm_name
-                    lock_file = pm_info["lock"]
-                    break
+        # Second pass: check config files only (if no lock file was found)
+        if not detected_pm:
+            for pm_name, pm_info in PACKAGE_MANAGERS.items():
+                if pm_info["config"]:
+                    config_files = [
+                        fp for fp in walker.file_paths
+                        if fp.endswith("/" + pm_info["config"]) or fp.endswith(_os.sep + pm_info["config"]) or fp == pm_info["config"]
+                    ]
+                    if config_files:
+                        detected_pm = pm_name
+                        lock_file = pm_info["lock"]
+                        break
 
         return DetectorResult(
             success=True,

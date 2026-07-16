@@ -70,9 +70,12 @@ class RepoWalker:
 
         for root, dirs, files in os.walk(self.repo_path):
             # Filter out skipped directories (in-place modification)
+            # NOTE: not filtering d.startswith(".") because legitimate
+            # directories like .github/workflows must be traversed.
+            # SKIP_DIRS covers specific hidden dirs to exclude (.git, .env, etc.)
             dirs[:] = [
                 d for d in dirs
-                if d not in self.skip_dirs and not d.startswith(".")
+                if d not in self.skip_dirs
             ]
 
             for filename in files:

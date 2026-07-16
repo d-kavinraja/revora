@@ -64,7 +64,7 @@ class TestTokenBudgetEngine:
         assert budget.used == {}
 
     async def test_estimate_allocations_small(self, budget_engine):
-        budget = budget_engine.get_budget("2000")
+        budget = budget_engine.get_budget("2K")
         assert budget.total == 2000
 
     async def test_estimate_allocations_large(self, budget_engine):
