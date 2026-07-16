@@ -329,12 +329,12 @@ export default function ReviewsPage() {
 
     // Date range filter
     if (fromDate) {
-      const reviewDate = new Date(review.created_at);
+      const reviewDate = new Date(review.created_at ?? '');
       const startStr = useTime && fromTime ? `${fromDate}T${fromTime}:00` : `${fromDate}T00:00:00`;
       if (reviewDate < new Date(startStr)) return false;
     }
     if (toDate) {
-      const reviewDate = new Date(review.created_at);
+      const reviewDate = new Date(review.created_at ?? '');
       const endStr = useTime && toTime ? `${toDate}T${toTime}:59` : `${toDate}T23:59:59`;
       if (reviewDate > new Date(endStr)) return false;
     }

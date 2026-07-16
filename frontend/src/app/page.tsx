@@ -47,7 +47,7 @@ export default function LandingPage() {
             height={32}
             className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
           />
-          <span className="font-bold text-xl tracking-tight">Revora</span>
+          <span className="font-bold text-xl tracking-tight" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
         </div>
         <nav className="flex items-center gap-3">
           <ThemeToggle />
@@ -75,7 +75,7 @@ export default function LandingPage() {
             transition={{ duration: 0.7, ease: 'easeOut' }}
             className="max-w-4xl space-y-6"
           >
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]">
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
               The Ultimate <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-brand to-purple-500">AI Code Reviewer</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">

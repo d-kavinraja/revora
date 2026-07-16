@@ -142,7 +142,7 @@ export function Sidebar() {
                 className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
               />
               <div className="min-w-0">
-                <span className="font-bold text-lg tracking-tight text-foreground block leading-tight">Revora</span>
+                <span className="font-bold text-lg tracking-tight text-foreground block leading-tight font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
                 <div className="text-[10px] text-brand font-medium flex items-center gap-1 leading-tight">
                   <LoaderIcon size={8} className="text-brand" />
                   AI Code Review

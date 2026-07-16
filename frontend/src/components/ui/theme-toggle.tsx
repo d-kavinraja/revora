@@ -10,7 +10,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   return (
     <button
       onClick={toggleTheme}
-      className={`relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer ${className ?? ''}`}
+      className={`relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.06] hover:ring-1 hover:ring-border transition-all duration-150 cursor-pointer ${className ?? ''}`}
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -20,10 +20,10 @@ export function ThemeToggle({ className }: { className?: string }) {
             initial={{ rotate: -90, scale: 0 }}
             animate={{ rotate: 0, scale: 1 }}
             exit={{ rotate: 90, scale: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
             className="block"
           >
-            <SunIcon size={16} />
+            <SunIcon size={16} className="text-amber-400" />
           </motion.span>
         ) : (
           <motion.span
@@ -31,13 +31,14 @@ export function ThemeToggle({ className }: { className?: string }) {
             initial={{ rotate: 90, scale: 0 }}
             animate={{ rotate: 0, scale: 1 }}
             exit={{ rotate: -90, scale: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
             className="block"
           >
-            <MoonIcon size={16} />
+            <MoonIcon size={16} className="text-slate-600" />
           </motion.span>
         )}
       </AnimatePresence>
     </button>
   );
 }
+

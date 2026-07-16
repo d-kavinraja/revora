@@ -8,9 +8,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-geist-mono, ui-monospace, monospace);
+  --font-heading: var(--font-oxanium, var(--font-inter, ui-sans-serif));
 
   /* Surface levels */
   --color-surface-1: var(--surface-1);
@@ -195,4 +195,26 @@
   100% {
     transform: translateX(100%);
   }
+}
+
+@keyframes spin-ring {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spin-ring {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.25);
+  border-top-color: #3b82f6;
+  animation: spin-ring 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Heading font utility */
+.font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
 }
