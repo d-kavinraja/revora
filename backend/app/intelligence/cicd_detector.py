@@ -60,6 +60,7 @@ class CICDDetector(BaseDetector):
         Returns:
             DetectorResult with CI/CD info.
         """
+        import os as _os
         providers: List[str] = []
         config_files: List[str] = []
 
@@ -68,7 +69,9 @@ class CICDDetector(BaseDetector):
 
             # Check for directory-based CI (e.g., .github/workflows)
             if "directory" in config:
-                dir_prefix = config["directory"] + "/"
+                # Normalize forward-slash paths to OS separator (win32: .github\\workflows)
+                normalized_dir = config["directory"].replace("/", _os.sep)
+                dir_prefix = normalized_dir + _os.sep
                 extensions = config.get("extensions", [".yml", ".yaml"])
                 workflow_files = [
                     fp for fp in walker.file_paths
@@ -85,7 +88,7 @@ class CICDDetector(BaseDetector):
                 for ci_file in config["files"]:
                     matching_files = [
                         fp for fp in walker.file_paths
-                        if fp.endswith("/" + ci_file) or fp == ci_file
+                        if fp.endswith("/" + ci_file) or fp.endswith(_os.sep + ci_file) or fp == ci_file
                     ]
                     if matching_files:
                         providers.append(provider)

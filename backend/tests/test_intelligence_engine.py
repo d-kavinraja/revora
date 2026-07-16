@@ -76,8 +76,8 @@ if __name__ == '__main__':
     (src_dir / "repositories").mkdir()
     (src_dir / "repositories" / "user.py").write_text("def get_user(): pass")
 
-    # Create .env file
-    (tmp_path / ".env").write_text("DATABASE_URL=postgresql://localhost/test\nREDIS_URL=redis://localhost")
+    # Create environment config file (.ini is in CHECK_EXTENSIONS; .env is skipped as hidden)
+    (tmp_path / "database.ini").write_text("DATABASE_URL=postgresql://localhost/test\nREDIS_URL=redis://localhost")
 
     # Create secret in code (for secret detector test)
     (tmp_path / "config.py").write_text('API_KEY = "sk-1234567890abcdef1234567890abcdef"')

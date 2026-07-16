@@ -1,4 +1,5 @@
 import time
+import asyncio
 import logging
 from collections import OrderedDict
 from typing import Optional, Any
@@ -33,7 +34,7 @@ class MemoryCache(BaseCache):
 
     async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-        expiry = time.time() + ttl if ttl > 0 else None
+        expiry = time.time() + ttl if ttl is not None else None
 
         if key in self._store:
             self._store.move_to_end(key)
@@ -60,7 +61,7 @@ class MemoryCache(BaseCache):
         if cached is not None:
             return cached
 
-        value = await compute_fn() if hasattr(compute_fn, "__await__") else compute_fn()
+        value = await compute_fn() if asyncio.iscoroutinefunction(compute_fn) else compute_fn()
         await self.set(key, value, ttl_seconds)
         return value
 

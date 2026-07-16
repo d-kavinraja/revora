@@ -1,4 +1,4 @@
-from app.models.user import User
+﻿from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.organization import Organization, OrgMember
 from app.models.team import Team, TeamMember
@@ -11,6 +11,13 @@ from app.models.knowledge import (
     RepositoryIntelligence,
     ReviewEvent,
     ReviewMetrics,
+)
+from app.models.prompt import (
+    PromptTemplate,
+    PromptVersionRecord,
+    PromptCacheRecord,
+    PromptMetric,
+    TokenUsageRecord,
 )
 
 __all__ = [
@@ -31,4 +38,9 @@ __all__ = [
     "RepositoryIntelligence",
     "ReviewEvent",
     "ReviewMetrics",
+    "PromptTemplate",
+    "PromptVersionRecord",
+    "PromptCacheRecord",
+    "PromptMetric",
+    "TokenUsageRecord",
 ]

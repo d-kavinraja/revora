@@ -1,4 +1,4 @@
-"""Review pipeline orchestrator.
+﻿"""Review pipeline orchestrator.
 
 Orchestrates the full Context Engineering review pipeline with
 per-stage error handling and graceful degradation.
@@ -25,6 +25,7 @@ from app.retrieval.models import RetrievalConfig
 from app.retrieval.init import initialize_retrieval_engine
 from app.retrieval.token_budget_engine import token_budget_engine
 from app.prompt_engine.builder import prompt_builder
+from app.prompt_engine.models import ReviewType
 from app.orchestrator.orchestrator import llm_orchestrator
 from app.verification.engine import verification_engine
 from app.github_review.generator import github_review_generator
@@ -120,7 +121,7 @@ class ReviewPipeline:
             # Stage 7: Build prompt
             prompt = await self._stage_prompt(
                 emitter, intelligence_data, conventions, rules,
-                diff_content, retrieval_result
+                diff_content, retrieval_result, provider
             )
 
             # Stage 8: LLM call
@@ -292,7 +293,6 @@ class ReviewPipeline:
             retrieval_result = await retrieval_engine.retrieve(
                 changed_files, ".", index, diff_content
             )
-            retrieval_result._repo_id = repo_id
 
             await emitter.emit("finding_related_files", "completed",
                              metrics={"total_tokens": retrieval_result.total_tokens,
@@ -307,26 +307,20 @@ class ReviewPipeline:
             return None
 
     async def _stage_prompt(self, emitter, intelligence_data, conventions, rules,
-                           diff_content, retrieval_result):
+                           diff_content, retrieval_result, provider="gemini"):
         """Stage: Prompt building."""
         await emitter.emit("building_prompt", "running", EventType.STAGE_START)
 
         try:
-            related_files_data = []
-            if retrieval_result:
-                related_files_data = [
-                    {"file_path": r.file_path, "content": r.content[:1000]}
-                    for r in retrieval_result.related_files
-                ]
-
             prompt = await prompt_builder.compile(
-                repo_summary=str(intelligence_data),
-                architecture_summary=intelligence_data.get("architecture", {}).get("pattern", "")
-                    if intelligence_data else "",
-                conventions=conventions,
-                rules=rules,
+                review_type=ReviewType.PR_REVIEW,
+                repo_path=".",
                 diff_content=sanitize_content(diff_content),
-                related_files=related_files_data,
+                retrieval_result=retrieval_result,
+                intelligence_data=intelligence_data or {},
+                conventions=conventions or "",
+                rules=rules or [],
+                provider=provider,
             )
 
             await emitter.emit("building_prompt", "completed",
