@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { XIcon, CircleCheckIcon, TriangleAlertIcon, InfoIcon, LoaderIcon } from '@animateicons/react/lucide';
+import { XIcon, CircleCheckIcon, TriangleAlertIcon, InfoIcon } from '@animateicons/react/lucide';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export type ToastType = 'success' | 'error' | 'info' | 'loading';
@@ -64,7 +64,22 @@ export function ToasterProvider({ children }: { children: ReactNode }) {
                 {t.type === 'success' && <CircleCheckIcon size={18} className="text-success" />}
                 {t.type === 'error' && <TriangleAlertIcon size={18} className="text-error" />}
                 {t.type === 'info' && <InfoIcon size={18} className="text-info" />}
-                {t.type === 'loading' && <LoaderIcon size={18} className="text-brand" animate />}
+                {t.type === 'loading' && (
+                  <span
+                    className="animate-spin"
+                    style={{
+                      display: 'inline-block',
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      borderWidth: 2.5,
+                      borderStyle: 'solid',
+                      borderColor: 'rgba(99,102,241,0.25)',
+                      borderTopColor: 'oklch(0.62 0.2 265)',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
               </div>
               <div className="flex-1 min-w-0 pr-6">
                 <p className="text-sm font-semibold text-foreground">{t.title}</p>
