@@ -1,4 +1,5 @@
-import asyncio
+﻿import asyncio
+import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional
@@ -9,9 +10,12 @@ from app.ai.model_registry import CanonicalModel, canonical_registry
 logger = logging.getLogger(__name__)
 
 # Global in-memory cache for model discovery.
-# Structure: { "api_key": { "timestamp": datetime, "models": List[Dict[str, Any]] } }
 _MODEL_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL = timedelta(hours=1)
+
+def _hash_api_key(raw_key: str) -> str:
+    """Hash API key for secure cache storage."""
+    return hashlib.sha256(raw_key.encode()).hexdigest()[:16]
 
 class ModelDiscoveryEngine:
     """
@@ -27,19 +31,30 @@ class ModelDiscoveryEngine:
         "deepseek": "deepseek",
         "groq": "groq",
         "grok": "xai",
+        "openrouter": "openrouter",
+        "azure_openai": "azure",
+        "ollama": "ollama",
+        "cohere": "cohere",
+        "mistral": "mistral",
     }
 
-    # Terms indicating a model is not a chat model, or is too specific.
+    # Terms indicating a model is not a chat model
     NON_CHAT_EXCLUSIONS = [
         "dall-e", "whisper", "embedding", "tts", "veo", "imagen", "lyria",
-        "moderation", "speech", "audio", "video", "clip", "rerank", "vision",
+        "moderation", "speech", "audio", "video", "clip", "rerank",
         "image-generation", "image-preview", "1024-x", "1536-x", "512-x",
-        "learnlm", "aqa", "bison", "gemini-1.0", "chat-bison", "text-bison",
-        "gecko"
+        "learnlm", "aqa", "bison", "chat-bison", "text-bison", "gecko"
+    ]
+
+    # Gemini 2.0/2.5 models have severe rate limits on both free and paid tiers
+    # Excluding them entirely - users should use 1.5, 3, or Gemma models
+    GEMINI_RATE_LIMITED_MODELS = [
+        "gemini-2.0", "gemini-2.5", "gemini-2.0-flash", "gemini-2.5-flash",
+        "gemini-2.5-pro", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite",
     ]
 
     DEPRECATED_TERMS = ["-001", "-0314", "-0613", "legacy", "deprecated"]
-    PREVIEW_TERMS = ["preview", "exp-", "experimental", "rc", "alpha", "beta", "latest", "-2.0-", "-2.5-", "2.0-", "2.5-"]
+    PREVIEW_TERMS = ["preview", "exp-", "experimental", "rc", "alpha", "beta"]
     ENTERPRISE_TERMS = ["enterprise", "provisioned"]
 
     @classmethod
@@ -52,8 +67,8 @@ class ModelDiscoveryEngine:
         if not litellm_prov:
             return []
 
-        # Check cache
-        cache_key = f"{litellm_prov}:{raw_key}"
+        # Check cache using hashed key
+        cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
         cached = _MODEL_CACHE.get(cache_key)
         now = datetime.now(timezone.utc)
 
@@ -70,6 +85,11 @@ class ModelDiscoveryEngine:
                 api_key=raw_key,
             )
         except Exception as e:
+            error_str = str(e).lower()
+            # Rate limiting is not a permanent failure - return empty but don't cache
+            if "429" in error_str or "rate" in error_str or "quota" in error_str:
+                logger.warning(f"Rate limited during model discovery for '{provider}': {e}")
+                return []
             logger.warning(f"Live model fetch failed for provider '{provider}': {e}")
             return []
 
@@ -79,9 +99,14 @@ class ModelDiscoveryEngine:
         enriched_models = []
         for model_name in live_models:
             m_lower = model_name.lower()
-            
-            # Exclude non-chat models entirely (they shouldn't be selectable for code review)
+
+            # Exclude non-chat models
             if any(ex in m_lower for ex in cls.NON_CHAT_EXCLUSIONS):
+                continue
+
+            # Exclude Gemini 2.0/2.5 models due to severe rate limits
+            if any(ex in m_lower for ex in cls.GEMINI_RATE_LIMITED_MODELS):
+                logger.info(f"Skipping rate-limited Gemini model: {model_name}")
                 continue
 
             canonical_model = cls._enrich_model(model_name, provider)
@@ -93,13 +118,13 @@ class ModelDiscoveryEngine:
             c_model.accessible = has_quota
             canonical_registry.register(c_model)
             return c_model.model_dump()
-            
+
         validated_models = await asyncio.gather(*(verify_and_update(m) for m in enriched_models))
-        
-        # Filter out models that failed the quota check so they don't clutter the UI
+
+        # Filter out models that failed the quota check
         final_models = [m for m in validated_models if m["accessible"]]
 
-        # Update cache
+        # Update cache with hashed key
         _MODEL_CACHE[cache_key] = {
             "timestamp": now,
             "models": final_models
@@ -114,11 +139,11 @@ class ModelDiscoveryEngine:
         """
         m_lower = model_name.lower()
         provider_lower = provider.lower()
-        
+
         provider_model_name = model_name
         canonical_model_name = model_name
         litellm_model_name = model_name
-        
+
         # Normalization logic
         if provider_lower == "gemini":
             if model_name.startswith("gemini/"):
@@ -134,11 +159,21 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"groq/{canonical_model_name}"
         elif provider_lower == "grok" and not model_name.startswith("xai/"):
             litellm_model_name = f"xai/{canonical_model_name}"
+        elif provider_lower == "openrouter" and not model_name.startswith("openrouter/"):
+            litellm_model_name = f"openrouter/{canonical_model_name}"
+        elif provider_lower == "azure_openai" and not model_name.startswith("azure/"):
+            litellm_model_name = f"azure/{canonical_model_name}"
+        elif provider_lower == "ollama" and not model_name.startswith("ollama/"):
+            litellm_model_name = f"ollama/{canonical_model_name}"
+        elif provider_lower == "cohere" and not model_name.startswith("cohere/"):
+            litellm_model_name = f"cohere/{canonical_model_name}"
+        elif provider_lower == "mistral" and not model_name.startswith("mistral/"):
+            litellm_model_name = f"mistral/{canonical_model_name}"
 
         is_deprecated = any(term in m_lower for term in cls.DEPRECATED_TERMS)
         is_preview = any(term in m_lower for term in cls.PREVIEW_TERMS)
         is_enterprise = any(term in m_lower for term in cls.ENTERPRISE_TERMS)
-        
+
         # Check litellm model cost / info mapping if available
         info = litellm.model_cost.get(litellm_model_name, {})
         if not info and litellm_model_name != canonical_model_name:
@@ -147,11 +182,11 @@ class ModelDiscoveryEngine:
         context_window = info.get("max_tokens") or info.get("max_input_tokens") or None
         input_cost = info.get("input_cost_per_token") or info.get("input_cost_per_prompt_token") or 0.0
         output_cost = info.get("output_cost_per_token") or info.get("output_cost_per_completion_token") or 0.0
-        
+
         supports_vision = info.get("supports_vision", False)
         supports_function_calling = info.get("supports_function_calling", False)
         supports_streaming = info.get("supports_streaming", True)
-        
+
         status = "available"
         if is_deprecated:
             status = "deprecated"
@@ -207,16 +242,16 @@ class ModelDiscoveryEngine:
             if "429" in error_str or "quota" in error_str or "rate" in error_str or "403" in error_str or "forbidden" in error_str:
                 logger.warning(f"Quota verification failed for {canonical_model.canonical_model_name}: {e}")
                 return False
-                
+
             # If LiteLLM doesn't support the mapping, try native fallback for Gemini
             if canonical_model.provider.lower() == "gemini" and ("404" in error_str or "not found" in error_str or "unsupported" in error_str):
                 try:
                     from app.ai.llm import llm_service
                     await asyncio.wait_for(
                         llm_service._native_gemini_fallback(
-                            canonical_model.canonical_model_name, 
-                            [{"role": "user", "content": "hi"}], 
-                            raw_key, 
+                            canonical_model.canonical_model_name,
+                            [{"role": "user", "content": "hi"}],
+                            raw_key,
                             timeout=5
                         ),
                         timeout=5
@@ -227,18 +262,17 @@ class ModelDiscoveryEngine:
                     if "429" in f_error_str or "quota" in f_error_str or "403" in f_error_str:
                         logger.warning(f"Native fallback quota verification failed for {canonical_model.canonical_model_name}: {fallback_e}")
                         return False
-                        
-            # If it fails for other reasons (e.g. 500, timeout), assume it's accessible so we don't erroneously hide it
+
+            # If it fails for other reasons (e.g. 500, timeout), assume it's accessible
             return True
 
     @classmethod
     async def validate_model_access(cls, provider: str, model_name: str, raw_key: str) -> bool:
         """
-        Validates if a specific model is accessible with the given key using compatibility engine.
+        Validates if a specific model is accessible with the given key.
         """
         available = await cls.get_available_models(provider, raw_key)
         for m in available:
-            # We must resolve based on canonical, provider, or litellm name
             if model_name in [m["canonical_model_name"], m["litellm_model_name"], m["provider_model_name"], m.get("model_name", "")]:
                 return m["accessible"] and not m["deprecated"]
         return False
@@ -248,7 +282,7 @@ class ModelDiscoveryEngine:
         litellm_prov = cls.LITELLM_PROVIDER_MAP.get(provider.lower())
         if not litellm_prov:
             return
-        cache_key = f"{litellm_prov}:{raw_key}"
+        cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
         if cache_key in _MODEL_CACHE:
             del _MODEL_CACHE[cache_key]
 

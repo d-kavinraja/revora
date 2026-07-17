@@ -1,4 +1,4 @@
-﻿"""Review pipeline orchestrator.
+"""Review pipeline orchestrator.
 
 Orchestrates the full Context Engineering review pipeline with
 per-stage error handling and graceful degradation.
@@ -150,7 +150,7 @@ class ReviewPipeline:
 
             # Save to DB
             await self._save_completed(
-                review_id, verified, llm_response, metrics, start
+                review_id, verified, llm_response, metrics, start, user_id
             )
 
             # Complete
@@ -422,8 +422,9 @@ class ReviewPipeline:
             await emitter.emit("generating_review_summary", "failed",
                              EventType.STAGE_FAILED, message=str(e))
 
-    async def _save_completed(self, review_id, verified, llm_response, metrics, start):
-        """Save completed review to database."""
+    async def _save_completed(self, review_id, verified, llm_response, metrics, start, user_id=None):
+        """Save completed review to database and record usage stats."""
+        # --- 1. Save review status (own session) ---
         try:
             async with AsyncSessionLocal() as db:
                 res = await db.execute(select(Review).where(Review.id == review_id))
@@ -439,7 +440,79 @@ class ReviewPipeline:
                     }
                     await db.commit()
         except Exception as e:
-            logger.error(f"Failed to save review: {e}")
+            logger.error(f"Failed to save review status: {e}")
+
+        # --- 2. Record usage in a FRESH session ---
+        try:
+            from app.services.token_manager import token_manager
+            from app.services.usage_tracker import usage_tracker
+            import uuid as _uuid
+
+            input_tok  = llm_response.input_tokens  or 0
+            output_tok = llm_response.output_tokens or 0
+
+            logger.info(f"[usage] Logging for review {review_id}: provider={llm_response.provider} "
+                        f"input={input_tok} output={output_tok} user_id={user_id}")
+
+            COST_TABLE = {
+                "gemini":    {"input": 0.000075, "output": 0.0003},
+                "openai":    {"input": 0.0025,   "output": 0.01},
+                "anthropic": {"input": 0.003,    "output": 0.015},
+                "deepseek":  {"input": 0.00014,  "output": 0.00028},
+                "groq":      {"input": 0.00059,  "output": 0.00079},
+            }
+            rates = COST_TABLE.get(llm_response.provider, {"input": 0.001, "output": 0.003})
+            input_cost  = round((input_tok  * rates["input"])  / 1000, 8)
+            output_cost = round((output_tok * rates["output"]) / 1000, 8)
+
+            parsed_user_id = None
+            if user_id:
+                try:
+                    parsed_user_id = _uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+                except Exception:
+                    pass
+
+            if parsed_user_id:
+                async with AsyncSessionLocal() as usage_db:
+                    await token_manager.record_usage(
+                        db=usage_db,
+                        user_id=parsed_user_id,
+                        provider=llm_response.provider,
+                        model=llm_response.model,
+                        input_tokens=input_tok,
+                        output_tokens=output_tok,
+                        input_cost_usd=input_cost,
+                        output_cost_usd=output_cost,
+                        feature="code_review",
+                        latency_ms=llm_response.latency_ms or 0.0,
+                        is_fallback=llm_response.is_fallback,
+                        review_id=review_id,
+                    )
+                    logger.info(f"[usage] token_manager.record_usage committed for review {review_id}")
+
+                async with AsyncSessionLocal() as log_db:
+                    await usage_tracker.log_request(
+                        db=log_db,
+                        request_id=str(_uuid.uuid4()),
+                        user_id=parsed_user_id,
+                        provider=llm_response.provider,
+                        model=llm_response.model,
+                        feature="code_review",
+                        messages=[],
+                        status="success",
+                        latency_ms=llm_response.latency_ms or 0.0,
+                        input_tokens=input_tok,
+                        output_tokens=output_tok,
+                        cost_usd=input_cost + output_cost,
+                        started_at=datetime.now(timezone.utc),
+                        was_fallback=llm_response.is_fallback,
+                    )
+                    logger.info(f"[usage] usage_tracker.log_request committed for review {review_id}")
+            else:
+                logger.warning(f"[usage] No valid user_id for review {review_id}, skipping usage log")
+        except Exception as ue:
+            logger.error(f"[usage] Failed to record usage stats: {ue}", exc_info=True)
+
 
     async def _save_failed(self, review_id, error_message):
         """Save failed review to database."""

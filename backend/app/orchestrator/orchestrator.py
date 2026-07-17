@@ -1,6 +1,7 @@
 import time
 import logging
 import asyncio
+import uuid
 from typing import List, Optional
 from collections import defaultdict
 
@@ -11,7 +12,7 @@ from app.prompt_engine.models import CompiledPrompt
 logger = logging.getLogger(__name__)
 
 PROVIDER_PRIORITY = [
-    ProviderConfig(name="gemini", model="gemini-3.5-flash", priority=0, timeout_seconds=60),
+    ProviderConfig(name="gemini", model="gemini-1.5-flash", priority=0, timeout_seconds=60),
     ProviderConfig(name="openai", model="gpt-4o", priority=1, timeout_seconds=60),
     ProviderConfig(name="anthropic", model="anthropic/claude-sonnet-4-20250514", priority=2, timeout_seconds=60),
     ProviderConfig(name="deepseek", model="deepseek/deepseek-chat", priority=3, timeout_seconds=90),
@@ -54,12 +55,16 @@ class LLMOrchestrator:
                         await callback("selecting_ai_provider", "completed", {"provider": provider_config.name, "model": provider_config.model})
                         await callback("sending_request_to_llm", "running")
 
-                    response_text = await llm_service.get_completion(
+                    response_text, real_input_tokens, real_output_tokens = await llm_service.get_completion(
                         user_id=__import__("uuid").UUID(user_id),
                         provider=provider_config.name,
                         messages=prompt.get_user_messages(),
                         model=provider_config.model,
                     )
+
+                    # Use real token counts from API; fall back to estimates if API didn't return them
+                    input_tokens = real_input_tokens if real_input_tokens > 0 else max(prompt.total_tokens, len(str(prompt.get_user_messages())) // 4)
+                    output_tokens = real_output_tokens if real_output_tokens > 0 else (len(response_text) // 4 if response_text else 0)
 
                     latency_ms = (time.time() - start) * 1000
                     if callback:
@@ -69,10 +74,10 @@ class LLMOrchestrator:
                     usage = UsageStats(
                         provider=provider_config.name,
                         model=provider_config.model,
-                        input_tokens=prompt.total_tokens,
-                        output_tokens=len(response_text) // 4,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
                         latency_ms=latency_ms,
-                        estimated_cost_usd=self._estimate_cost(provider_config.name, prompt.total_tokens, len(response_text) // 4),
+                        estimated_cost_usd=self._estimate_cost(provider_config.name, input_tokens, output_tokens),
                     )
                     self.usage_history.append(usage)
                     provider_config.success_rate = min(1.0, provider_config.success_rate + 0.05)
@@ -123,3 +128,4 @@ class LLMOrchestrator:
 
 
 llm_orchestrator = LLMOrchestrator()
+

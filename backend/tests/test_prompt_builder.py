@@ -65,7 +65,7 @@ class TestModels:
             total_tokens=5000,
             review_type="pr_review",
             token_metadata=TokenMetadata(budget_limit=10000, budget_used=0.5),
-            provider_metadata=ProviderMetadata(provider="gemini", model="gemini-3.5-flash"),
+            provider_metadata=ProviderMetadata(provider="gemini", model="gemini-2.5-flash"),
             explainability=PromptExplainability(
                 context_size=4000,
                 files_retrieved=10,
@@ -663,3 +663,4 @@ class TestPromptBuilder:
         prompt = await builder.compile(diff_content="test")
         # With no compression, ratio should be 0.0
         assert 0.0 <= prompt.token_metadata.compression_ratio <= 1.0
+

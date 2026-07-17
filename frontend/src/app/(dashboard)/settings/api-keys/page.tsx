@@ -1,16 +1,16 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, ApiKey, ThemeConfig } from '@/lib/api';
-import { 
-  KeyIcon, 
-  TrashIcon, 
-  PlusIcon, 
-  LoaderCircleIcon, 
-  CircleCheckIcon, 
-  TriangleAlertIcon, 
-  EyeIcon, 
-  EyeOffIcon 
+import { api, ApiKey, ThemeConfig, ApiKeyHealth } from '@/lib/api';
+import {
+  KeyIcon,
+  TrashIcon,
+  PlusIcon,
+  LoaderCircleIcon,
+  CircleCheckIcon,
+  TriangleAlertIcon,
+  EyeIcon,
+  EyeOffIcon,
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
@@ -20,7 +20,7 @@ export default function ApiKeysSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
   const { toast } = useToast();
-  
+
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
   const [provider, setProvider] = useState('openai');
@@ -28,13 +28,24 @@ export default function ApiKeysSettingsPage() {
   const [apiKey, setApiKey] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Test Key State
   const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { status: string; message: string }>>({});
-  
+
   // Delete confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Rotate state
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+  const [rotateKeyValue, setRotateKeyValue] = useState('');
+
+  // Health state
+  const [healthKeyId, setHealthKeyId] = useState<string | null>(null);
+  const [healthData, setHealthData] = useState<Record<string, ApiKeyHealth[]>>({});
+
+  // Validate all state
+  const [validatingAll, setValidatingAll] = useState(false);
 
   const trashIconRefs = useRef<Record<string, any>>({});
   const refreshIconRefs = useRef<Record<string, any>>({});
@@ -62,7 +73,7 @@ export default function ApiKeysSettingsPage() {
   const handleValidateAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErrors({});
-    
+
     if (!label.trim()) {
       setFormErrors(prev => ({ ...prev, label: 'Label is required' }));
       return;
@@ -74,7 +85,6 @@ export default function ApiKeysSettingsPage() {
 
     setSubmitting(true);
     try {
-      // Validate form endpoint check
       const valResult = await api.validateForm({ provider, api_key: apiKey, label });
       if (!valResult.valid) {
         setFormErrors(valResult.errors);
@@ -82,13 +92,10 @@ export default function ApiKeysSettingsPage() {
         return;
       }
 
-      // Create API key
       const newKey = await api.createApiKey({ provider, label, api_key: apiKey });
       setKeys(prev => [newKey, ...prev]);
-      
       toast({ title: 'API Key added successfully', type: 'success' });
 
-      // Reset form
       setLabel('');
       setApiKey('');
       setProvider('openai');
@@ -121,14 +128,11 @@ export default function ApiKeysSettingsPage() {
   const handleTestKey = async (id: string) => {
     setTestingKeyId(id);
     refreshIconRefs.current[id]?.startAnimation();
-    
+
     try {
       const res = await api.testApiKey(id);
       setTestResults(prev => ({ ...prev, [id]: { status: res.status, message: res.message } }));
-      
-      // Refresh the key validation status locally
       setKeys(prev => prev.map(k => k.id === id ? { ...k, is_valid: res.status === 'success' } : k));
-      
       toast({ title: `Test ${res.status}`, description: res.message, type: res.status === 'success' ? 'success' : 'error' });
     } catch (err: any) {
       console.error('Failed to test key', err);
@@ -142,14 +146,63 @@ export default function ApiKeysSettingsPage() {
     }
   };
 
+  const handleRotateKey = async (id: string) => {
+    if (!rotateKeyValue.trim()) {
+      toast({ title: 'Please enter a new API key', type: 'error' });
+      return;
+    }
+    setRotatingKeyId(id);
+    try {
+      const updated = await api.rotateApiKey(id, rotateKeyValue);
+      setKeys(prev => prev.map(k => k.id === id ? { ...k, ...updated } : k));
+      setRotateKeyValue('');
+      setRotatingKeyId(null);
+      toast({ title: 'API Key rotated successfully', type: 'success' });
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || 'Failed to rotate key.';
+      toast({ title: errMsg, type: 'error' });
+    } finally {
+      setRotatingKeyId(null);
+    }
+  };
+
+  const handleLoadHealth = async (id: string) => {
+    if (healthData[id]) {
+      setHealthKeyId(healthKeyId === id ? null : id);
+      return;
+    }
+    try {
+      const data = await api.getKeyHealth(id);
+      setHealthData(prev => ({ ...prev, [id]: data }));
+      setHealthKeyId(id);
+    } catch (err) {
+      toast({ title: 'Failed to load health data', type: 'error' });
+    }
+  };
+
+  const handleValidateAll = async () => {
+    setValidatingAll(true);
+    try {
+      const res = await api.validateAllKeys();
+      const results = res.results;
+      setKeys(prev => prev.map(k => ({
+        ...k,
+        is_valid: results[k.id]?.status === 'success',
+      })));
+      toast({ title: 'All keys validated', type: 'success' });
+    } catch (err) {
+      toast({ title: 'Failed to validate keys', type: 'error' });
+    } finally {
+      setValidatingAll(false);
+    }
+  };
+
   const getProviderIcon = (prov: string) => {
     const names: Record<string, string> = {
-      openai: 'OpenAI',
-      anthropic: 'Anthropic',
-      gemini: 'Gemini',
-      groq: 'Groq',
-      deepseek: 'DeepSeek',
-      grok: 'Grok'
+      openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini',
+      groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
+      openrouter: 'OpenRouter', azure_openai: 'Azure OpenAI',
+      ollama: 'Ollama', cohere: 'Cohere', mistral: 'Mistral',
     };
     return names[prov.toLowerCase()] || prov;
   };
@@ -173,18 +226,28 @@ export default function ApiKeysSettingsPage() {
             API Keys Settings
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
-            Manage credentials for multi-provider LLM support (OpenAI, Claude, Groq, DeepSeek, Gemini, and Grok).
+            Manage credentials for multi-provider LLM support. Keys are encrypted with AES-256.
           </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          onMouseEnter={() => plusIconRef.current?.startAnimation()}
-          onMouseLeave={() => plusIconRef.current?.stopAnimation()}
-          className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-xl text-sm font-medium transition-colors shadow-lg shadow-brand/10 shrink-0"
-        >
-          <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
-          Add Key
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleValidateAll}
+            disabled={validatingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-surface-2 text-muted-foreground hover:text-foreground border border-border rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
+            {validatingAll ? 'Validating...' : 'Validate All'}
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            onMouseEnter={() => plusIconRef.current?.startAnimation()}
+            onMouseLeave={() => plusIconRef.current?.stopAnimation()}
+            className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-xl text-sm font-medium transition-colors shadow-lg shadow-brand/10 shrink-0"
+          >
+            <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
+            Add Key
+          </button>
+        </div>
       </div>
 
       {/* Add Key Form */}
@@ -192,7 +255,7 @@ export default function ApiKeysSettingsPage() {
         <div className="mb-8 p-6 rounded-xl border border-border bg-surface-1 backdrop-blur-md shadow-2xl relative overflow-hidden transition-all duration-300">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-purple-500" />
           <h2 className="text-lg font-bold text-foreground mb-4">Add Encrypted API Key</h2>
-          
+
           <form onSubmit={handleValidateAndSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -203,14 +266,18 @@ export default function ApiKeysSettingsPage() {
                   className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
                 >
                   <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
+                  <option value="anthropic">Claude</option>
                   <option value="gemini">Gemini</option>
                   <option value="groq">Groq</option>
                   <option value="deepseek">DeepSeek</option>
-                  <option value="grok">Grok</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="azure_openai">Azure OpenAI</option>
+                  <option value="ollama">Ollama</option>
+                  <option value="cohere">Cohere</option>
+                  <option value="mistral">Mistral</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Label (e.g. My Prod Key)</label>
                 <input
@@ -268,7 +335,7 @@ export default function ApiKeysSettingsPage() {
       {/* Keys List */}
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-foreground">Registered API Credentials</h2>
-        
+
         {keys.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface-1 p-8 text-center backdrop-blur-md">
             <KeyIcon size={32} className="text-muted-foreground/40 mx-auto mb-3" />
@@ -281,8 +348,9 @@ export default function ApiKeysSettingsPage() {
           <div className="space-y-3">
             {keys.map((key) => {
               const testResult = testResults[key.id];
+              const keyHealth = healthData[key.id];
               return (
-                <div 
+                <div
                   key={key.id}
                   className="rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-white/[0.08] backdrop-blur-md relative"
                 >
@@ -293,11 +361,11 @@ export default function ApiKeysSettingsPage() {
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
                           {getProviderIcon(key.provider)}
                         </span>
-                        
+
                         {key.is_valid !== null && (
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
-                            key.is_valid 
-                              ? 'bg-success/5 border-success/20 text-success' 
+                            key.is_valid
+                              ? 'bg-success/5 border-success/20 text-success'
                               : 'bg-error/5 border-error/20 text-error'
                           }`}>
                             {key.is_valid ? (
@@ -309,7 +377,7 @@ export default function ApiKeysSettingsPage() {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center gap-2 mt-2 text-xs font-mono text-muted-foreground">
                         <span>Masked Key: {key.masked_key}</span>
                         <span className="text-border">&#183;</span>
@@ -328,15 +396,23 @@ export default function ApiKeysSettingsPage() {
                           className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
                           title="Test key connectivity"
                         >
-                          <LoaderCircleIcon 
-                            ref={(el) => { refreshIconRefs.current[key.id] = el; }} 
-                            size={14} 
-                            isAnimated={false} 
+                          <LoaderCircleIcon
+                            ref={(el) => { refreshIconRefs.current[key.id] = el; }}
+                            size={14}
+                            isAnimated={false}
                             className={testingKeyId === key.id ? 'animate-spin text-brand' : ''}
                           />
-                          {testingKeyId === key.id ? 'Testing...' : 'Test Key'}
+                          {testingKeyId === key.id ? 'Testing...' : 'Test'}
                         </button>
-                        
+
+                        <button
+                          onClick={() => handleLoadHealth(key.id)}
+                          className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors text-xs font-semibold border border-border"
+                          title="View health history"
+                        >
+                          Health
+                        </button>
+
                         <button
                           onClick={() => setDeleteConfirmId(key.id)}
                           onMouseEnter={() => trashIconRefs.current[key.id]?.startAnimation()}
@@ -344,14 +420,14 @@ export default function ApiKeysSettingsPage() {
                           className="p-2 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-colors border border-border"
                           title="Delete key"
                         >
-                          <TrashIcon 
-                            ref={(el) => { trashIconRefs.current[key.id] = el; }} 
-                            size={14} 
-                            isAnimated={false} 
+                          <TrashIcon
+                            ref={(el) => { trashIconRefs.current[key.id] = el; }}
+                            size={14}
+                            isAnimated={false}
                           />
                         </button>
                       </div>
-                      
+
                       {deleteConfirmId === key.id && (
                         <div className="flex items-center gap-2 mt-2 animate-fade-in bg-error/10 border border-error/20 p-2 rounded-lg">
                           <span className="text-xs text-error font-medium">Delete key?</span>
@@ -380,6 +456,26 @@ export default function ApiKeysSettingsPage() {
                         </span>
                         {testResult.message}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Health History */}
+                  {healthKeyId === key.id && keyHealth && (
+                    <div className="mt-3 p-3 border border-border rounded-lg bg-surface-2">
+                      <div className="text-xs font-semibold text-muted-foreground mb-2">Health History</div>
+                      {keyHealth.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No health records yet.</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {keyHealth.slice(0, 5).map((h) => (
+                            <div key={h.id} className="flex items-center justify-between text-[10px]">
+                              <span className={`font-medium ${h.status === 'healthy' ? 'text-success' : 'text-error'}`}>{h.status}</span>
+                              <span className="text-muted-foreground">{h.latency_ms ? `${h.latency_ms.toFixed(0)}ms` : '-'}</span>
+                              <span className="text-muted-foreground">{new Date(h.checked_at).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
