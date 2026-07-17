@@ -96,7 +96,7 @@ class SummarizeStrategy(BaseCompressionStrategy):
                 f"```\n{content}\n```"
             )
 
-            response = await llm_service.get_completion(
+            response, _, _ = await llm_service.get_completion(
                 user_id=uuid.uuid4(),
                 provider="gemini",
                 messages=[{"role": "user", "content": prompt}],

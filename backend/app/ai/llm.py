@@ -73,8 +73,14 @@ class LLMService:
             )
 
             if response and response.choices and response.choices[0].message:
-                return response.choices[0].message.content
-            return None
+                content = response.choices[0].message.content
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, 'usage') and response.usage:
+                    input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
+                    output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
+                return content, input_tokens, output_tokens
+            return None, 0, 0
 
         except asyncio.TimeoutError:
             raise RuntimeError(
@@ -105,7 +111,7 @@ class LLMService:
                     ) from e
                 
                 raise RuntimeError(
-                    f"API rate limit exceeded or quota exhausted for model '{model_to_use}'. Provider error: {e}"
+                    f"API rate limit exceeded for model '{model_to_use}'. Provider error: {e}"
                 ) from e
             elif "401" in error_str or "unauthorized" in error_str:
                 raise RuntimeError(
@@ -157,8 +163,11 @@ class LLMService:
                     if "candidates" in data and len(data["candidates"]) > 0:
                         parts = data["candidates"][0].get("content", {}).get("parts", [])
                         if parts and "text" in parts[0]:
-                            return parts[0]["text"]
-                    return None
+                            usage = data.get("usageMetadata", {})
+                            input_tokens = usage.get("promptTokenCount", 0) or 0
+                            output_tokens = usage.get("candidatesTokenCount", 0) or 0
+                            return parts[0]["text"], input_tokens, output_tokens
+                    return None, 0, 0
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < 3:
                     # Exponential backoff: wait 2s, 4s, 8s

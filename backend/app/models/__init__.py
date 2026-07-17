@@ -19,6 +19,10 @@ from app.models.prompt import (
     PromptMetric,
     TokenUsageRecord,
 )
+from app.models.provider import ProviderRegistry
+from app.models.health import ApiKeyHealth, ProviderHealth, FailoverLog
+from app.models.token_usage import LlmTokenUsage, CostBudget
+from app.models.observability import LLMRequestLog
 
 __all__ = [
     "User",
@@ -43,4 +47,11 @@ __all__ = [
     "PromptCacheRecord",
     "PromptMetric",
     "TokenUsageRecord",
+    "ProviderRegistry",
+    "ApiKeyHealth",
+    "ProviderHealth",
+    "FailoverLog",
+    "LlmTokenUsage",
+    "CostBudget",
+    "LLMRequestLog",
 ]

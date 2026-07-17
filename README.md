@@ -46,7 +46,7 @@ Designed with enterprise-grade engineering in mind, Revora combines repository i
 - [GitHub Permissions](#github-permissions)
 - [Webhook Configuration](#webhook-configuration)
 - [Database Setup](#database-setup)
-- [Redis Setup](#redis-setup)
+- [Redis (Optional)](#redis-optional)
 - [Docker Setup](#docker-setup)
 - [Running the Application](#running-the-application)
 - [Authentication Flow](#authentication-flow)
@@ -127,12 +127,15 @@ graph TB
 
     subgraph Data["Data Layer"]
         PG[(PostgreSQL 15)]
-        RD[(Redis 7)]
+        MC[(Memory Cache)]
+        RC{Redis 7 - Optional}
     end
+
+    style RC fill:#ffe0e0,stroke:#ff4444
 
     subgraph External["External Services"]
         GH[GitHub API - Webhooks, PR Reviews, Check Runs]
-        LLM[Gemini / OpenAI / Claude / Groq / DeepSeek]
+        LLM[11+ Providers via BYOK Orchestrator]
     end
 
     UI <--> API
@@ -142,6 +145,8 @@ graph TB
     SEC --> I4
     INJ --> I4
     API <--> PG
+    MC -.-> I4
+    RC -.-> I4
     I8 <--> GH
     I6 <--> LLM
 ```
@@ -217,22 +222,30 @@ sequenceDiagram
 - Repository Intelligence Engine (17 detectors)
 - Repository Indexing (7 code graphs)
 - Knowledge Base with PostgreSQL persistence
-- Context Retrieval Engine — 13 specialized retrievers, 6-factor ranking, 5-stage compression pipeline, configurable token budgets (4K–128K), multi-layer caching, 5-stage fallback chain, graph traversal (BFS/DFS/k-hop/shortest path)
+- Context Retrieval Engine — 13 specialized retrievers, 6-factor ranking, 5-stage compression pipeline, configurable token budgets (4K–128K), multi-layer caching (in-memory LRU + optional Redis), 5-stage fallback chain, graph traversal (BFS/DFS/k-hop/shortest path)
 - Modular Prompt Builder
-- Multi-Provider LLM Orchestrator (Gemini, OpenAI, Claude, Groq, DeepSeek)
+- Multi-Provider LLM Orchestrator (Gemini available; OpenAI, Anthropic, Groq, DeepSeek, Grok, OpenRouter, Azure OpenAI, Ollama, Cohere, Mistral in development)
 - Verification Engine (file/line checks, hallucination detection)
 - GitHub Review Generator (inline comments, risk scoring)
 - Security layer (secret redaction, prompt injection detection)
 - SSE real-time event emitter
 - Repository-level model configuration
 
+**Backend - BYOK LLM Orchestrator:**
+- Provider Registry & Management (CRUD for LLM providers)
+- Token Usage Tracking with real cost estimation
+- Health Monitoring & Failover logging
+- Intelligent Model Router (multi-model routing strategies)
+- Retry & Failover (circuit breaker, exponential backoff)
+- Analytics & Observability (LLM request logging)
+- Model Discovery Engine (dynamic model listing per provider)
+
 **Backend - Core:**
 - GitHub App authentication (JWT + installation tokens)
 - GitHub OAuth login flow
 - Webhook receiver with HMAC verification
 - Review pipeline with 8-phase execution
-- Celery worker configuration
-- Alembic migrations (4 migrations, 17 tables)
+- Alembic migrations (9 migrations, 25+ tables)
 
 **Frontend:**
 - Landing page with hero and features
@@ -241,7 +254,12 @@ sequenceDiagram
 - Repositories page with model configuration modal
 - Reviews list with status filters
 - Review detail with markdown rendering
-- Settings page (API keys management)
+- Settings: API keys management with test/rotate/health
+- Settings: Provider management
+- Settings: Usage analytics dashboard
+- Settings: Health monitoring
+- Settings: LLM routing configuration
+- Settings: Platform analytics
 - Light/dark mode toggle
 - Responsive sidebar with collapse
 - Shared components (StatusBadge, Skeleton, EmptyState)
@@ -252,7 +270,6 @@ sequenceDiagram
 ### In Development 
 
 **AI Capabilities:**
-- Multi-provider LLM support (only Gemini available now)
 - Auto-remediation (generating fix commits)
 - Conversational PR interface (Chat with PR)
 - PR description auto-generation
@@ -276,7 +293,6 @@ sequenceDiagram
 
 **Frontend:**
 - Real-time SSE execution dashboard on review detail page
-- API keys settings page (route exists, needs full UI)
 
 </td>
 </tr>
@@ -284,22 +300,49 @@ sequenceDiagram
 
 ---
 
-## Model Compatibility & Discovery Engine
+## Bring-Your-Own-Key (BYOK) LLM Orchestrator
 
-The **Model Compatibility & Discovery Engine** dynamically connects to LLM providers to fetch, validate, enrich, and normalize model lists for user selection across the entire platform.
+The **BYOK LLM Orchestrator** is a production-grade multi-provider LLM routing and management system built into Revora. It consists of several integrated services:
 
-Features include:
-- **Canonical Model Registry**: Provides a single source of truth for model identifiers, normalizing inconsistencies between providers (e.g., Google Native API) and orchestration layers (e.g., LiteLLM).
-- **Dynamic Discovery**: Automatically fetches the live list of models your configured API keys have access to.
-- **Rich Metadata Extraction**: Detects context window sizes, cost estimations, and capabilities (vision, streaming, tool-calling).
-- **Status Classification**: Automatically categorizes models into:
-  - **Available**: General availability.
-  - **Deprecated**: Flagged legacy models.
-  - **Preview/Experimental**: Unstable or alpha models.
-  - **Enterprise Only**: Provisioned throughput endpoints.
-- **Compatibility Engine Verification**: Prevents users from assigning deprecated, unavailable, or unsupported models to their repositories during configuration.
-- **Fallback Adapters**: If the orchestration layer (LiteLLM) fails to execute a valid canonical model (e.g., due to mapping delays for newly released models like `gemini-2.5-flash-lite`), the engine automatically falls back to a Native Provider Adapter (via `httpx`).
-- **Caching**: Leverages an in-memory TTL caching mechanism to prevent excessive provider requests.
+### Provider Registry & Management
+- CRUD operations for LLM providers with encrypted API key storage
+- Supports **11 providers**: Gemini, OpenAI, Anthropic, Groq, DeepSeek, Grok, OpenRouter, Azure OpenAI, Ollama, Cohere, Mistral
+- API key validation with test endpoints
+- Atomic key rotation with health history tracking
+- Bulk validation
+
+### Model Discovery Engine
+- Dynamically fetches live model lists per API key
+- Normalizes model identifiers across providers and LiteLLM
+- Detects context window sizes, cost estimations, capabilities (vision, streaming, tool-calling)
+- Classifies models as Available / Deprecated / Preview / Enterprise Only
+- Falls back to native Provider API (httpx) when LiteLLM lacks mapping for new models
+- Caches results with configurable TTL
+
+### Smart Model Router
+- Multi-strategy routing (priority-based, cost-optimized, latency-optimized, random)
+- Route rules with provider, model, and weight configurations
+- Circuit breaker pattern with automatic recovery
+- Exponential backoff retry with configurable max attempts
+
+### Token Usage Tracking & Cost Estimation
+- Real-time token counting per request
+- Provider-specific cost tables for accurate estimation
+- Usage breakdown by model, provider, and feature
+- Cost history and trending
+- Budget tracking and alerts
+
+### Health Monitoring & Failover
+- Per-key health status tracking
+- Automatic failover to healthy keys/providers
+- Health check endpoints with history
+- Failover logs for auditing
+
+### Security & Observability
+- Prompt injection detection (common attack patterns)
+- Secret redaction from traces and logs
+- Full LLM request logging (observability)
+- Cache layer metrics (hit/miss/eviction rates)
 
 ---
 
@@ -421,14 +464,24 @@ class IntelligenceEngine:
 <table>
 <tr>
 <td align="center"><img src="https://img.shields.io/badge/Google%20Gemini-4285f4?style=for-the-badge&logo=google&logoColor=white" /><br/><sub>Available</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/OpenAI-Coming%20Soon-412991?style=for-the-badge&logo=openai&logoColor=white" /><br/><sub>In Development</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/Anthropic%20Claude-Coming%20Soon-D97757?style=for-the-badge" /><br/><sub>In Development</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/Groq-Coming%20Soon-6366f1?style=for-the-badge" /><br/><sub>In Development</sub></td>
-<td align="center"><img src="https://img.shields.io/badge/DeepSeek-Coming%20Soon-0066ff?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Anthropic%20Claude-D97757?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Groq-6366f1?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/DeepSeek-0066ff?style=for-the-badge" /><br/><sub>In Development</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="https://img.shields.io/badge/xAI%20Grok-000000?style=for-the-badge&logo=x&logoColor=white" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/OpenRouter-8B5CF6?style=for-the-badge" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Azure%20OpenAI-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white" /><br/><sub>In Development</sub></td>
+<td align="center"><img src="https://img.shields.io/badge/Cohere-3955ff?style=for-the-badge" /><br/><sub>In Development</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="https://img.shields.io/badge/Mistral-FF6600?style=for-the-badge" /><br/><sub>In Development</sub></td>
 </tr>
 </table>
 
-> Currently only **Google Gemini** is fully integrated. Multi-provider support is actively being developed.
+> Currently **Google Gemini** is fully integrated and available. Support for OpenAI, Anthropic Claude, Groq, DeepSeek, Grok, OpenRouter, Azure OpenAI, Ollama, Cohere, and Mistral is actively being developed via the BYOK LLM Orchestrator.
 
 ---
 
@@ -439,7 +492,7 @@ class IntelligenceEngine:
 <td align="center" width="25%">
 
 **Repository Intelligence**
-<br/><sub>13 detectors analyzing languages, frameworks, architecture pattern, database, package manager, testing, build tools, CI/CD, security auth, cloud provider, caching, queues, repo type — all without LLM</sub>
+<br/><sub>17 detectors analyzing languages, frameworks, architecture pattern, database, package manager, testing, build tools, CI/CD, security auth, cloud provider, caching, queues, secrets, complexity, dead code, duplicates, repo health — all without LLM</sub>
 
 </td>
 <td align="center" width="25%">
@@ -497,8 +550,8 @@ class IntelligenceEngine:
 <td>
 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169e1?style=flat-square&logo=postgresql)
-![Redis](https://img.shields.io/badge/Redis-7-dc382d?style=flat-square&logo=redis)
-![Celery](https://img.shields.io/badge/Celery-5-9ddc10?style=flat-square)
+![In-Memory Cache](https://img.shields.io/badge/Cache-In--Memory%20LRU-FF6B6B?style=flat-square)
+![Redis (Optional)](https://img.shields.io/badge/Redis-Optional-dc382d?style=flat-square&logo=redis)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker)
 
 </td>
@@ -514,136 +567,79 @@ revora/
 ├── backend/
 │   ├── app/
 │   │   ├── ai/                    # LLM service, LangGraph agents, prompts, state
-│   │   ├── api/v1/endpoints/      # FastAPI routes (auth, repos, reviews, dashboard, webhooks)
-│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet encryption), constants
-│   │   ├── db/                    # SQLAlchemy async engine and session
-│   │   ├── github/                # GitHub App auth, API client, webhook handler
-│   │   ├── github_review/         # GitHub PR review format generator
-│   │   ├── indexing/              # Code graph builders with BaseGraphBuilder interface
-│   │   │   ├── base_graph.py      # Graph builder interface
-│   │   │   ├── dependency_graph.py # Import dependency graph
-│   │   │   ├── call_graph.py      # Function call graph
-│   │   │   ├── module_graph.py    # Module hierarchy graph
-│   │   │   ├── api_graph.py       # API endpoint graph
-│   │   │   ├── db_graph.py        # Database model graph
-│   │   │   ├── config_graph.py    # Configuration file graph
-│   │   │   └── test_graph.py      # Test-to-source mapping graph
-│   │   ├── intelligence/          # Repository Intelligence Engine (17 detectors, zero-LLM)
-│   │   │   ├── base_detector.py   # Detector interface
-│   │   │   ├── repo_walker.py     # Single-pass filesystem traversal
-│   │   │   ├── engine.py          # Parallel detector orchestrator
-│   │   │   ├── language_detector.py
-│   │   │   ├── framework_detector.py
-│   │   │   ├── architecture_detector.py
-│   │   │   ├── database_detector.py
-│   │   │   ├── dependency_analyzer.py
-│   │   │   ├── testing_detector.py
-│   │   │   ├── build_detector.py
-│   │   │   ├── cicd_detector.py
-│   │   │   ├── security_detector.py
-│   │   │   ├── cloud_detector.py
-│   │   │   ├── queue_detector.py
-│   │   │   ├── secret_detector.py    # NEW: Hardcoded credential detection
-│   │   │   ├── complexity_analyzer.py # NEW: Cyclomatic complexity
-│   │   │   ├── dead_code_detector.py  # NEW: Unused code detection
-│   │   │   ├── duplicate_detector.py  # NEW: Copy-paste detection
-│   │   │   ├── health_engine.py       # NEW: Repository health scoring
-│   │   │   └── metrics_engine.py      # NEW: Repository metrics
-│   │   ├── knowledge/             # Knowledge base with DB persistence and caching
-│   │   ├── models/                # SQLAlchemy ORM models (17 tables)
-│   │   ├── orchestrator/          # Multi-provider LLM with fallbacks and cost tracking
-│   │   ├── pipeline/              # Review pipeline with per-stage error handling
-│   │   ├── prompt_engine/         # Modular prompt builder with templates
-│   │   ├── cache/                 # Multi-layer caching (memory, Redis, graph, retrieval)
+│   │   ├── api/v1/endpoints/      # FastAPI routes (17 endpoint modules)
+│   │   ├── cache/                 # Multi-layer caching (memory LRU + optional Redis)
 │   │   │   ├── base_cache.py      # Abstract cache interface
-│   │   │   ├── memory_cache.py    # LRU in-process cache
-│   │   │   ├── redis_cache.py     # Redis-backed distributed cache
+│   │   │   ├── memory_cache.py    # LRU in-process cache (5K entries)
+│   │   │   ├── redis_cache.py     # Redis-backed distributed cache (optional)
 │   │   │   ├── graph_cache.py     # Graph traversal result cache
 │   │   │   ├── retrieval_cache.py # Retrieval result cache
 │   │   │   └── metrics.py         # Cache hit/miss/eviction tracking
-│   │   ├── retrieval/             # Context Retrieval Engine
-│   │   │   ├── __init__.py        # Module exports
-│   │   │   ├── models.py          # RetrievedContext, RetrievalResult, RetrievalConfig
-│   │   │   ├── engine.py          # Core orchestrator with async, cache, fallback
-│   │   │   ├── graph_traversal.py # BFS, DFS, k-hop, shortest path, transitive closure
-│   │   │   ├── fallback.py        # 5-stage fallback chain (graph→KB→static→diff→graceful)
-│   │   │   ├── token_budget_engine.py # 4K–128K presets, custom budgets, section allocation
-│   │   │   ├── init.py            # Engine initialization wiring
-│   │   │   ├── rankers/           # Ranking engine
-│   │   │   │   ├── engine.py      # Multi-factor ranking pipeline
-│   │   │   │   ├── base_scorer.py # Scorer interface
-│   │   │   │   ├── normalizer.py  # Min-max score normalization
-│   │   │   │   └── scorers/       # 6 specialized scorers
-│   │   │   │       ├── graph_distance.py
-│   │   │   │       ├── file_importance.py
-│   │   │   │       ├── dependency_weight.py
-│   │   │   │       ├── change_frequency.py
-│   │   │   │       ├── security_impact.py
-│   │   │   │       └── test_coverage.py
-│   │   │   ├── compression/       # Compression engine
-│   │   │   │   ├── engine.py      # Compression pipeline orchestrator
-│   │   │   │   ├── base_strategy.py # Strategy interface
-│   │   │   │   ├── budget_allocator.py # Token budget distribution
-│   │   │   │   └── strategies/    # 5 compression strategies
-│   │   │   │       ├── dedup.py
-│   │   │   │       ├── truncation.py
-│   │   │   │       ├── import_prune.py
-│   │   │   │       ├── symbol_merge.py
-│   │   │   │       └── summarize.py
-│   │   │   └── retrievers/        # 13 specialized retrievers
-│   │   │       ├── base_retriever.py
-│   │   │       ├── changed_file_retriever.py
-│   │   │       ├── import_retriever.py
-│   │   │       ├── dependency_retriever.py
-│   │   │       ├── call_graph_retriever.py
-│   │   │       ├── module_retriever.py
-│   │   │       ├── api_retriever.py
-│   │   │       ├── db_retriever.py
-│   │   │       ├── security_retriever.py
-│   │   │       ├── impact_retriever.py
-│   │   │       ├── historical_retriever.py
-│   │   │       ├── documentation_retriever.py
-│   │   │       ├── test_retriever.py
-│   │   │       └── rule_retriever.py
+│   │   ├── core/                  # Auth (JWT, bcrypt), config, security (Fernet), constants
+│   │   ├── db/                    # SQLAlchemy async engine and session
+│   │   ├── github/                # GitHub App auth, API client, webhook handler
+│   │   ├── github_review/         # GitHub PR review format generator
+│   │   ├── indexing/              # Code graph builders (7 graph types)
+│   │   ├── intelligence/          # Repository Intelligence Engine (17 detectors, zero-LLM)
+│   │   ├── knowledge/             # Knowledge base with DB persistence
+│   │   ├── models/                # SQLAlchemy ORM models (25+ tables)
+│   │   ├── orchestrator/          # Multi-provider LLM with fallbacks, retries, cost tracking
+│   │   ├── pipeline/              # Review pipeline with per-stage error handling
+│   │   ├── prompt_engine/         # Modular prompt builder with versioning, templates
+│   │   ├── retrieval/             # Context Retrieval Engine (13 retrievers, 6-rankers, 5-compressors)
 │   │   ├── schemas/               # Pydantic request/response schemas
 │   │   ├── security/              # Secret redaction, prompt injection detection
-│   │   ├── services/              # Business logic (user, API key management)
+│   │   ├── services/              # Business logic services
+│   │   │   ├── api_key_service.py   # API key CRUD, health, rotation
+│   │   │   ├── model_discovery.py   # Dynamic model discovery per provider
+│   │   │   ├── provider_registry.py # Provider CRUD with encrypted storage
+│   │   │   ├── model_router.py      # Smart LLM routing (priority/cost/latency)
+│   │   │   ├── token_manager.py     # Token counting & usage tracking
+│   │   │   ├── usage_tracker.py     # LLM request logging & analytics
+│   │   │   ├── health_monitor.py    # Provider health monitoring
+│   │   │   ├── cost_estimator.py    # Cost estimation & budget tracking
+│   │   │   ├── retry_failover.py    # Retry with circuit breaker & failover
+│   │   │   └── user_service.py      # User management
 │   │   ├── sse/                   # Server-Sent Events emitter
-│   │   ├── verification/          # AI finding verification engine
-│   │   └── worker/                # Celery background tasks
-│   ├── alembic/                   # Database migrations (4 migrations)
-│   ├── tests/                     # Test suite
-│   │   ├── test_repo_walker.py    # RepoWalker tests
-│   │   ├── test_intelligence_engine.py # Intelligence engine tests
-│   │   ├── test_graph_traversal.py     # 14 graph traversal tests
-│   │   ├── test_ranking_engine.py      # 13 ranking engine tests
-│   │   ├── test_compression_engine.py  # 10 compression tests
-│   │   ├── test_token_budget.py        # 11 token budget tests
-│   │   ├── test_cache.py               # 13 cache layer tests
-│   │   ├── test_retrievers.py          # 8 retriever tests
-│   │   ├── test_retrieval_engine.py    # 18 retrieval engine tests
-│   │   └── test_fallback.py           # 10 fallback chain tests
+│   │   └── verification/          # AI finding verification engine
+│   ├── alembic/                   # Database migrations (9 migrations, 25+ tables)
+│   ├── tests/                     # Test suite (11 test files)
 │   ├── .env.example               # Environment variable template
 │   └── requirements.txt
 │
 ├── frontend/
 │   ├── .env.example               # Frontend environment template
 │   └── src/
-│       ├── app/                   # Next.js App Router (9 pages)
-│       ├── components/            # React components
+│       ├── app/                   # Next.js App Router (10 pages)
+│       │   └── (dashboard)/
+│       │       ├── dashboard/       # Stats, recent reviews
+│       │       ├── repositories/    # Repo list, model config modal
+│       │       ├── reviews/         # Review list with status filters
+│       │       ├── reviews/[id]/    # Review detail with markdown
+│       │       └── settings/
+│       │           ├── api-keys/    # API key CRUD with test/rotate/health
+│       │           ├── providers/   # LLM provider management
+│       │           ├── usage/       # Usage analytics dashboard
+│       │           ├── health/      # Health monitoring
+│       │           ├── routing/     # LLM routing configuration
+│       │           └── analytics/   # Platform analytics
+│       ├── components/
 │       │   ├── layout/            # Sidebar, ThemeProvider
 │       │   ├── shared/            # StatusBadge, Skeleton, EmptyState
-│       │   └── ui/                # shadcn/ui primitives, Button, LoaderIcon, ThemeToggle
+│       │   └── ui/                # shadcn/ui primitives, Button, ThemeToggle
 │       ├── lib/                   # Axios API client, utilities
+│       ├── proxy.ts               # API proxy configuration
 │       └── store/                 # Zustand stores (auth, theme)
 │
 ├── docs/                        # Documentation
-│   ├── context-retrieval.md     # Context Retrieval Engine overview
-│   ├── token-budget.md          # Token budget configuration guide
-│   ├── ranking.md               # Ranking engine documentation
-│   ├── compression.md           # Compression strategies guide
-│   └── cache-strategy.md        # Caching layer documentation
-├── docker-compose.yml
+│   ├── byok-orchestrator-plan.md # BYOK LLM Orchestrator plan
+│   ├── context-retrieval.md      # Context Retrieval Engine overview
+│   ├── token-budget.md           # Token budget configuration guide
+│   ├── ranking.md                # Ranking engine documentation
+│   ├── compression.md            # Compression strategies guide
+│   └── cache-strategy.md         # Caching layer documentation
+├── docker-compose.yml            # PostgreSQL, Backend, Frontend
+├── run.bat                       # Windows startup script
 └── README.md
 ```
 
@@ -699,7 +695,6 @@ This guide walks you through setting up Revora on your local machine from scratc
 - **Python 3.11+** — [Download](https://python.org)
 - **Node.js 18+** — [Download](https://nodejs.org)
 - **PostgreSQL 15+** — [Download](https://postgresql.org) or use Docker
-- **Redis 7+** — [Download](https://redis.io) or use Docker
 - **Docker & Docker Compose** (optional) — [Download](https://docker.com)
 - **Git** — [Download](https://git-scm.com)
 
@@ -715,9 +710,8 @@ cd revora
 #### 2. Start Database Services (Docker)
 
 ```bash
-# Start PostgreSQL and Redis
+# Start PostgreSQL (Redis is optional)
 docker run -d --name revora-postgres -p 5432:5432 -e POSTGRES_USER=revora -e POSTGRES_PASSWORD=revora_pass -e POSTGRES_DB=revora_db postgres:15-alpine
-docker run -d --name revora-redis -p 6379:6379 redis:7-alpine
 ```
 
 Or use the full Docker Compose setup:
@@ -807,7 +801,7 @@ The frontend will be available at `http://localhost:3000`.
 | `JWT_SECRET_KEY` | JWT signing key | **Yes** | `your-jwt-secret-here` | Backend |
 | `ENCRYPTION_KEY` | Fernet encryption key (32 bytes, base64) | **Yes** | `CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=` | Backend |
 | `DATABASE_URL` | PostgreSQL connection string | **Yes** | `postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db` | Backend |
-| `REDIS_URL` | Redis connection string | No | `redis://localhost:6379/0` | Backend |
+| `REDIS_URL` | Redis connection string (optional, falls back to in-memory cache) | No | `redis://localhost:6379/0` | Backend |
 | `CORS_ORIGINS` | Allowed CORS origins | No | `["http://localhost:3000"]` | Backend |
 
 ### GitHub OAuth Variables
@@ -831,8 +825,12 @@ The frontend will be available at `http://localhost:3000`.
 |----------|---------|----------|---------|---------|
 | `GEMINI_API_KEY` | Google Gemini API key | Conditional* | `your-gemini-api-key` | Backend |
 | `OPENAI_API_KEY` | OpenAI API key | Conditional* | `sk-...` | Backend |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key | Conditional* | `sk-ant-...` | Backend |
+| `GROQ_API_KEY` | Groq API key | Conditional* | `gsk_...` | Backend |
+| `DEEPSEEK_API_KEY` | DeepSeek API key | Conditional* | `sk-...` | Backend |
+| `GROK_API_KEY` | xAI Grok API key | Conditional* | `xai-...` | Backend |
 
-*At least one LLM provider API key is required for AI reviews.
+*At least one LLM provider API key is required for AI reviews. Users can also bring their own keys via the API Keys settings page, supporting **11 providers**: Gemini, OpenAI, Anthropic, Groq, DeepSeek, Grok, OpenRouter, Azure OpenAI, Ollama, Cohere, Mistral.
 
 ### Frontend Variables
 
@@ -1136,7 +1134,7 @@ alembic downgrade -1
 
 ### Database Schema
 
-Revora uses 17 tables across these domains:
+Revora uses 25+ tables across these domains:
 
 - **Users & Auth**: `users`, `api_keys`
 - **Organizations**: `organizations`, `org_members`, `teams`, `team_members`
@@ -1144,6 +1142,7 @@ Revora uses 17 tables across these domains:
 - **Reviews**: `reviews`, `review_comments`
 - **Knowledge**: `repository_knowledge`, `repository_rules`, `repository_indexes`, `repository_intelligence`
 - **Analytics**: `review_events`, `review_metrics`
+- **BYOK Orchestrator**: `provider_registry`, `api_key_health`, `provider_health`, `failover_logs`, `llm_token_usage`, `cost_budgets`, `llm_request_logs`
 
 ### Resetting Database
 
@@ -1158,9 +1157,17 @@ alembic upgrade head
 
 ---
 
-## Redis Setup
+## Redis (Optional)
 
-### Installation
+Redis is **not required** to run Revora. The platform uses an in-memory LRU cache (`MemoryCache`) with 5,000 entry capacity and 300-second default TTL as the primary caching layer. Redis serves as an **optional upgrade** for distributed caching scenarios.
+
+### When to Use Redis
+
+- Running multiple backend instances behind a load balancer
+- Need persistent cache across restarts
+- High-traffic deployments requiring distributed cache coherence
+
+### Installing Redis (Optional)
 
 **Docker (Recommended):**
 ```bash
@@ -1171,24 +1178,24 @@ docker run -d --name revora-redis -p 6379:6379 redis:7-alpine
 1. Download Redis from [redis.io](https://redis.io)
 2. Install and start the service
 
-### Purpose
+### Cache Architecture
 
-Redis is used for:
-- Celery task queue backend
-- Caching frequently accessed data
-- Session storage (future)
-- Rate limiting (future)
+The caching layer uses a **fallback chain**:
+1. In-memory LRU cache (always available, 5,000 entries)
+2. Redis (if configured, falls back gracefully to memory cache on failure)
+3. Used by: `GraphCache`, `RetrievalCache`, retrieval engine
 
-### Troubleshooting
+### Enabling Redis
 
-```bash
-# Test Redis connection
-redis-cli ping
-# Should return: PONG
-
-# Check Redis status
-redis-cli info server
-```
+1. Set `REDIS_URL` in your `.env`:
+   ```env
+   REDIS_URL=redis://localhost:6379/0
+   ```
+2. Install the optional `redis` package:
+   ```bash
+   pip install redis
+   ```
+3. Restart the backend — Redis will be auto-detected
 
 ---
 
@@ -1201,6 +1208,8 @@ redis-cli info server
 | `db` | `postgres:15-alpine` | 5432 | PostgreSQL database |
 | `backend` | Custom build | 8000 | FastAPI backend |
 | `frontend` | Custom build | 3000 | Next.js frontend |
+
+> **Note:** Redis and Celery workers are **not included** in the default Docker Compose setup. Redis is optional (see [Redis section](#redis-optional)), and Revora does not use Celery.
 
 ### Docker Commands
 
@@ -1236,6 +1245,8 @@ docker-compose ps
 |--------|---------|
 | `postgres_data` | Persistent PostgreSQL data |
 
+> There is no Redis volume since Redis is optional and not part of the default compose setup.
+
 ### Common Issues
 
 | Issue | Solution |
@@ -1251,9 +1262,8 @@ docker-compose ps
 ### Expected Startup Order
 
 1. **PostgreSQL** — Database must be running first
-2. **Redis** — Required for Celery workers
-3. **Backend** — FastAPI server on port 8000
-4. **Frontend** — Next.js dev server on port 3000
+2. **Backend** — FastAPI server on port 8000
+3. **Frontend** — Next.js dev server on port 3000
 
 ### Health Checks
 
@@ -1265,8 +1275,8 @@ curl http://localhost:8000/api/v1/health
 # Database health check
 docker exec -it revora-postgres pg_isready -U revora
 
-# Redis health check
-redis-cli ping
+# Optional: Redis health check (if configured)
+# redis-cli ping
 ```
 
 ### Verifying Everything Works
@@ -1414,6 +1424,38 @@ flowchart TD
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/v1/health` | Health check |
+
+### Provider & Model Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/providers` | List configured LLM providers |
+| `POST` | `/api/v1/providers` | Add new LLM provider |
+| `PUT` | `/api/v1/providers/{id}` | Update provider configuration |
+| `DELETE` | `/api/v1/providers/{id}` | Remove provider |
+| `GET` | `/api/v1/models` | List available models across providers |
+| `GET` | `/api/v1/llm/routes` | Get configured LLM routing rules |
+| `POST` | `/api/v1/llm/route` | Create routing rule |
+| `PUT` | `/api/v1/llm/route/{id}` | Update routing rule |
+| `DELETE` | `/api/v1/llm/route/{id}` | Delete routing rule |
+
+### Analytics & Usage Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/platform-usage` | Get LLM usage statistics |
+| `GET` | `/api/v1/platform-usage/breakdown` | Get usage breakdown by model/provider |
+| `GET` | `/api/v1/platform-analytics` | Get platform analytics |
+| `GET` | `/api/v1/cost/estimates` | Get cost estimates |
+| `GET` | `/api/v1/cost/history` | Get cost history |
+
+### API Key Endpoints (Extended)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/api-keys/{id}/rotate` | Rotate API key atomically |
+| `POST` | `/api/v1/api-keys/validate-all` | Validate all user API keys |
+| `GET` | `/api/v1/api-keys/{id}/health` | Get API key health history |
 
 ---
 

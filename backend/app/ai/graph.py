@@ -30,7 +30,7 @@ async def bug_agent(state: ReviewState) -> Dict[str, Any]:
             repo_context=str(state.get("repo_context", "")),
             diff_content=state.get("diff_content", ""),
         )
-        result = await llm_service.get_completion(
+        result, _, _ = await llm_service.get_completion(
             user_id=uuid.UUID(state["user_id"]),
             provider=state.get("provider", "gemini"),
             messages=[{"role": "user", "content": prompt}],
@@ -50,7 +50,7 @@ async def security_agent(state: ReviewState) -> Dict[str, Any]:
             repo_context=str(state.get("repo_context", "")),
             diff_content=state.get("diff_content", ""),
         )
-        result = await llm_service.get_completion(
+        result, _, _ = await llm_service.get_completion(
             user_id=uuid.UUID(state["user_id"]),
             provider=state.get("provider", "gemini"),
             messages=[{"role": "user", "content": prompt}],
@@ -70,7 +70,7 @@ async def performance_agent(state: ReviewState) -> Dict[str, Any]:
             repo_context=str(state.get("repo_context", "")),
             diff_content=state.get("diff_content", ""),
         )
-        result = await llm_service.get_completion(
+        result, _, _ = await llm_service.get_completion(
             user_id=uuid.UUID(state["user_id"]),
             provider=state.get("provider", "gemini"),
             messages=[{"role": "user", "content": prompt}],
@@ -96,7 +96,7 @@ async def coordinator_agent(state: ReviewState) -> Dict[str, Any]:
             security_analysis="\n".join(security_analysis) if security_analysis else "No security analysis available",
             performance_analysis="\n".join(performance_analysis) if performance_analysis else "No performance analysis available",
         )
-        result = await llm_service.get_completion(
+        result, _, _ = await llm_service.get_completion(
             user_id=uuid.UUID(state["user_id"]),
             provider=state.get("provider", "gemini"),
             messages=[{"role": "user", "content": prompt}],

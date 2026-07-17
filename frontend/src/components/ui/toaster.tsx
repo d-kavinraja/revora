@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { XIcon, CircleCheckIcon, TriangleAlertIcon, InfoIcon } from '@animateicons/react/lucide';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,8 +47,10 @@ export function ToasterProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const contextValue = useMemo(() => ({ toasts, toast, removeToast }), [toasts, toast, removeToast]);
+
   return (
-    <ToastContext.Provider value={{ toasts, toast, removeToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         <AnimatePresence>

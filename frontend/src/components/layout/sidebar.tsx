@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, LogoutIcon, MenuIcon, XIcon } from '@animateicons/react/lucide';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon } from '@animateicons/react/lucide';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useRef, useState, useEffect } from 'react';
 
@@ -18,6 +18,11 @@ const navLinks = [
 
 const bottomLinks = [
   { href: '/settings/api-keys', label: 'API Keys', icon: KeyIcon },
+  { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
+  { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
+  { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon },
+  { href: '/settings/health', label: 'Health', icon: ActivityIcon },
+  { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon },
 ];
 
 function NavLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean }) {
@@ -80,7 +85,6 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // Auto-collapse on smaller screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const handler = (e: MediaQueryListEvent | MediaQueryList) => {
@@ -107,7 +111,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
         className="fixed top-4 left-4 z-50 md:hidden p-2 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -116,7 +119,6 @@ export function Sidebar() {
         <MenuIcon size={20} />
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
@@ -124,13 +126,11 @@ export function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={`fixed md:sticky top-0 h-screen ${sidebarWidth} border-r border-sidebar-border bg-sidebar flex flex-col shrink-0 transition-all duration-200 z-40 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-        {/* Logo & collapse toggle */}
         <div className={`p-4 border-b border-sidebar-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <div className="flex items-center gap-3 min-w-0">
@@ -151,9 +151,7 @@ export function Sidebar() {
             </div>
           )}
           <div className="flex items-center gap-1">
-            {/* Theme toggle */}
             <ThemeToggle />
-            {/* Mobile close button */}
             <button
               onClick={() => setMobileOpen(false)}
               className="md:hidden p-1 rounded text-muted-foreground hover:text-foreground"
@@ -161,7 +159,6 @@ export function Sidebar() {
             >
               <XIcon size={16} />
             </button>
-            {/* Desktop collapse toggle */}
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="hidden md:flex p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
@@ -172,7 +169,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {!collapsed && (
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
@@ -208,7 +204,6 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* User footer */}
         <div className="p-3 border-t border-sidebar-border">
           <div className={`flex items-center gap-3 px-2 mb-2 ${collapsed ? 'justify-center' : ''}`}>
             {user?.image ? (
@@ -244,21 +239,20 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Native Dialog for Logout Confirmation */}
-      <dialog 
+      <dialog
         ref={dialogRef}
         className="p-6 rounded-xl border border-border bg-surface-1 text-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm m-auto open:flex flex-col gap-4 max-w-sm w-full"
       >
         <h3 className="text-lg font-bold">Sign out</h3>
         <p className="text-sm text-muted-foreground">Are you sure you want to sign out?</p>
         <div className="flex justify-end gap-3 mt-4">
-          <button 
+          <button
             onClick={() => dialogRef.current?.close()}
             className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={handleConfirmLogout}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
           >
@@ -269,3 +263,5 @@ export function Sidebar() {
     </>
   );
 }
+
+
