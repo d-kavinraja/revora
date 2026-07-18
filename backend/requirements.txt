@@ -16,3 +16,6 @@ httpx
 pytest
 pytest-asyncio
 python-dotenv
+aiofiles
+GitPython>=3.1.43
+semgrep>=1.90.0

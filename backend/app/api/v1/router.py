@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import webhooks, auth, repositories, reviews, dashboard, review_stream, api_keys, ui_settings, providers, usage, health, routing, analytics, llm, models, cost
+from app.api.v1.endpoints import webhooks, auth, repositories, reviews, dashboard, review_stream, api_keys, ui_settings, providers, usage, health, routing, analytics, llm, models, cost, verification
 
 api_router = APIRouter()
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
@@ -18,3 +18,5 @@ api_router.include_router(analytics.router, prefix="/platform-analytics", tags=[
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(cost.router, prefix="/cost", tags=["cost"])
+api_router.include_router(verification.router, prefix="/verify", tags=["verification"])
+
