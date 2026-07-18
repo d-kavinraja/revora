@@ -72,8 +72,8 @@ export default function ReviewsPage() {
   const hasDateFilter = fromDate || toDate;
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+      <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Reviews</h1>
           <p className="text-muted-foreground mt-1 text-sm">All AI code reviews across your repositories.</p>
@@ -118,7 +118,7 @@ export default function ReviewsPage() {
             placeholder="Search by title, repo, author..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3.5 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+            className="w-full h-10 px-4 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
           />
         </div>
 

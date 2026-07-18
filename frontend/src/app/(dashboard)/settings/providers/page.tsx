@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { api, Provider } from '@/lib/api';
@@ -9,6 +9,34 @@ import {
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
+import {
+  Gemini,
+  OpenAI,
+  Claude,
+  DeepSeek,
+  Groq,
+  OpenRouter,
+  Azure,
+  Ollama,
+  Cohere,
+  Mistral
+} from '@lobehub/icons';
+
+const getProviderIcon = (slug: string) => {
+  switch (slug) {
+    case 'gemini': return <Gemini.Color size={24} />;
+    case 'openai': return <OpenAI size={24} />;
+    case 'anthropic': return <Claude.Color size={24} />;
+    case 'deepseek': return <DeepSeek.Color size={24} />;
+    case 'groq': return <Groq size={24} />;
+    case 'openrouter': return <OpenRouter size={24} />;
+    case 'azure': return <Azure.Color size={24} />;
+    case 'ollama': return <Ollama size={24} />;
+    case 'cohere': return <Cohere.Color size={24} />;
+    case 'mistral': return <Mistral.Color size={24} />;
+    default: return <GlobeIcon size={24} className="text-muted-foreground" />;
+  }
+};
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -58,7 +86,7 @@ export default function ProvidersPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh]">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col items-center justify-center min-h-[50vh]">
         <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
         <span className="text-sm text-muted-foreground">Loading providers...</span>
       </div>
@@ -66,7 +94,7 @@ export default function ProvidersPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -92,6 +120,9 @@ export default function ProvidersPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5">
+                    <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-surface-2 border border-border">
+                      {getProviderIcon(provider.slug)}
+                    </span>
                     <span className="font-bold text-foreground text-base">{provider.display_name}</span>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
                       {provider.litellm_provider}
@@ -148,7 +179,10 @@ export default function ProvidersPage() {
           );
         })}
       </div>
+
+      <footer className="mt-12 border-t border-border pt-6 text-center text-xs text-muted-foreground">
+        &copy; {new Date().getFullYear()} Revora. All rights reserved.
+      </footer>
     </div>
   );
 }
-

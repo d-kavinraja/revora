@@ -17,7 +17,7 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
     <div
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
-      className="relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-white/[0.08]"
+      className="relative overflow-hidden rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-white/[0.08]"
     >
       <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent}`} />
       <div className="flex items-start justify-between">
@@ -81,7 +81,7 @@ export default function Dashboard() {
   const hasActiveReviews = reviews.some((r) => r.status === 'running' || r.status === 'pending');
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -154,7 +154,7 @@ export default function Dashboard() {
               placeholder="Search reviews by PR title, repo, or author..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-1.5 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+              className="flex-1 min-w-0 h-10 px-4 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
             />
             <ViewAllLink />
           </div>

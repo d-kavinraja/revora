@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { api, ApiKey, ThemeConfig, ApiKeyHealth } from '@/lib/api';
@@ -209,7 +209,7 @@ export default function ApiKeysSettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[50vh]">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col items-center justify-center min-h-[50vh]">
         <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
         <span className="text-sm text-muted-foreground">Loading settings...</span>
       </div>
@@ -217,7 +217,7 @@ export default function ApiKeysSettingsPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
