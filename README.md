@@ -1780,6 +1780,26 @@ Detailed documentation for the Context Retrieval Engine is available in the `doc
 
 ---
 
+## Verification Engine (Trust Layer)
+
+The Verification Engine is a core component that validates AI-generated reviews for accuracy and relevance.
+
+### Verification Flow
+1. **Parser**: Extracts structured findings from LLM responses.
+2. **Hallucination Detection**: Verifies APIs, dependencies, and file structures to eliminate hallucinations.
+3. **Validators**: Runs security, performance, architecture, repository, and rule validators.
+4. **Confidence Engine**: Calculates a confidence score (0-100) based on accumulated validation evidence.
+5. **False Positive Filtering**: Discards low-confidence findings before they reach GitHub.
+6. **Evidence Generation**: Attaches exact code snippets or rule proofs to each finding.
+
+### Core Capabilities
+- Eliminates Hallucinations
+- Filters False Positives
+- Provides High-Confidence Security Validation
+- Emits Detailed Verification Metrics
+
+---
+
 ## License
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.

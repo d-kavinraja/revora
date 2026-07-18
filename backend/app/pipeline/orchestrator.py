@@ -105,7 +105,7 @@ class ReviewPipeline:
 
             # Cleanup cloned repo immediately after indexing
             if repo_path:
-                GitService.cleanup_repository(repo_path)
+                await GitService.cleanup_repository(repo_path)
                 repo_path = None
 
             # Stage 5: Knowledge retrieval
@@ -138,7 +138,7 @@ class ReviewPipeline:
 
             # Stage 9: Verification
             verified = await self._stage_verification(
-                emitter, llm_response.content, repo_path or ".", diff_content
+                emitter, llm_response.content, repo_path or ".", diff_content, str(review_id)
             )
 
             # Stage 10: Generate and publish review
@@ -175,7 +175,7 @@ class ReviewPipeline:
             # Ensure repo cleanup
             if repo_path:
                 try:
-                    GitService.cleanup_repository(repo_path)
+                    await GitService.cleanup_repository(repo_path)
                 except Exception as e:
                     logger.warning(f"Failed to cleanup repo: {e}")
 
@@ -189,7 +189,7 @@ class ReviewPipeline:
             return None
 
         try:
-            repo_path = GitService.clone_repository(clone_url, token)
+            repo_path = await GitService.clone_repository(clone_url, token)
             await emitter.emit("cloning_repository", "completed", EventType.STAGE_COMPLETE)
             return repo_path
         except Exception as e:
@@ -355,14 +355,14 @@ class ReviewPipeline:
                              message=str(e))
             raise  # This is critical - cannot proceed without LLM response
 
-    async def _stage_verification(self, emitter, ai_response, repo_path, diff_content):
+    async def _stage_verification(self, emitter, ai_response, repo_path, diff_content, review_id=None):
         """Stage: Verification."""
         await emitter.emit("running_verification_agent", "running", EventType.STAGE_START)
 
         try:
             import re
             changed_files = list(set(re.findall(r"diff --git a/(.*?) b/", diff_content)))
-            verified = await verification_engine.verify(ai_response, repo_path, changed_files)
+            verified = await verification_engine.verify(ai_response, repo_path, changed_files, context={"review_id": review_id})
             await emitter.emit("removing_hallucinations", "completed")
             await emitter.emit("deduplicating_findings", "completed")
             await emitter.emit("ranking_severity", "completed")

@@ -113,7 +113,8 @@ class GitHubReviewGenerator:
                     sections.append(f"- {sev} **[{finding.severity.upper()}]** {loc}")
                     sections.append(f"  {finding.description[:200]}")
                     if finding.suggestion:
-                        sections.append(f"  > 💡 Suggestion: {finding.suggestion[:200]}")
+                        sug = finding.suggestion[0] if isinstance(finding.suggestion, list) else finding.suggestion
+                        sections.append(f"  > 💡 Suggestion: {sug[:200]}")
                     sections.append("")
 
         # Positive feedback
@@ -145,7 +146,8 @@ class GitHubReviewGenerator:
             sev = SEVERITY_EMOJI.get(finding.severity, "•")
             body_parts.append(f"{sev} **{finding.severity.upper()}** — {finding.description[:300]}")
             if finding.suggestion:
-                body_parts.append(f"\n> 💡 **Suggestion:** {finding.suggestion[:200]}")
+                sug = finding.suggestion[0] if isinstance(finding.suggestion, list) else finding.suggestion
+                body_parts.append(f"\n> 💡 **Suggestion:** {sug[:200]}")
 
             comments.append(GitHubReviewComment(
                 path=finding.file_path,
