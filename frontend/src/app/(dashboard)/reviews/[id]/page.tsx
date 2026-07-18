@@ -28,7 +28,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
         <div className="h-6 w-48 bg-surface-1 rounded-lg animate-pulse mb-6" />
         <div className="h-28 bg-surface-1 border border-border rounded-xl animate-pulse mb-6" />
         <SkeletonText lines={8} />
@@ -41,7 +41,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     
     if (is404) {
       return (
-        <div className="p-6 md:p-8 max-w-5xl mx-auto text-center">
+        <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 text-center">
           <p className="text-muted-foreground text-lg">Review not found.</p>
           <Link href="/reviews" className="text-brand hover:underline mt-2 block">Back to Reviews</Link>
         </div>
@@ -49,8 +49,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     }
     
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto text-center">
-        <div className="p-6 bg-error/10 border border-error/20 rounded-xl max-w-md mx-auto">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 text-center">
+        <div className="p-4 bg-error/10 border border-error/20 rounded-xl max-w-md mx-auto">
           <TriangleAlertIcon size={32} className="text-error mx-auto mb-3" />
           <h2 className="text-lg font-bold text-foreground">Failed to load review</h2>
           <p className="text-muted-foreground text-sm mt-1 mb-4">{(error as any).message || 'An unexpected error occurred.'}</p>
@@ -86,9 +86,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       : null;
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6" aria-label="Breadcrumb">
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-8" aria-label="Breadcrumb">
         <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
         <ChevronRightIcon size={12} className="text-border" />
         <Link href="/reviews" className="hover:text-foreground transition-colors">Reviews</Link>

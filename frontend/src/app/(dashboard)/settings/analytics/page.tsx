@@ -111,7 +111,7 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">

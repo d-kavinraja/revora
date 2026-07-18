@@ -97,7 +97,7 @@ export default function RoutingPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh]">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col items-center justify-center min-h-[50vh]">
         <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
         <span className="text-sm text-muted-foreground">Loading routing config...</span>
       </div>
@@ -106,7 +106,7 @@ export default function RoutingPage() {
 
   if (availableProviders.length === 0) {
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <GitBranchIcon size={28} className="text-brand" />
@@ -128,7 +128,7 @@ export default function RoutingPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
+    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">

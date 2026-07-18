@@ -107,7 +107,7 @@ export function Sidebar() {
 
   const isActive = (href: string) => pathname === href;
 
-  const sidebarWidth = collapsed ? 'w-[68px]' : 'w-64';
+  const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[240px]';
 
   return (
     <>
