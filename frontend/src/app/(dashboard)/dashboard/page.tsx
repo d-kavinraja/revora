@@ -17,7 +17,7 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
     <div
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
-      className="relative overflow-hidden rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-white/[0.08]"
+      className="cursor-target relative overflow-hidden rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-white/[0.08]"
     >
       <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent}`} />
       <div className="flex items-start justify-between">
@@ -40,7 +40,7 @@ function ViewAllLink() {
       href="/reviews"
       onMouseEnter={() => arrowRef.current?.startAnimation()}
       onMouseLeave={() => arrowRef.current?.stopAnimation()}
-      className="text-sm text-brand hover:text-brand-hover flex items-center gap-1 transition-colors"
+      className="cursor-target text-sm text-brand hover:text-brand-hover flex items-center gap-1 transition-colors"
     >
       View all
       <MoveRightIcon ref={arrowRef} size={16} isAnimated={false} />

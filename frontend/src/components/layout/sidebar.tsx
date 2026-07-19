@@ -33,7 +33,7 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: s
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
       title={collapsed ? label : undefined}
-      className={`flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
+      className={`cursor-target flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isActive
@@ -60,7 +60,7 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
       title={collapsed ? label : undefined}
-      className={`flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
+      className={`cursor-target flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isActive
@@ -228,8 +228,7 @@ export function Sidebar() {
             onClick={handleLogoutClick}
             onMouseEnter={() => logoutIconRef.current?.startAnimation()}
             onMouseLeave={() => logoutIconRef.current?.stopAnimation()}
-            title={collapsed ? 'Sign out' : undefined}
-            className={`w-full flex items-center gap-2 rounded-lg text-sm text-muted-foreground hover:text-error hover:bg-error/10 transition-all duration-150 cursor-pointer ${
+            className={`cursor-target w-full flex items-center gap-2 rounded-lg text-sm text-muted-foreground hover:text-error hover:bg-error/10 transition-all duration-150 cursor-pointer ${
               collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
             }`}
           >
@@ -248,13 +247,13 @@ export function Sidebar() {
         <div className="flex justify-end gap-3 mt-4">
           <button
             onClick={() => dialogRef.current?.close()}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+            className="cursor-target px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirmLogout}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
+            className="cursor-target px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
           >
             Sign out
           </button>

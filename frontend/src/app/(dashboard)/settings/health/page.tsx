@@ -87,7 +87,7 @@ export default function HealthPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         {healthData.map((h) => (
-          <div key={h.provider} className="rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
+          <div key={h.provider} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-foreground">{h.provider}</span>

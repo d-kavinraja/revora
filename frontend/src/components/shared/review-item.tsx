@@ -21,7 +21,7 @@ export function ReviewItem({ review }: { review: Review }) {
         iconRef.current?.stopAnimation();
         arrowRef.current?.stopAnimation();
       }}
-      className="block rounded-xl border border-border bg-surface-1 hover:border-brand/30 transition-all duration-150 p-4 group"
+      className="cursor-target block rounded-xl border border-border bg-surface-1 hover:border-brand/30 transition-all duration-150 p-4 group"
     >
       <div className="flex items-start gap-3">
         <div className="shrink-0">
