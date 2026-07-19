@@ -127,7 +127,7 @@ export function Sidebar() {
       )}
 
       <aside
-        className={`fixed md:sticky top-0 h-screen ${sidebarWidth} border-r border-sidebar-border bg-sidebar flex flex-col shrink-0 transition-all duration-200 z-40 ${
+        className={`fixed md:sticky top-0 h-screen ${sidebarWidth} border-r border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col shrink-0 transition-all duration-200 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
