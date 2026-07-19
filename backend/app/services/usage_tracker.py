@@ -99,8 +99,12 @@ class UsageTracker:
             except Exception:
                 pass
         if start_date:
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
             query = query.where(LLMRequestLog.created_at >= start_date)
         if end_date:
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
             query = query.where(LLMRequestLog.created_at <= end_date)
         return query
 

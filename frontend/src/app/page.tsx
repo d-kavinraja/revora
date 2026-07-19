@@ -7,7 +7,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { GithubIcon, ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateicons/react/lucide";
 import { useRef } from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { SoftAurora } from "@/components/ui/SoftAurora";
 import { cn } from "@/lib/utils";
+
+import { useThemeStore } from '@/store/useThemeStore';
 
 const features = [
   {
@@ -29,14 +32,32 @@ const features = [
 
 export default function LandingPage() {
   const githubIconRef = useRef<any>(null);
+  const { theme } = useThemeStore();
+  const isLight = theme === 'light';
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden">
-      {/* Background gradients */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand/15 blur-[140px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[140px] rounded-full pointer-events-none" />
-      {/* Subtle grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none" />
+      {/* Background gradients and SoftAurora */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <SoftAurora
+          speed={0.6}
+          scale={1.5}
+          brightness={isLight ? 0.7 : 1.0}
+          color1={isLight ? "#2563eb" : "#f7f7f7"}
+          color2={isLight ? "#7c3aed" : "#e100ff"}
+          noiseFrequency={2.5}
+          noiseAmplitude={1.0}
+          bandHeight={0.5}
+          bandSpread={1.0}
+          octaveDecay={0.1}
+          layerOffset={0}
+          colorSpeed={1.0}
+          enableMouseInteraction={true}
+          mouseInfluence={0.25}
+        />
+      </div>
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand/15 blur-[140px] rounded-full pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[140px] rounded-full pointer-events-none z-0" />
 
       <header className="flex items-center justify-between p-6 z-10 border-b border-border bg-background/50 backdrop-blur-md sticky top-0">
         <div className="flex items-center gap-2.5">
@@ -75,10 +96,10 @@ export default function LandingPage() {
             transition={{ duration: 0.7, ease: 'easeOut' }}
             className="max-w-4xl space-y-6"
           >
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1] drop-shadow-md" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
               The Ultimate <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-brand to-purple-500">AI Code Reviewer</span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-foreground/80 max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
@@ -106,12 +127,12 @@ export default function LandingPage() {
             {features.map((feature, i) => {
               const Icon = feature.icon;
               return (
-                <div key={i} className="rounded-xl border border-border bg-surface-1/50 p-6 text-center space-y-3">
+                <div key={i} className="rounded-xl border border-border bg-surface-1/50 backdrop-blur-md p-6 text-center space-y-3 shadow-lg shadow-black/5">
                   <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center mx-auto text-brand">
                     <Icon size={20} />
                   </div>
-                  <h3 className="font-semibold text-foreground">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+                  <h3 className="font-semibold text-foreground drop-shadow-sm">{feature.title}</h3>
+                  <p className="text-sm text-foreground/80 leading-relaxed">{feature.description}</p>
                 </div>
               );
             })}
