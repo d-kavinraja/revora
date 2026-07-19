@@ -2,6 +2,7 @@
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { DotGrid } from '@/components/ui/DotGrid';
+import TargetCursor from '@/components/ui/TargetCursor';
 import { useThemeStore } from '@/store/useThemeStore';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background text-foreground flex w-full relative">
+      <TargetCursor 
+        spinDuration={2}
+        hideDefaultCursor={true}
+        parallaxOn={true}
+        cursorColor={isLight ? '#6366f1' : '#a855f7'}
+        cursorColorOnTarget={isLight ? '#4338ca' : '#d8b4fe'}
+      />
       {/* Background DotGrid */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <DotGrid

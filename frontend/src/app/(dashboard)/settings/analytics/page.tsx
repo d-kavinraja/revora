@@ -172,7 +172,7 @@ export default function AnalyticsPage() {
         </div>
         
         <select 
-          className="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
+          className="cursor-target bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
           value={filters.provider || ''}
           onChange={(e) => handleFilterChange('provider', e.target.value)}
         >
@@ -183,7 +183,7 @@ export default function AnalyticsPage() {
         </select>
         
         <select 
-          className="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
+          className="cursor-target bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
           value={filters.api_key_id || ''}
           onChange={(e) => handleFilterChange('api_key_id', e.target.value)}
         >
@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
         </select>
         
         <select 
-          className="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
+          className="cursor-target bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
           value={filters.model || ''}
           onChange={(e) => handleFilterChange('model', e.target.value)}
         >
@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
         </select>
         
         <select 
-          className="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
+          className="cursor-target bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:border-brand text-foreground"
           value={filters.repo_id || ''}
           onChange={(e) => handleFilterChange('repo_id', e.target.value)}
         >
@@ -225,7 +225,7 @@ export default function AnalyticsPage() {
                 setToTime('23:59');
                 setUseTime(false);
             }}
-            className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors ml-auto"
+            className="cursor-target text-xs font-medium text-muted-foreground hover:text-foreground transition-colors ml-auto"
           >
             Clear Filters
           </button>
@@ -241,11 +241,11 @@ export default function AnalyticsPage() {
         <>
           {latency && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="rounded-xl border border-border bg-surface-1 p-4">
+              <div className="cursor-target rounded-xl border border-border bg-surface-1 p-4">
                 <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">P50 Latency</div>
                 <div className="text-2xl font-bold text-foreground mt-1">{latency.p50?.toFixed(0) || 0}ms</div>
               </div>
-              <div className="rounded-xl border border-border bg-surface-1 p-4">
+              <div className="cursor-target rounded-xl border border-border bg-surface-1 p-4">
                 <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">P90 Latency</div>
                 <div className="text-2xl font-bold text-foreground mt-1">{latency.p90?.toFixed(0) || 0}ms</div>
               </div>

@@ -113,7 +113,7 @@ export default function ProvidersPage() {
           return (
             <div
               key={provider.slug}
-              className="rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md relative overflow-hidden transition-all hover:border-white/[0.08]"
+              className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md relative overflow-hidden transition-all hover:border-white/[0.08]"
             >
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-purple-500 opacity-50" />
 

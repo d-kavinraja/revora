@@ -352,7 +352,7 @@ export default function ApiKeysSettingsPage() {
               return (
                 <div
                   key={key.id}
-                  className="rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-white/[0.08] backdrop-blur-md relative"
+                  className="cursor-target rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-white/[0.08] backdrop-blur-md relative"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">

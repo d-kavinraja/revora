@@ -154,7 +154,7 @@ export default function RoutingPage() {
           const modelsForProvider = selectedProvider ? (modelsPerProvider[selectedProvider] || []) : [];
 
           return (
-            <div key={feature} className="rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
+            <div key={feature} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
               <h2 className="font-bold text-foreground mb-3">{getFeatureLabel(feature)}</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
