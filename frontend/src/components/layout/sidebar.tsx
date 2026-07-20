@@ -111,13 +111,19 @@ export function Sidebar() {
 
   return (
     <>
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-50 md:hidden p-2 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
-        aria-label="Open menu"
-      >
-        <MenuIcon size={20} />
-      </button>
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface-1/80 backdrop-blur-md border-b border-border z-40 flex items-center px-4 justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} className="rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.3)]" />
+          <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Open menu"
+        >
+          <MenuIcon size={20} />
+        </button>
+      </div>
 
       {mobileOpen && (
         <div
