@@ -93,36 +93,23 @@ class VerificationPipeline:
             status = self.confidence_engine.get_status(confidence_score)
             
             # 4. False Positive Filtering
-            # Filtering out REJECT and NEEDS_REVIEW as requested in Bug #7
-            if status in ["REJECT", "NEEDS_REVIEW"]:
+            # Only reject clearly low-confidence findings
+            if status == "REJECT":
                 metrics["false_positives_filtered"] += 1
                 metrics["rejected_findings"] += 1
                 finding_id = finding.get("id", str(uuid.uuid4()))
                 metrics["false_positive_reports"].append({
                     "finding_id": finding_id,
                     "finding": finding,
-                    "reason_category": "LOW_CONFIDENCE" if status == "REJECT" else "NEEDS_REVIEW",
-                    "details": f"Finding confidence score {confidence_score:.2f} is in {status} threshold."
+                    "reason_category": "LOW_CONFIDENCE",
+                    "details": f"Finding confidence score {confidence_score:.2f} is below threshold."
                 })
                 continue
                 
-            # 5. Evidence Generation
+            # 5. Evidence Generation (best-effort, not a hard gate)
             evidence = await self.evidence_engine.generate(finding, repo_path)
-            
-            # Bug #10 fix: Reject findings missing evidence if they require it
             if evidence:
                 finding["evidence"] = [evidence]
-            else:
-                metrics["false_positives_filtered"] += 1
-                metrics["rejected_findings"] += 1
-                finding_id = finding.get("id", str(uuid.uuid4()))
-                metrics["false_positive_reports"].append({
-                    "finding_id": finding_id,
-                    "finding": finding,
-                    "reason_category": "MISSING_EVIDENCE",
-                    "details": "Failed to generate evidence. File might be missing, unreadable, or line is invalid."
-                })
-                continue
                 
             finding["verified"] = True
             verified_findings.append(finding)

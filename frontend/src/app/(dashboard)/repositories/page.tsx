@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 
 function LangBadge({ lang }: { lang: string | null }) {
   if (!lang) return null;
@@ -324,7 +325,8 @@ function RepositoryCard({
 
         {assignedModel && (
           <div className="mb-3">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand/10 text-brand border border-brand/20">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand/10 text-brand border border-brand/20">
+              {assignedProvider && <ProviderIcon slug={assignedProvider} size={10} />}
               {assignedProvider}: {assignedModel}{keyLabel}
             </span>
           </div>

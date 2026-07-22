@@ -333,6 +333,14 @@ class ReviewContextBuilder(BaseSectionBuilder):
         elif request.review_type == ReviewType.REPO_REVIEW:
             parts.append("**Context**: Full repository review")
 
+        # Include the actual code diff for the LLM to review
+        if request.diff_content:
+            diff = request.diff_content
+            if len(diff) > 50000:
+                diff = diff[:50000] + "\n\n... (diff truncated, too large)"
+            parts.append(f"**Code Diff**:\n```diff\n{diff}\n```")
+
+
         if not parts:
             return None
 
@@ -430,3 +438,5 @@ ALL_SECTION_BUILDERS = [
     TokenMetadataBuilder(),
     ProviderMetadataBuilder(),
 ]
+
+

@@ -1,4 +1,4 @@
-﻿from typing import List
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +6,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.services.health_monitor import health_monitor
+from app.services.api_key_service import api_key_service
 from app.schemas.health import ProviderHealthRead, FailoverLogRead, HealthDashboard
 
 router = APIRouter()
@@ -16,8 +17,15 @@ async def list_provider_health(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get health status for all providers."""
-    return await health_monitor.get_all_health(db)
+    """Get health status for providers registered by the current user."""
+    user_keys = await api_key_service.get_all_for_user(db, current_user.id)
+    user_providers = {k.provider.lower() for k in user_keys if k.provider}
+
+    for p in user_providers:
+        await health_monitor.get_or_create(db, p)
+
+    all_health = await health_monitor.get_all_health(db)
+    return [h for h in all_health if h.provider.lower() in user_providers]
 
 
 @router.get("/providers/{provider}", response_model=ProviderHealthRead)
@@ -58,5 +66,8 @@ async def get_circuit_breakers(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get circuit breaker states for all providers."""
-    return await health_monitor.get_circuit_breakers(db)
+    """Get circuit breaker states for user-registered providers."""
+    user_keys = await api_key_service.get_all_for_user(db, current_user.id)
+    user_providers = {k.provider.lower() for k in user_keys if k.provider}
+    all_cb = await health_monitor.get_circuit_breakers(db)
+    return {prov: state for prov, state in all_cb.items() if prov.lower() in user_providers}

@@ -1,9 +1,11 @@
-import json
+﻿import json
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.github.webhooks import github_webhook_service
 
 router = APIRouter()
+
 
 @router.post("/github")
 async def github_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -20,12 +22,12 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
     # 3. Parse event
     event = request.headers.get("X-GitHub-Event")
     delivery_id = request.headers.get("X-GitHub-Delivery")
-    
+
     try:
         payload = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-        
+
     action = payload.get("action")
 
     # 4. Process asynchronously in the background
@@ -33,4 +35,8 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
         github_webhook_service.process_webhook, event, action, payload, delivery_id
     )
 
-    return {"status": "ok"}
+    # Return 202 Accepted (not 200) to indicate async processing
+    return JSONResponse(
+        status_code=202,
+        content={"status": "accepted", "delivery_id": delivery_id},
+    )

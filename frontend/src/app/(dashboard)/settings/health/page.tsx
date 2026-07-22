@@ -5,6 +5,7 @@ import { api, ProviderHealth, FailoverLog } from '@/lib/api';
 import { ActivityIcon, CircleCheckIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 
 export default function HealthPage() {
   const [healthData, setHealthData] = useState<ProviderHealth[]>([]);
@@ -85,50 +86,66 @@ export default function HealthPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {healthData.map((h) => (
-          <div key={h.provider} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-foreground">{h.provider}</span>
-                <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${getStatusColor(h.status)}`}>
-                  {getStatusIcon(h.status)}
-                  {h.status}
-                </span>
+      {healthData.length === 0 ? (
+        <div className="rounded-xl border border-border bg-surface-1 p-8 text-center mb-8">
+          <ActivityIcon size={32} className="mx-auto text-muted-foreground mb-3 opacity-50" />
+          <h3 className="font-semibold text-foreground text-base mb-1">No Configured Providers</h3>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+            You don't have any active API credentials registered for your account. Add an API key in Settings &rarr; API Keys to monitor provider health.
+          </p>
+          <a href="/settings/api-keys" className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-brand text-white hover:bg-brand-hover transition-colors">
+            + Add API Key
+          </a>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {healthData.map((h) => (
+            <div key={h.provider} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-surface-2 border border-border">
+                    <ProviderIcon slug={h.provider} size={14} />
+                  </span>
+                  <span className="font-bold text-foreground">{h.provider}</span>
+                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${getStatusColor(h.status)}`}>
+                    {getStatusIcon(h.status)}
+                    {h.status}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleCheckHealth(h.provider)}
+                  className="text-xs font-semibold px-2 py-1 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground border border-border transition-colors"
+                >
+                  Check
+                </button>
               </div>
-              <button
-                onClick={() => handleCheckHealth(h.provider)}
-                className="text-xs font-semibold px-2 py-1 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground border border-border transition-colors"
-              >
-                Check
-              </button>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Avg Latency</span>
+                  <div className="font-mono text-foreground">{h.avg_latency_ms.toFixed(0)}ms</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Success Rate</span>
+                  <div className="font-mono text-foreground">{(h.success_rate * 100).toFixed(1)}%</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Requests</span>
+                  <div className="font-mono text-foreground">{h.total_requests}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Circuit</span>
+                  <div className={`font-mono font-bold ${getCircuitColor(h.circuit_state)}`}>{h.circuit_state}</div>
+                </div>
+              </div>
+              {h.last_error && (
+                <div className="mt-3 p-2 rounded-lg bg-error/5 border border-error/20 text-xs text-error">
+                  {h.last_error}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-muted-foreground">Avg Latency</span>
-                <div className="font-mono text-foreground">{h.avg_latency_ms.toFixed(0)}ms</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Success Rate</span>
-                <div className="font-mono text-foreground">{(h.success_rate * 100).toFixed(1)}%</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Requests</span>
-                <div className="font-mono text-foreground">{h.total_requests}</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Circuit</span>
-                <div className={`font-mono font-bold ${getCircuitColor(h.circuit_state)}`}>{h.circuit_state}</div>
-              </div>
-            </div>
-            {h.last_error && (
-              <div className="mt-3 p-2 rounded-lg bg-error/5 border border-error/20 text-xs text-error">
-                {h.last_error}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {failovers.length > 0 && (
         <div className="rounded-xl border border-border bg-surface-1 p-5">
@@ -136,10 +153,16 @@ export default function HealthPage() {
           <div className="space-y-2">
             {failovers.slice(0, 10).map((f) => (
               <div key={f.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-2 border border-border text-xs">
-                <div>
-                  <span className="text-error font-medium">{f.failed_provider}/{f.failed_model}</span>
+                <div className="flex items-center">
+                  <span className="flex items-center gap-1.5 text-error font-medium">
+                    <ProviderIcon slug={f.failed_provider} size={12} />
+                    {f.failed_provider}/{f.failed_model}
+                  </span>
                   <span className="mx-2 text-muted-foreground">&rarr;</span>
-                  <span className="text-success font-medium">{f.fallback_provider}/{f.fallback_model}</span>
+                  <span className="flex items-center gap-1.5 text-success font-medium">
+                    <ProviderIcon slug={f.fallback_provider} size={12} />
+                    {f.fallback_provider}/{f.fallback_model}
+                  </span>
                 </div>
                 <div className="text-muted-foreground">{new Date(f.created_at).toLocaleString()}</div>
               </div>

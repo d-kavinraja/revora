@@ -46,7 +46,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${oxanium.variable} min-h-screen bg-background text-foreground antialiased font-sans`}>
+      <body className={`${inter.variable} ${oxanium.variable} min-h-screen bg-background text-foreground antialiased font-sans`} suppressHydrationWarning>
         <Providers>
           {children}
         </Providers>

@@ -5,6 +5,7 @@ import { api, ModelRoute } from '@/lib/api';
 import { GitBranchIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 
 const FEATURES = ['code_review', 'security_scan', 'documentation', 'testing', 'summarization'];
 
@@ -155,7 +156,10 @@ export default function RoutingPage() {
 
           return (
             <div key={feature} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
-              <h2 className="font-bold text-foreground mb-3">{getFeatureLabel(feature)}</h2>
+              <h2 className="flex items-center gap-2 font-bold text-foreground mb-3">
+                {selectedProvider && <ProviderIcon slug={selectedProvider} size={18} />}
+                {getFeatureLabel(feature)}
+              </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Provider</label>
@@ -219,6 +223,9 @@ export default function RoutingPage() {
         <div className="flex flex-wrap gap-2">
           {availableProviders.map((p) => (
             <div key={p} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-border">
+              <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded bg-surface-3 border border-border">
+                <ProviderIcon slug={p} size={14} />
+              </span>
               <span className="font-medium text-foreground text-sm">{getProviderDisplayName(p)}</span>
               <span className="text-xs text-muted-foreground">({modelsPerProvider[p].length} models)</span>
             </div>

@@ -16,11 +16,22 @@ class BaseValidator:
         raise NotImplementedError
 
 class RepositoryValidator(BaseValidator):
-    """Verifies that the file and line numbers actually exist in the repository."""
+    def _find_actual_file(self, repo_path: str, file_path: str) -> str:
+        full_path = os.path.join(repo_path, file_path)
+        if os.path.exists(full_path):
+            return file_path
+        
+        basename = os.path.basename(file_path)
+        for root, dirs, files in os.walk(repo_path):
+            if basename in files:
+                return os.path.relpath(os.path.join(root, basename), repo_path)
+        return file_path
+
     async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
         file_path = finding.get("file_path", "")
         line_number = finding.get("line_number")
         
+        file_path = self._find_actual_file(repo_path, file_path)
         full_path = os.path.join(repo_path, file_path)
         
         if not os.path.exists(full_path):
@@ -37,7 +48,7 @@ class RepositoryValidator(BaseValidator):
                     lines = await f.readlines()
                     
                 if 0 < line_number <= len(lines):
-                    return ValidationResult(is_valid=True, evidence=f"Verified line {line_number} in {file_path}", score_modifier=0.1)
+                    return ValidationResult(is_valid=True, evidence=f"Verified line {line_number} in {file_path}", score_modifier=0.25)
                 else:
                     return ValidationResult(is_valid=False, evidence=f"Line {line_number} is out of bounds for {file_path}", score_modifier=-0.3)
             except Exception as e:

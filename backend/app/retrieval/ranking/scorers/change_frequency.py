@@ -1,5 +1,5 @@
-import os
-import subprocess
+﻿import os
+import asyncio
 import logging
 from typing import Optional
 
@@ -38,13 +38,15 @@ class ChangeFrequencyScorer(BaseScorer):
             return self._cache[cache_key]
 
         try:
-            result = subprocess.run(
-                ["git", "-C", repo_path, "log", "--oneline", "--follow", "--since=6 months", "--", file_path],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            proc = await asyncio.create_subprocess_exec(
+                "git", "-C", repo_path, "log", "--oneline", "--follow",
+                "--since=6 months", "--", file_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            commit_count = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            output = stdout.decode() if stdout else ""
+            commit_count = len(output.strip().split("\n")) if output.strip() else 0
 
             score = min(1.0, commit_count / 20.0)
             self._cache[cache_key] = score

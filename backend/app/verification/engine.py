@@ -202,48 +202,74 @@ class VerificationEngine:
 
     def _parse_findings(self, response: str) -> List[Dict[str, Any]]:
         """
-        Mock implementation of the Review Parser.
+        Robust implementation of the Review Parser.
+        Extracts findings from LLM response, handling various formats.
         """
         findings = []
-        sections = re.split(r"###\s+", response)
+        sections = re.split(r"###\s+", response) if "###" in response else [response]
 
         for section in sections:
             if not section.strip():
                 continue
 
             category = "IMPROVEMENT"
-            if "security" in section.lower():
+            section_lower = section.lower()
+            if "security" in section_lower:
                 category = "SECURITY"
-            elif "bug" in section.lower():
+            elif "bug" in section_lower or "error" in section_lower or "issue" in section_lower:
                 category = "BUG"
-            elif "performance" in section.lower():
+            elif "performance" in section_lower:
                 category = "PERFORMANCE"
 
-            blocks = re.split(r"\n(?:\*\*|\d+\.)\s+", section)
+            blocks = re.split(r"\n\s*(?:\d+\.|\*|-|\*\*|•)\s+", "\n" + section)
             for block in blocks:
-                if not block.strip() or len(block.strip()) < 20:
+                block = block.strip()
+                if not block or len(block) < 10:
                     continue
 
-                # Broaden regex for multiple languages
-                file_match = re.search(r"`([^`]+\.(?:py|js|ts|tsx|jsx|go|java|rs|rb|php|swift|kt|scala|c|cpp|h|hpp|sh|yaml|yml|json|tf|sql))`", block)
-                line_match = re.search(r"line\s+(\d+)", block, re.IGNORECASE)
+                file_match = re.search(
+                    r"`?([a-zA-Z0-9_\-\./\\]+\.(?:py|js|ts|tsx|jsx|go|java|rs|rb|php|swift|kt|scala|c|cpp|h|hpp|sh|yaml|yml|json|tf|sql|md|txt|cfg|ini|toml|env))`?",
+                    block
+                )
+                line_match = re.search(r"line\s*:?\s*(\d+)", block, re.IGNORECASE)
                 severity_match = re.search(r"(critical|high|medium|low)", block, re.IGNORECASE)
                 
-                # Extract suggested fix
                 suggested_fix = ""
-                sug_match = re.search(r"(?:Suggestion|Fix|Suggested Fix):\s*(.*)", block, re.IGNORECASE | re.DOTALL)
+                sug_match = re.search(r"(?:Suggestion|Fix|Suggested Fix|Recommendation):\s*(.*)", block, re.IGNORECASE | re.DOTALL)
                 if sug_match:
                     suggested_fix = sug_match.group(1).strip()
 
-                if file_match:
+                # Create finding even without file match if description is substantial
+                if len(block) >= 20:
                     findings.append({
                         "id": str(uuid.uuid4())[:8],
-                        "file_path": file_match.group(1),
+                        "file_path": file_match.group(1) if file_match else "",
                         "line_number": int(line_match.group(1)) if line_match else None,
                         "category": category,
                         "severity": severity_match.group(1).upper() if severity_match else "MEDIUM",
-                        "description": block.strip()[:500],
+                        "description": block[:500],
                         "suggested_fix": suggested_fix
+                    })
+
+        # Fallback: extract any file mentions from the full response
+        if not findings:
+            file_matches = re.finditer(
+                r"`?([a-zA-Z0-9_\-\./\\]+\.(?:py|js|ts|tsx|jsx|go|java|rs|rb|php|swift|kt|scala|c|cpp|h|hpp|sh|yaml|yml|json|tf|sql))`?",
+                response
+            )
+            seen_files = set()
+            for m in file_matches:
+                filepath = m.group(1)
+                if filepath not in seen_files:
+                    seen_files.add(filepath)
+                    findings.append({
+                        "id": str(uuid.uuid4())[:8],
+                        "file_path": filepath,
+                        "line_number": None,
+                        "category": "BUG" if "bug" in response.lower() else "IMPROVEMENT",
+                        "severity": "MEDIUM",
+                        "description": response.strip()[:500],
+                        "suggested_fix": ""
                     })
 
         return findings

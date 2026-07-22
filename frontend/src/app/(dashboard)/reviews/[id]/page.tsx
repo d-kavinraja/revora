@@ -10,7 +10,7 @@ import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide'
 import { StatusBadge } from '@/components/shared/status-badge';
 import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
-import { Gemini, Claude, OpenAI, Grok, Groq, DeepSeek } from '@lobehub/icons';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useQuery } from '@tanstack/react-query';
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,15 +70,15 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   const pr = review.pull_request;
   const reviewProvider = ((review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
 
-  const providerMeta: Record<string, { label: string; icon: React.ReactNode; gradient: string }> = {
-    gemini: { label: 'Gemini AI Review', icon: <Gemini size={14} />, gradient: 'from-blue-500 to-brand' },
-    openai: { label: 'OpenAI Review', icon: <OpenAI size={14} />, gradient: 'from-green-500 to-teal-500' },
-    anthropic: { label: 'Claude AI Review', icon: <Claude size={14} />, gradient: 'from-orange-500 to-amber-500' },
-    grok: { label: 'Grok AI Review', icon: <Grok size={14} />, gradient: 'from-gray-600 to-gray-800' },
-    groq: { label: 'Groq Review', icon: <Groq size={14} />, gradient: 'from-pink-500 to-red-500' },
-    deepseek: { label: 'DeepSeek Review', icon: <DeepSeek size={14} />, gradient: 'from-sky-500 to-blue-600' },
+  const providerMeta: Record<string, { label: string; gradient: string }> = {
+    gemini: { label: 'Gemini AI Review', gradient: 'from-blue-500 to-brand' },
+    openai: { label: 'OpenAI Review', gradient: 'from-green-500 to-teal-500' },
+    anthropic: { label: 'Claude AI Review', gradient: 'from-orange-500 to-amber-500' },
+    grok: { label: 'Grok AI Review', gradient: 'from-gray-600 to-gray-800' },
+    groq: { label: 'Groq Review', gradient: 'from-pink-500 to-red-500' },
+    deepseek: { label: 'DeepSeek Review', gradient: 'from-sky-500 to-blue-600' },
   };
-  const meta = providerMeta[reviewProvider] ?? providerMeta['gemini'];
+  const meta = providerMeta[reviewProvider] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
   const repo = review.repository;
   const duration =
     review.started_at && review.completed_at
@@ -173,7 +173,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             <div>
               <span className="text-sm font-semibold text-error">AI Review Failed</span>
               {review.stats && (review.stats as Record<string, string>).provider && (
-                <span className="text-xs text-muted-foreground ml-2">
+                <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
+                  <ProviderIcon slug={(review.stats as Record<string, string>).provider} size={12} />
                   {(review.stats as Record<string, string>).provider} &middot; {(review.stats as Record<string, string>).model}
                 </span>
               )}
@@ -207,12 +208,12 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       {review.status === 'completed' && review.summary && (
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
-            <div className={`w-6 h-6 rounded-md bg-gradient-to-br ${meta.gradient} flex items-center justify-center shrink-0 text-white p-1`}>
-              {meta.icon}
+            <div className="shrink-0 flex items-center justify-center">
+              <ProviderIcon slug={reviewProvider} size={24} />
             </div>
             <div>
               <span className="text-sm font-semibold text-foreground">{meta.label}</span>
-              <span className="text-xs text-muted-foreground ml-2">
+              <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
                 {(review.stats as Record<string, string>)?.provider} &middot; {(review.stats as Record<string, string>)?.model}
               </span>
             </div>

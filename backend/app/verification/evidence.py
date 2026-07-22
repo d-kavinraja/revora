@@ -6,17 +6,35 @@ MAX_FILE_READ_BYTES = 1024 * 1024  # 1MB limit
 
 class EvidenceEngine:
     """Generates evidence for verified findings."""
-    
+    def _find_actual_file(self, repo_path: str, file_path: str) -> str:
+        full_path = os.path.join(repo_path, file_path)
+        if os.path.exists(full_path):
+            return file_path
+        
+        basename = os.path.basename(file_path)
+        for root, dirs, files in os.walk(repo_path):
+            if basename in files:
+                return os.path.relpath(os.path.join(root, basename), repo_path)
+        return file_path
+
     async def generate(self, finding: Dict[str, Any], repo_path: str) -> Optional[Dict[str, Any]]:
         file_path = finding.get("file_path", "")
         line_number = finding.get("line_number")
         
-        if not file_path or not line_number:
+        if not file_path:
             return None
             
+        file_path = self._find_actual_file(repo_path, file_path)
         full_path = os.path.join(repo_path, file_path)
         if not os.path.exists(full_path):
             return None
+            
+        if not line_number:
+            return {
+                "evidence_type": "FILE_EXISTS",
+                "content": f"File {file_path} exists.",
+                "metadata": {}
+            }
             
         try:
             # Prevent reading massive files which would cause OOM and latency

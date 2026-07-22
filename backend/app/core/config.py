@@ -39,6 +39,12 @@ class Settings(BaseSettings):
         description="PostgreSQL async connection string"
     )
 
+    # Security
+    ALLOW_HTTP_SELF_HOSTED: bool = Field(
+        default=False,
+        description="Allow HTTP for self-hosted providers like Ollama. Set to true only for local development."
+    )
+
     # Redis (optional)
     REDIS_URL: Optional[str] = Field(
         default=None,
@@ -97,4 +103,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
 

@@ -101,11 +101,11 @@ class UsageTracker:
         if start_date:
             if start_date.tzinfo is None:
                 start_date = start_date.replace(tzinfo=timezone.utc)
-            query = query.where(LLMRequestLog.created_at >= start_date)
+            query = query.where(LLMRequestLog.started_at >= start_date)
         if end_date:
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
-            query = query.where(LLMRequestLog.created_at <= end_date)
+            query = query.where(LLMRequestLog.started_at <= end_date)
         return query
 
     async def get_user_requests(
@@ -120,7 +120,7 @@ class UsageTracker:
     ) -> List[LLMRequestLog]:
         query = select(LLMRequestLog).where(LLMRequestLog.user_id == user_id)
         query = self._apply_filters(query, provider, model, api_key_id, repo_id, start_date, end_date)
-        query = query.order_by(LLMRequestLog.created_at.desc()).offset(offset).limit(limit)
+        query = query.order_by(LLMRequestLog.started_at.desc()).offset(offset).limit(limit)
         result = await db.execute(query)
         return list(result.scalars().all())
 
@@ -133,9 +133,7 @@ class UsageTracker:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
     ) -> Dict:
-        if not start_date:
-            start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-            
+
         query = select(LLMRequestLog).where(
             LLMRequestLog.user_id == user_id,
             LLMRequestLog.status == "error",

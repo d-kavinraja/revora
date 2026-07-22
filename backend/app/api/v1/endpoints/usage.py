@@ -82,23 +82,34 @@ async def get_usage_trend(
         now = end_date
     else:
         now = datetime.now(timezone.utc)
-        
+        start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = now
+
+    daily_data = await token_manager.get_daily_trend(
+        db, current_user.id, start_date, end_date, provider, model, api_key_id, repo_id
+    )
+
+    # Convert to dict for fast lookup
+    daily_map = {d["date"]: d for d in daily_data}
+
     trend = []
     for i in range(days):
-        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
-        cost = await token_manager.get_total_cost(
-            db, current_user.id, day_start, day_end, provider, model, api_key_id, repo_id
-        )
-        records = await token_manager.get_usage_by_user(
-            db, current_user.id, day_start, day_end, provider, model, api_key_id, repo_id, limit=10000
-        )
-        total_tokens = sum(r.total_tokens for r in records)
-        trend.append(DailyCost(
-            date=day_start.strftime("%Y-%m-%d"),
-            cost_usd=round(cost, 6),
-            tokens=total_tokens,
-        ))
+        day_start = (now - timedelta(days=days-1-i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_str = day_start.strftime("%Y-%m-%d")
+        
+        if date_str in daily_map:
+            trend.append(DailyCost(
+                date=date_str,
+                cost_usd=round(daily_map[date_str]["cost_usd"], 6),
+                tokens=daily_map[date_str]["tokens"]
+            ))
+        else:
+            trend.append(DailyCost(
+                date=date_str,
+                cost_usd=0.0,
+                tokens=0
+            ))
+            
     return list(reversed(trend))
 
 

@@ -15,7 +15,7 @@ from app.services.token_manager import token_manager
 from app.services.cost_estimator import cost_estimator
 from app.services.usage_tracker import usage_tracker
 from app.orchestrator.models import LLMResponse
-from app.security.prompt_guard import sanitize_messages, detect_injection
+from app.security.content_guard import sanitize_messages, detect_injection
 
 router = APIRouter()
 
@@ -51,11 +51,13 @@ async def execute_llm(
 
     # Check for injection in user messages
     for msg in sanitized_messages:
-        if msg.get("role") == "user" and detect_injection(msg.get("content", "")):
-            raise HTTPException(
-                status_code=400,
-                detail="Potential prompt injection detected. Please revise your input.",
-            )
+        if msg.get("role") == "user":
+            is_injection, patterns = detect_injection(msg.get("content", ""))
+            if is_injection:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Potential prompt injection detected. Please revise your input.",
+                )
 
     routes = await model_router.route(
         db, current_user.id, data.feature,
