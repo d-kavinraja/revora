@@ -1,4 +1,4 @@
-﻿"""Tests for SSRF URL validation."""
+"""Tests for SSRF URL validation."""
 
 import pytest
 from unittest.mock import patch, MagicMock

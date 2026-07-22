@@ -1,4 +1,4 @@
-﻿"""SSRF protection for user-supplied provider URLs.
+"""SSRF protection for user-supplied provider URLs.
 
 Validates that user-supplied URLs do not target private/internal networks
 after DNS resolution. This prevents Server-Side Request Forgery attacks
@@ -69,25 +69,23 @@ def validate_provider_url(
     if not hostname:
         raise SSRFValidationError("URL has no hostname")
 
-    # Allow Ollama on localhost with explicit opt-in
+    # Detect localhost hostnames for self-hosted Ollama opt-in
     is_localhost = hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
-    if scheme == "http":
-        if is_localhost and allow_http_self_hosted:
-            logger.info(f"Allowing HTTP to localhost (self-hosted Ollama): {hostname}")
-            return url
-        elif not allow_http_self_hosted:
-            raise SSRFValidationError(
-                f"HTTP not allowed for {hostname}. Use HTTPS, or set "
-                f"ALLOW_HTTP_SELF_HOSTED=true for local Ollama."
-            )
 
-    # DNS resolution
+    # Self-hosted localhost opt-in: allow HTTP to loopback when explicitly
+    # requested (e.g. local Ollama). This must be checked before the IP
+    # range block since loopback addresses are in the blocked ranges.
+    if scheme == "http" and is_localhost and allow_http_self_hosted:
+        logger.info(f"Allowing HTTP to localhost (self-hosted Ollama): {hostname}")
+        return url
+
+    # DNS resolution — check resolved IPs against blocked private networks.
+    # This catches SSRF via DNS rebinding, cloud metadata endpoints, etc.
     try:
         resolved_ips = socket.getaddrinfo(hostname, None)
     except socket.gaierror as e:
         raise SSRFValidationError(f"DNS resolution failed for {hostname}: {e}")
 
-    # Check each resolved IP against blocked networks
     for family, _, _, _, sockaddr in resolved_ips:
         ip_str = sockaddr[0]
         try:
@@ -101,6 +99,13 @@ def validate_provider_url(
                     f"URL targets private/internal network: {ip} is in {network}. "
                     f"This could be an SSRF attack."
                 )
+
+    # Enforce HTTPS for non-localhost URLs
+    if scheme == "http":
+        raise SSRFValidationError(
+            f"HTTP not allowed for {hostname}. Use HTTPS, or set "
+            f"ALLOW_HTTP_SELF_HOSTED=true for local Ollama."
+        )
 
     return url
 

@@ -1,4 +1,4 @@
-﻿"""Content guard for input sanitization and output filtering.
+"""Content guard for input sanitization and output filtering.
 
 Merges the functionality of prompt_guard.py and sanitizer.py into a single
 unified module. Handles both prompt injection detection and secret redaction.
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # --- Secret Patterns (superset of both original modules) ---
 SECRET_PATTERNS = [
     # OpenAI / Anthropic / Groq / xAI keys
-    (r"sk-[a-zA-Z0-9]{20,}", "[REDACTED]"),
+    (r"sk-[a-zA-Z0-9]{15,}", "[REDACTED]"),
     (r"sk-ant-[a-zA-Z0-9]{20,}", "[REDACTED]"),
     (r"xai-[a-zA-Z0-9]{20,}", "[REDACTED]"),
     (r"gsk_[a-zA-Z0-9]{20,}", "[REDACTED]"),
