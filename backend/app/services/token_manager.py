@@ -143,5 +143,37 @@ class TokenManager:
         )
         return breakdown["total_cost_usd"]
 
+    async def get_daily_trend(
+        self, db: AsyncSession, user_id: uuid.UUID,
+        start: Optional[datetime] = None, end: Optional[datetime] = None,
+        provider: Optional[str] = None, model: Optional[str] = None,
+        api_key_id: Optional[str] = None, repo_id: Optional[str] = None,
+    ) -> List[Dict]:
+        query = select(
+            func.date_trunc('day', LlmTokenUsage.created_at).label('day'),
+            func.sum(LlmTokenUsage.total_cost_usd).label('cost_usd'),
+            func.sum(LlmTokenUsage.total_tokens).label('tokens')
+        ).where(LlmTokenUsage.user_id == user_id)
+        
+        if start:
+            query = query.where(LlmTokenUsage.created_at >= start)
+        if end:
+            query = query.where(LlmTokenUsage.created_at <= end)
+            
+        query = self._apply_filters(query, provider, model, api_key_id, repo_id)
+        
+        query = query.group_by('day').order_by('day')
+        
+        result = await db.execute(query)
+        rows = result.all()
+        
+        return [
+            {
+                "date": row.day.strftime("%Y-%m-%d") if row.day else "",
+                "cost_usd": float(row.cost_usd) if row.cost_usd else 0.0,
+                "tokens": int(row.tokens) if row.tokens else 0
+            }
+            for row in rows
+        ]
 
 token_manager = TokenManager()

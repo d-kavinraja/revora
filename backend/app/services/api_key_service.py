@@ -47,22 +47,42 @@ class ApiKeyService:
         await db.commit()
 
     async def get_decrypted_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> Optional[str]:
+        """Get decrypted API key, preferring the most recently used valid key."""
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.user_id == user_id)
-            .where(ApiKey.provider == provider)
+            .where(ApiKey.provider.ilike(provider))
             .where(ApiKey.is_valid == True)
+            .order_by(ApiKey.last_used_at.desc().nulls_last())
         )
         key_obj = result.scalars().first()
         if not key_obj:
             return None
         return encryption_service.decrypt(key_obj.encrypted_key)
 
+    async def get_all_decrypted_keys(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> list:
+        """Get ALL decrypted API keys for a provider (for retry logic)."""
+        result = await db.execute(
+            select(ApiKey)
+            .where(ApiKey.user_id == user_id)
+            .where(ApiKey.provider.ilike(provider))
+            .where(ApiKey.is_valid == True)
+            .order_by(ApiKey.last_used_at.desc().nulls_last())
+        )
+        keys = result.scalars().all()
+        decrypted = []
+        for k in keys:
+            try:
+                decrypted.append((k.id, encryption_service.decrypt(k.encrypted_key)))
+            except Exception:
+                continue
+        return decrypted
+
     async def get_usable_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> Optional[ApiKey]:
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.user_id == user_id)
-            .where(ApiKey.provider == provider)
+            .where(ApiKey.provider.ilike(provider))
             .where(ApiKey.is_valid == True)
             .order_by(ApiKey.last_used_at.desc().nulls_last())
         )
@@ -132,3 +152,5 @@ class ApiKeyService:
 
 
 api_key_service = ApiKeyService()
+
+

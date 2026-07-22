@@ -9,34 +9,7 @@ import {
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
-import {
-  Gemini,
-  OpenAI,
-  Claude,
-  DeepSeek,
-  Groq,
-  OpenRouter,
-  Azure,
-  Ollama,
-  Cohere,
-  Mistral
-} from '@lobehub/icons';
-
-const getProviderIcon = (slug: string) => {
-  switch (slug) {
-    case 'gemini': return <Gemini.Color size={24} />;
-    case 'openai': return <OpenAI size={24} />;
-    case 'anthropic': return <Claude.Color size={24} />;
-    case 'deepseek': return <DeepSeek.Color size={24} />;
-    case 'groq': return <Groq size={24} />;
-    case 'openrouter': return <OpenRouter size={24} />;
-    case 'azure': return <Azure.Color size={24} />;
-    case 'ollama': return <Ollama size={24} />;
-    case 'cohere': return <Cohere.Color size={24} />;
-    case 'mistral': return <Mistral.Color size={24} />;
-    default: return <GlobeIcon size={24} className="text-muted-foreground" />;
-  }
-};
+import { ProviderIcon } from '@/components/ui/provider-icon';
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -121,7 +94,7 @@ export default function ProvidersPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5">
                     <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-surface-2 border border-border">
-                      {getProviderIcon(provider.slug)}
+                      <ProviderIcon slug={provider.slug} size={16} />
                     </span>
                     <span className="font-bold text-foreground text-base">{provider.display_name}</span>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">

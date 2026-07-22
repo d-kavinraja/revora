@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background text-foreground flex w-full relative">
-      <TargetCursor 
+      <TargetCursor
         spinDuration={2}
         hideDefaultCursor={true}
         parallaxOn={true}

@@ -8,7 +8,7 @@ import uuid
 import asyncio
 import logging
 import httpx
-from typing import Optional
+from typing import Optional, Tuple
 
 from litellm import completion
 
@@ -31,7 +31,7 @@ class LLMService:
         model: str = None,
         api_key_id: Optional[str] = None,
         timeout: int = LLM_DEFAULT_TIMEOUT,
-    ) -> Optional[str]:
+    ) -> Tuple[Optional[str], int, int]:
         """Fetch the user's API key and call LiteLLM asynchronously.
 
         Args:
@@ -43,7 +43,7 @@ class LLMService:
             timeout: Timeout in seconds for the LLM call.
 
         Returns:
-            LLM response text or None on failure.
+            Tuple of (response_text, input_tokens, output_tokens).
 
         Raises:
             ValueError: If no valid API key is found.
@@ -61,24 +61,30 @@ class LLMService:
 
         try:
             # Run synchronous completion in a thread pool with built-in retries
+            # litellm 1.91.x: use max_retries instead of num_retries
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     completion,
                     model=model_to_use,
                     messages=messages,
                     api_key=api_key,
-                    num_retries=3,  # LiteLLM will auto-retry on 429s with exponential backoff
-                ),
+                                    ),
                 timeout=timeout,
             )
 
-            if response and response.choices and response.choices[0].message:
+            # Handle dict responses (litellm sometimes returns dicts instead of ModelResponse)
+            if isinstance(response, dict):
+                logger.warning(f"litellm returned dict for {model_to_use}: {response}")
+                error_msg = response.get("error", {}).get("message", "") if isinstance(response.get("error"), dict) else str(response.get("error", ""))
+                raise RuntimeError(f"LLM provider returned error response: {error_msg or response}")
+
+            if response and hasattr(response, "choices") and response.choices and response.choices[0].message:
                 content = response.choices[0].message.content
                 input_tokens = 0
                 output_tokens = 0
-                if hasattr(response, 'usage') and response.usage:
-                    input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
-                    output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
+                if hasattr(response, "usage") and response.usage:
+                    input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+                    output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
                 return content, input_tokens, output_tokens
             return None, 0, 0
 
@@ -97,17 +103,15 @@ class LLMService:
                     return await self._native_gemini_fallback(native_model, messages, api_key, timeout)
                 except Exception as fallback_e:
                     logger.error(f"Native Gemini fallback also failed: {fallback_e}")
-                    # Allow the fallback exception to be processed by the blocks below
                     e = fallback_e
                     error_str = str(e).lower()
-                    model_to_use = native_model # Update model name for accurate error messaging
+                    model_to_use = native_model
 
             if "429" in error_str or "rate" in error_str or "quota" in error_str:
-                # Provide a highly actionable message for Google's specific 20-request/day free tier limit on 2.0/2.5 models
                 if "free_tier_requests" in error_str or "generaterequestsperday" in error_str:
                     raise RuntimeError(
                         f"Google limits the '{model_to_use}' model to only 20 requests per day on the Free Tier, which you have exceeded. "
-                        f"To continue using Revora for free, please edit your Repository Settings and select a model with higher free limits, such as 'gemini-1.5-flash' or 'gemma'."
+                        f"To continue using Revora for free, please edit your Repository Settings and select a model with higher free limits, such as 'gemini-2.5-flash' or 'gemma-4-26b-a4b-it'."
                     ) from e
                 
                 raise RuntimeError(
@@ -132,9 +136,8 @@ class LLMService:
             else:
                 raise RuntimeError(f"AI provider error for '{model_to_use}': {e}") from e
 
-    async def _native_gemini_fallback(self, model: str, messages: list, api_key: str, timeout: int) -> Optional[str]:
+    async def _native_gemini_fallback(self, model: str, messages: list, api_key: str, timeout: int) -> Tuple[Optional[str], int, int]:
         """Fallback adapter for Gemini using native REST API via httpx."""
-        # Convert litellm messages to Gemini format
         gemini_contents = []
         system_instruction = None
         for msg in messages:
@@ -152,7 +155,6 @@ class LLMService:
             
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
-        # Exponential backoff loop for rate limits in native adapter
         for attempt in range(4):
             try:
                 async with httpx.AsyncClient() as client:
@@ -170,14 +172,12 @@ class LLMService:
                     return None, 0, 0
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < 3:
-                    # Exponential backoff: wait 2s, 4s, 8s
                     wait_time = 2 ** (attempt + 1)
                     logger.warning(f"Native Gemini fallback hit 429. Retrying in {wait_time}s... (Attempt {attempt+1}/3)")
                     await asyncio.sleep(wait_time)
                     continue
                 raise e
             except Exception as e:
-                # Other exceptions raise immediately
                 raise e
 
     async def _resolve_api_key(
@@ -188,49 +188,70 @@ class LLMService:
     ) -> Optional[str]:
         """Resolve API key from database or environment.
 
-        Args:
-            user_id: User UUID.
-            provider: Provider name.
-            api_key_id: Optional specific key ID.
-
-        Returns:
-            Decrypted API key string or None.
+        If api_key_id is provided, resolve that specific key.
+        Otherwise, get ALL keys for the provider and return the first valid one.
         """
         try:
             async with AsyncSessionLocal() as db:
                 if api_key_id:
+                    logger.info(f"Resolving API key by id={api_key_id} for user={user_id}")
                     from app.core.security import encryption_service
-
                     db_key = await api_key_service.get_by_id(db, uuid.UUID(api_key_id))
                     if db_key and db_key.user_id == user_id and db_key.is_valid:
-                        return encryption_service.decrypt(db_key.encrypted_key)
+                        decrypted = encryption_service.decrypt(db_key.encrypted_key)
+                        logger.info(f"Resolved API key by id: {db_key.label} (provider={db_key.provider})")
+                        return decrypted
+                    logger.warning(f"API key id={api_key_id} not found or not valid for user={user_id}")
                     return None
                 else:
-                    return await api_key_service.get_decrypted_key(
-                        db, user_id, provider
-                    )
+                    logger.info(f"Resolving API key by provider={provider} for user={user_id}")
+                    # Try all keys for this provider, preferring recently used
+                    all_keys = await api_key_service.get_all_decrypted_keys(db, user_id, provider)
+                    if all_keys:
+                        key_id, key_value = all_keys[0]
+                        logger.info(f"Resolved API key: id={key_id} (provider={provider}, {len(all_keys)} total keys)")
+                        return key_value
+                    logger.warning(f"No API key found for provider={provider}, user={user_id}")
+                    return None
         except Exception as e:
             logger.warning(f"Failed to resolve API key from database: {e}")
 
+    async def _get_all_provider_keys(
+        self,
+        user_id: uuid.UUID,
+        provider: str,
+    ) -> list:
+        """Get all decrypted API keys for a provider (for retry logic).
+        
+        Falls back to environment variables if no database keys found.
+        """
+        try:
+            async with AsyncSessionLocal() as db:
+                db_keys = await api_key_service.get_all_decrypted_keys(db, user_id, provider)
+                if db_keys:
+                    return db_keys
+        except Exception as e:
+            logger.warning(f"Failed to get all API keys from database: {e}")
+
         # Fallback to environment variables
         from app.core.config import settings
-
-        env_keys = {
-            "gemini": settings.GEMINI_API_KEY,
-            "openai": settings.OPENAI_API_KEY,
+        env_key_map = {
+            "gemini": getattr(settings, "GEMINI_API_KEY", None),
+            "openai": getattr(settings, "OPENAI_API_KEY", None),
+            "anthropic": getattr(settings, "ANTHROPIC_API_KEY", None),
         }
-        return env_keys.get(provider)
+        env_key = env_key_map.get(provider)
+        if env_key:
+            logger.info(f"Using environment variable API key for provider={provider}")
+            return [(None, env_key)]
+        return []
 
     def _resolve_model(self, provider: str, model: Optional[str] = None):
-        """Resolve model name through Canonical Model Registry.
-
-        Returns:
-            Tuple of (resolved_litellm_model_str, CanonicalModel or None)
-        """
+        """Resolve model name through Canonical Model Registry."""
         defaults = {
             "openai": "gpt-4o",
             "anthropic": "claude-3-5-sonnet-20240620",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-2.5-flash",
             "deepseek": "deepseek-chat",
             "groq": "llama-3.3-70b-versatile",
             "grok": "grok-2",
@@ -262,3 +283,10 @@ class LLMService:
 
 
 llm_service = LLMService()
+
+
+
+
+
+
+

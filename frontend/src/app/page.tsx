@@ -72,14 +72,14 @@ export default function LandingPage() {
         </div>
         <nav className="flex items-center gap-3">
           <ThemeToggle />
-          <Link 
-            href="/login" 
+          <Link
+            href="/login"
             className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]")}
           >
             Sign In
           </Link>
-          <Link 
-            href="/register" 
+          <Link
+            href="/register"
             className={cn(buttonVariants({ variant: "default" }), "bg-foreground text-background hover:bg-foreground/90")}
           >
             Get Started
@@ -103,7 +103,7 @@ export default function LandingPage() {
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
-              <Link 
+              <Link
                 href="/login"
                 onMouseEnter={() => githubIconRef.current?.startAnimation()}
                 onMouseLeave={() => githubIconRef.current?.stopAnimation()}

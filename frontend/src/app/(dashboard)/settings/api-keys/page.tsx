@@ -14,6 +14,7 @@ import {
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 
 export default function ApiKeysSettingsPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -197,7 +198,7 @@ export default function ApiKeysSettingsPage() {
     }
   };
 
-  const getProviderIcon = (prov: string) => {
+  const getProviderLabel = (prov: string) => {
     const names: Record<string, string> = {
       openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini',
       groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
@@ -358,8 +359,9 @@ export default function ApiKeysSettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <span className="font-bold text-foreground text-base">{key.label}</span>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
-                          {getProviderIcon(key.provider)}
+                        <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
+                          <ProviderIcon slug={key.provider} size={12} />
+                          {getProviderLabel(key.provider)}
                         </span>
 
                         {key.is_valid !== null && (

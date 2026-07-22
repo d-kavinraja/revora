@@ -27,7 +27,7 @@ SECTION_ALLOCATIONS = {
         "coding_conventions": 200,
         "relevant_files": 1000,
         "relevant_code": 800,
-        "review_context": 200,
+        "review_context": 2000,
         "output_format": 300,
     },
     RepositorySize.MEDIUM: {
@@ -40,7 +40,7 @@ SECTION_ALLOCATIONS = {
         "relevant_code": 1500,
         "test_files": 500,
         "static_analysis": 500,
-        "review_context": 300,
+        "review_context": 4000,
         "output_format": 400,
     },
     RepositorySize.LARGE: {
@@ -54,7 +54,7 @@ SECTION_ALLOCATIONS = {
         "test_files": 800,
         "static_analysis": 700,
         "security_context": 500,
-        "review_context": 400,
+        "review_context": 6000,
         "output_format": 500,
     },
     RepositorySize.MONOREPO: {
@@ -69,7 +69,7 @@ SECTION_ALLOCATIONS = {
         "static_analysis": 800,
         "security_context": 600,
         "impact_context": 500,
-        "review_context": 500,
+        "review_context": 8000,
         "output_format": 600,
     },
     RepositorySize.ENTERPRISE: {
@@ -84,7 +84,7 @@ SECTION_ALLOCATIONS = {
         "static_analysis": 1000,
         "security_context": 800,
         "impact_context": 700,
-        "review_context": 600,
+        "review_context": 10000,
         "output_format": 700,
     },
 }

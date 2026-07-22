@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { api, LLMRequestLog, Provider, ApiKey, Repository, UsageFilters } from '@/lib/api';
-import { ActivityIcon } from '@animateicons/react/lucide';
-import { ListFilterIcon, CalendarIcon } from 'lucide-react';
+import { ActivityIcon, ListFilterIcon, CalendarIcon, TrendingUpIcon, AlertTriangleIcon } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { DateRangeFilter } from '@/components/shared/date-range-filter';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
+import { UsageChart } from '@/components/usage/usage-chart';
+import { DailyCost } from '@/lib/api';
 
 export default function AnalyticsPage() {
   const [requests, setRequests] = useState<LLMRequestLog[]>([]);
   const [errors, setErrors] = useState<{ total_errors: number; by_type: Record<string, number>; by_provider: Record<string, number>; error_rate: number } | null>(null);
   const [latency, setLatency] = useState<Record<string, number> | null>(null);
+  const [trendData, setTrendData] = useState<DailyCost[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -77,15 +80,17 @@ export default function AnalyticsPage() {
           queryFilters.end_date = useTime && toTime ? `${toDate}T${toTime}:59` : `${toDate}T23:59:59`;
         }
 
-        const [reqData, errData, latData] = await Promise.all([
+        const [reqData, errData, latData, trData] = await Promise.all([
           api.getRequestLogs(50, 0, queryFilters),
           api.getErrorSummary(queryFilters),
           api.getLatencyStats(queryFilters),
+          api.getUsageTrend(30, queryFilters),
         ]);
         if (!controller.signal.aborted) {
           setRequests(reqData);
           setErrors(errData);
           setLatency(latData);
+          setTrendData(trData);
         }
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -232,6 +237,9 @@ export default function AnalyticsPage() {
         )}
       </div>
 
+      <UsageChart data={trendData} isLoading={loading} />
+
+      {/* Latency Cards */}
       {loading && !latency ? (
         <div className="flex flex-col items-center justify-center min-h-[30vh]">
           <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
@@ -298,7 +306,10 @@ export default function AnalyticsPage() {
                   <div key={req.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-2 border border-border text-xs">
                     <div className="flex items-center gap-3">
                       <span className={`w-2 h-2 rounded-full ${req.status === 'success' ? 'bg-success' : req.status === 'error' ? 'bg-error' : 'bg-warning'}`} />
-                      <span className="font-medium text-foreground">{req.provider}/{req.model}</span>
+                      <span className="font-medium text-foreground flex items-center gap-1.5">
+                        <ProviderIcon slug={req.provider} size={14} />
+                        {req.provider}/{req.model}
+                      </span>
                       <span className="text-muted-foreground">{req.feature}</span>
                     </div>
                     <div className="flex items-center gap-4 text-muted-foreground">

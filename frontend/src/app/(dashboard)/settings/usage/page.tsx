@@ -6,9 +6,13 @@ import { ChartBarIcon, WalletIcon, TrashIcon, ListFilterIcon, CalendarIcon } fro
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { DateRangeFilter } from '@/components/shared/date-range-filter';
 import { useToast } from '@/components/ui/toaster';
+import { ProviderIcon } from '@/components/ui/provider-icon';
+import { UsageChart } from '@/components/usage/usage-chart';
+import { DailyCost } from '@/lib/api';
 
 export default function UsagePage() {
   const [summary, setSummary] = useState<UsageSummary | null>(null);
+  const [trendData, setTrendData] = useState<DailyCost[]>([]);
   const [budgets, setBudgets] = useState<CostBudget[]>([]);
   
   // Filter options
@@ -79,13 +83,17 @@ export default function UsagePage() {
         
         const activePeriod = (fromDate || toDate) ? 'custom' : period;
 
-        const [sumData, budData] = await Promise.all([
+        const trendDays = period === 'month' ? 30 : (period === 'week' ? 7 : 1);
+
+        const [sumData, budData, trData] = await Promise.all([
           api.getUsageSummary(activePeriod, queryFilters),
           api.getBudgets(),
+          api.getUsageTrend(trendDays, queryFilters),
         ]);
         if (!controller.signal.aborted) {
           setSummary(sumData);
           setBudgets(budData);
+          setTrendData(trData);
         }
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -249,6 +257,8 @@ export default function UsagePage() {
         )}
       </div>
 
+      <UsageChart data={trendData} isLoading={loading} />
+
       {loading && !summary ? (
         <div className="flex flex-col items-center justify-center min-h-[30vh]">
           <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
@@ -283,7 +293,10 @@ export default function UsagePage() {
               <div className="space-y-3">
                 {Object.entries(summary.by_provider).map(([provider, cost]) => (
                   <div key={provider} className="flex items-center justify-between">
-                    <span className="text-sm text-foreground font-medium">{provider}</span>
+                    <span className="flex items-center gap-1.5 text-sm text-foreground font-medium">
+                      <ProviderIcon slug={provider} size={14} />
+                      {provider}
+                    </span>
                     <div className="flex items-center gap-3">
                       <div className="w-32 h-2 bg-surface-3 rounded-full overflow-hidden">
                         <div
@@ -314,7 +327,11 @@ export default function UsagePage() {
                   <div key={budget.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-2 border border-border">
                     <div>
                       <span className="text-sm font-medium text-foreground">{budget.budget_type} limit</span>
-                      {budget.provider && <span className="ml-2 text-xs text-muted-foreground">for {budget.provider}</span>}
+                      {budget.provider && (
+                        <span className="ml-2 flex items-center gap-1 text-xs text-muted-foreground inline-flex">
+                          for <ProviderIcon slug={budget.provider} size={12} /> {budget.provider}
+                        </span>
+                      )}
                       <div className="text-xs text-muted-foreground mt-0.5">
                         ${budget.spent_usd.toFixed(4)} / ${budget.limit_usd.toFixed(2)}
                       </div>

@@ -29,7 +29,7 @@ from app.prompt_engine.models import ReviewType
 from app.orchestrator.orchestrator import llm_orchestrator
 from app.verification.engine import verification_engine
 from app.github_review.generator import github_review_generator
-from app.security.sanitizer import sanitize_content
+from app.security.content_guard import sanitize_input
 from app.github.client import github_client
 from app.ai.git_utils import GitService
 
@@ -62,6 +62,7 @@ class ReviewPipeline:
         model: str = None,
         clone_url: str = None,
         token: str = None,
+        api_key_id: str = None,
     ) -> dict:
         """Execute the full review pipeline.
 
@@ -95,7 +96,7 @@ class ReviewPipeline:
             await emitter.emit_log("preparing_review", f"Starting review for PR #{pr_number}")
 
             # Stage 2: Clone repository
-            repo_path = await self._stage_clone(emitter, clone_url, token)
+            repo_path = await self._stage_clone(emitter, clone_url, token, head_sha)
 
             # Stage 3: Intelligence analysis (if cloned)
             intelligence_data = await self._stage_intelligence(emitter, repo_path)
@@ -104,9 +105,8 @@ class ReviewPipeline:
             index = await self._stage_indexing(emitter, repo_path)
 
             # Cleanup cloned repo immediately after indexing
-            if repo_path:
-                await GitService.cleanup_repository(repo_path)
-                repo_path = None
+            # (Removed early cleanup so Verification Engine can access the files)
+            # Cleanup will be handled in the finally block.
 
             # Stage 5: Knowledge retrieval
             conventions, rules, repo_id = await self._stage_knowledge(
@@ -126,7 +126,7 @@ class ReviewPipeline:
 
             # Stage 8: LLM call
             llm_response = await self._stage_llm(
-                emitter, prompt, user_id, provider, model
+                emitter, prompt, user_id, provider, model, api_key_id
             )
             metrics.update({
                 "provider": llm_response.provider,
@@ -142,7 +142,7 @@ class ReviewPipeline:
             )
 
             # Stage 10: Generate and publish review
-            await self._stage_publish(
+            review_summary_body = await self._stage_publish(
                 emitter, verified, pr_title, installation_id,
                 owner, repo_name, pr_number, intelligence_data,
                 llm_response, start
@@ -150,7 +150,7 @@ class ReviewPipeline:
 
             # Save to DB
             await self._save_completed(
-                review_id, verified, llm_response, metrics, start, user_id
+                review_id, verified, llm_response, metrics, start, user_id, review_summary_body, api_key_id
             )
 
             # Complete
@@ -179,7 +179,7 @@ class ReviewPipeline:
                 except Exception as e:
                     logger.warning(f"Failed to cleanup repo: {e}")
 
-    async def _stage_clone(self, emitter, clone_url, token):
+    async def _stage_clone(self, emitter, clone_url, token, head_sha=None):
         """Stage: Clone repository."""
         await emitter.emit("cloning_repository", "running", EventType.STAGE_START)
 
@@ -189,7 +189,7 @@ class ReviewPipeline:
             return None
 
         try:
-            repo_path = await GitService.clone_repository(clone_url, token)
+            repo_path = await GitService.clone_repository(clone_url, token, head_sha)
             await emitter.emit("cloning_repository", "completed", EventType.STAGE_COMPLETE)
             return repo_path
         except Exception as e:
@@ -315,7 +315,7 @@ class ReviewPipeline:
             prompt = await prompt_builder.compile(
                 review_type=ReviewType.PR_REVIEW,
                 repo_path=".",
-                diff_content=sanitize_content(diff_content),
+                diff_content=sanitize_input(diff_content),
                 retrieval_result=retrieval_result,
                 intelligence_data=intelligence_data or {},
                 conventions=conventions or "",
@@ -332,7 +332,7 @@ class ReviewPipeline:
                              message=str(e))
             raise  # This is critical - cannot proceed without prompt
 
-    async def _stage_llm(self, emitter, prompt, user_id, provider, model):
+    async def _stage_llm(self, emitter, prompt, user_id, provider, model, api_key_id=None):
         """Stage: LLM call."""
         await emitter.emit("selecting_ai_provider", "running", EventType.STAGE_START)
 
@@ -341,6 +341,8 @@ class ReviewPipeline:
                 prompt=prompt,
                 user_id=user_id,
                 preferred_provider=provider,
+                preferred_model=model,
+                api_key_id=api_key_id,
                 callback=emitter.emit,
             )
             await emitter.emit("receiving_ai_response", "completed", metrics={
@@ -414,15 +416,37 @@ class ReviewPipeline:
                 await emitter.emit("publishing_review", "completed")
             except Exception as e:
                 logger.error(f"Failed to publish review to GitHub: {e}")
-                await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED,
-                                 message=str(e))
+                if github_comments:
+                    logger.info("Attempting to publish review without inline comments as fallback")
+                    try:
+                        fallback_body = review_summary.body + "\n\n> Note: Some inline comments were omitted because they referenced unmodified lines."
+                        await github_client.create_pr_review(
+                            installation_id=installation_id,
+                            owner=owner,
+                            repo=repo_name,
+                            pull_number=pr_number,
+                            body=fallback_body,
+                            event=review_summary.event,
+                            comments=None,
+                        )
+                        await emitter.emit("publishing_review", "completed")
+                    except Exception as fallback_e:
+                        logger.error(f"Fallback publish also failed: {fallback_e}")
+                        await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(fallback_e))
+                        raise fallback_e
+                else:
+                    await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(e))
+                    raise e
 
         except Exception as e:
             logger.warning(f"Review generation failed: {e}")
             await emitter.emit("generating_review_summary", "failed",
                              EventType.STAGE_FAILED, message=str(e))
+            return None
+            
+        return review_summary.body
 
-    async def _save_completed(self, review_id, verified, llm_response, metrics, start, user_id=None):
+    async def _save_completed(self, review_id, verified, llm_response, metrics, start, user_id=None, review_summary_body=None, api_key_id=None):
         """Save completed review to database and record usage stats."""
         # --- 1. Save review status (own session) ---
         try:
@@ -432,6 +456,8 @@ class ReviewPipeline:
                 if db_review:
                     db_review.status = "completed"
                     db_review.completed_at = datetime.now(timezone.utc)
+                    if review_summary_body:
+                        db_review.summary = review_summary_body
                     db_review.stats = {
                         "provider": llm_response.provider,
                         "model": llm_response.model,
@@ -487,6 +513,7 @@ class ReviewPipeline:
                         latency_ms=llm_response.latency_ms or 0.0,
                         is_fallback=llm_response.is_fallback,
                         review_id=review_id,
+                        api_key_id=api_key_id,
                     )
                     logger.info(f"[usage] token_manager.record_usage committed for review {review_id}")
 
@@ -506,6 +533,8 @@ class ReviewPipeline:
                         cost_usd=input_cost + output_cost,
                         started_at=datetime.now(timezone.utc),
                         was_fallback=llm_response.is_fallback,
+                        api_key_id=api_key_id,
+                        review_id=review_id,
                     )
                     logger.info(f"[usage] usage_tracker.log_request committed for review {review_id}")
             else:

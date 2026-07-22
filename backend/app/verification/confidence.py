@@ -5,9 +5,9 @@ class ConfidenceEngine:
     """Calculates confidence scores based on validation results."""
     
     BASE_SCORE = 0.5  # Start at 50%
-    THRESHOLD_REJECT = 0.40
-    THRESHOLD_NEEDS_REVIEW = 0.70
-    THRESHOLD_GOOD = 0.90
+    THRESHOLD_REJECT = 0.30
+    THRESHOLD_NEEDS_REVIEW = 0.50
+    THRESHOLD_GOOD = 0.70
     
     def calculate(self, finding: Dict[str, Any], validation_results: List[ValidationResult]) -> float:
         """

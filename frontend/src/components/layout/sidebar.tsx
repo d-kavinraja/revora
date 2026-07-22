@@ -83,7 +83,7 @@ export function Sidebar() {
   const logoutIconRef = useRef<any>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -96,11 +96,11 @@ export function Sidebar() {
   }, []);
 
   const handleLogoutClick = () => {
-    dialogRef.current?.showModal();
+    setIsLogoutModalOpen(true);
   };
 
   const handleConfirmLogout = () => {
-    dialogRef.current?.close();
+    setIsLogoutModalOpen(false);
     logout();
     router.push('/login');
   };
@@ -244,27 +244,28 @@ export function Sidebar() {
         </div>
       </aside>
 
-      <dialog
-        ref={dialogRef}
-        className="p-6 rounded-xl border border-border bg-surface-1 text-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm m-auto open:flex flex-col gap-4 max-w-sm w-full"
-      >
-        <h3 className="text-lg font-bold">Sign out</h3>
-        <p className="text-sm text-muted-foreground">Are you sure you want to sign out?</p>
-        <div className="flex justify-end gap-3 mt-4">
-          <button
-            onClick={() => dialogRef.current?.close()}
-            className="cursor-target px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirmLogout}
-            className="cursor-target px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
-          >
-            Sign out
-          </button>
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="p-6 rounded-xl border border-border bg-surface-1 text-foreground shadow-2xl flex flex-col gap-4 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-bold">Sign out</h3>
+            <p className="text-sm text-muted-foreground">Are you sure you want to sign out?</p>
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setIsLogoutModalOpen(false)}
+                className="cursor-target px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="cursor-target px-4 py-2 rounded-lg text-sm font-medium bg-error text-white hover:bg-error/90 transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
-      </dialog>
+      )}
     </>
   );
 }
