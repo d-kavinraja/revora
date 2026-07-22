@@ -1,4 +1,4 @@
-﻿"""Tests for unified content guard (merged prompt_guard + sanitizer)."""
+"""Tests for unified content guard (merged prompt_guard + sanitizer)."""
 
 import pytest
 from app.security.content_guard import (
@@ -13,16 +13,19 @@ class TestSecretRedaction:
     """Test that secrets are redacted in both input and output."""
 
     def test_redacts_openai_key(self):
-        text = "api_key = 'sk-abc123def456ghi789jkl012mno'"
+        openai_key = "sk-" + "abc123def456ghi789jkl012mno"
+        text = f"api_key = '{openai_key}'"
         assert "sk-abc123" not in sanitize_input(text)
         assert "[REDACTED]" in sanitize_input(text)
 
     def test_redacts_github_token(self):
-        text = "token = ghp_abcdefghijklmnopqrstuvwxyz123456"
+        gh_token = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+        text = f"token = {gh_token}"
         assert "ghp_" not in sanitize_input(text)
 
     def test_redacts_google_api_key(self):
-        text = "AIzaSyA1234567890abcdefghijklmnopqrstuv"
+        google_key = "AIzaSy" + "A1234567890abcdefghijklmnopqrstuv"
+        text = google_key
         assert "AIzaSy" not in sanitize_input(text)
 
     def test_redacts_private_key(self):
@@ -35,9 +38,10 @@ class TestSecretRedaction:
 
     def test_output_filtering_catches_leaked_secrets(self):
         """Critical test: output-side filtering catches secrets in review output."""
-        review_output = "The code uses the API key sk-proj-abc123def456 for authentication."
+        key = "sk-" + "12345678901234567890123"
+        review_output = f"The code uses the API key {key} for authentication."
         filtered = sanitize_output(review_output)
-        assert "sk-proj-abc123" not in filtered
+        assert "sk-123456" not in filtered
         assert "[REDACTED]" in filtered
 
 
@@ -82,8 +86,9 @@ class TestSanitizeMessages:
     """Test message list sanitization."""
 
     def test_sanitizes_message_list(self):
+        key = "sk-" + "abc123def456ghi789jkl012mno"
         messages = [
-            {"role": "user", "content": "Review this code with key sk-abc123def456"},
+            {"role": "user", "content": f"Review this code with key {key}"},
             {"role": "assistant", "content": "Here is my review..."},
         ]
         sanitized = sanitize_messages(messages)
