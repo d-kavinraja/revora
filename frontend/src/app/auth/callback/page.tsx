@@ -31,7 +31,7 @@ function CallbackHandler() {
         const res = await fetch(`${apiBase}/auth/github`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             code,
             redirect_uri: `${window.location.origin}/auth/callback`
           }),
@@ -56,7 +56,7 @@ function CallbackHandler() {
   }, [code, router, setAuth]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -121,7 +121,7 @@ export default function AuthCallbackPage() {
       <div className="absolute bottom-[15%] right-[25%] w-[30%] h-[30%] bg-purple-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
       <Suspense fallback={
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}

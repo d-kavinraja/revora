@@ -173,8 +173,9 @@ def configure_success_mocks(
     mock_compiled_prompt,
 ):
     """Configure all mocks for a successful pipeline execution."""
-    # GitService.clone_repository returns a path
-    mocks["git_service"].clone_repository = MagicMock(return_value="/tmp/test-repo")
+    # GitService.clone_repository returns a path (async method)
+    mocks["git_service"].clone_repository = AsyncMock(return_value="/tmp/test-repo")
+    mocks["git_service"].cleanup_repository = AsyncMock()
 
     # Intelligence result
     intelligence_mock = MagicMock()
@@ -224,6 +225,9 @@ def configure_success_mocks(
     # Review generation
     mocks["review_gen"].generate = AsyncMock(return_value=sample_review_summary)
 
+    # GitHub Client (async methods)
+    mocks["github_client"].create_pr_review = AsyncMock(return_value=MagicMock())
+
     # SSE Emitter
     mock_sse_instance = MagicMock()
     mocks["sse"].return_value = mock_sse_instance
@@ -245,6 +249,7 @@ def configure_success_mocks(
     mock_scalars.first.return_value = MagicMock()
     mock_scalars.first.return_value.id = uuid.uuid4()
     mock_db_context.commit = AsyncMock()
+    mock_db_context.refresh = AsyncMock()
     mock_db_context.add = MagicMock()
 
     return mocks
@@ -401,7 +406,7 @@ class TestPipelineFullExecution:
             mock_compiled_prompt,
         )
         # Make clone fail
-        mocks["git_service"].clone_repository = MagicMock(
+        mocks["git_service"].clone_repository = AsyncMock(
             side_effect=Exception("Clone failed: permission denied")
         )
         pipeline = ReviewPipeline()
@@ -857,7 +862,7 @@ class TestPipelineIndividualStages:
         pipeline = ReviewPipeline()
         emitter = MagicMock()
         emitter.emit = AsyncMock()
-        pipeline_mocks["git_service"].clone_repository = MagicMock(
+        pipeline_mocks["git_service"].clone_repository = AsyncMock(
             return_value="/tmp/test-repo"
         )
 

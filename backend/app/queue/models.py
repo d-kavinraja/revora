@@ -1,4 +1,4 @@
-﻿"""ReviewJob model for the Postgres-native job queue."""
+"""ReviewJob model for the Postgres-native job queue."""
 
 import uuid
 import enum
@@ -43,6 +43,11 @@ class ReviewJob(Base):
     __table_args__ = (
         UniqueConstraint("delivery_id", "head_sha", name="uq_review_job_delivery_sha"),
     )
+
+    def __init__(self, **kwargs):
+        if "attempt_count" not in kwargs:
+            kwargs["attempt_count"] = 0
+        super().__init__(**kwargs)
 
     def __repr__(self):
         return f"<ReviewJob {self.id} PR#{self.pr_number} status={self.status}>"
