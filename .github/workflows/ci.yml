@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
             HEAD_SHA="${{ github.sha }}"
           fi
 
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- backend | grep -E '\.py$' > changed_python_files.txt || true
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- backend | grep -E '\.py$' | sed 's|^backend/||' > changed_python_files.txt || true
 
           if [ -s changed_python_files.txt ]; then
             echo "has_python_changes=true" >> "$GITHUB_OUTPUT"
@@ -74,7 +74,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_test
           SECRET_KEY: test-secret-key-for-ci
           JWT_SECRET_KEY: test-jwt-key-for-ci
-          ENCRYPTION_KEY: test-encryption-key-for-ci-not-real-32-chars!!
+          ENCRYPTION_KEY: CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=
           APP_ENV: testing
         run: cd backend && python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 
@@ -83,5 +83,6 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_test
           SECRET_KEY: test-secret-key-for-ci
           JWT_SECRET_KEY: test-jwt-key-for-ci
-          ENCRYPTION_KEY: test-encryption-key-for-ci-not-real-32-chars!!
-        run: cd backend && alembic upgrade head
+          ENCRYPTION_KEY: CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=
+          PYTHONPATH: .
+        run: cd backend && python -m alembic upgrade head

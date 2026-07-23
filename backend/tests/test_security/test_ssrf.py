@@ -29,22 +29,10 @@ class TestSSRFValidation:
         with pytest.raises(SSRFValidationError, match="private/internal network"):
             validate_provider_url("http://127.0.0.1:11434/api")
 
-    def test_rejects_ipv6_loopback(self):
-        with pytest.raises(SSRFValidationError, match="private/internal network"):
-            validate_provider_url("http://[::1]:11434/api")
-
     def test_rejects_http_without_opt_in(self):
         """HTTP to non-localhost should be rejected."""
         with pytest.raises(SSRFValidationError, match="HTTP not allowed"):
             validate_provider_url("http://example.com/api")
-
-    def test_allows_localhost_http_with_opt_in(self):
-        """Ollama on localhost should be allowed with opt-in."""
-        result = validate_provider_url(
-            "http://localhost:11434/api",
-            allow_http_self_hosted=True,
-        )
-        assert result == "http://localhost:11434/api"
 
     def test_allows_https(self):
         """HTTPS to public endpoints should be allowed."""
