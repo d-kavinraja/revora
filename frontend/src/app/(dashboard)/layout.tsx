@@ -30,6 +30,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           shockStrength={5}
           resistance={750}
           returnDuration={1.5}
+          style={{}}
         />
       </div>
 
