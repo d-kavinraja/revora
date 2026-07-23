@@ -57,7 +57,7 @@ export interface Review {
   error_message: string | null;
   created_at: string | null;
   pull_request: PullRequestInfo;
-  repository: { name: string; full_name: string };
+  repository: { id?: string; name: string; full_name: string };
 }
 
 export interface Repository {

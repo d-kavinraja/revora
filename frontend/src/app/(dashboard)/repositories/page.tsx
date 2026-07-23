@@ -300,7 +300,6 @@ function RepositoryCard({
         reviewsRef.current?.stopAnimation();
         settingsRef.current?.stopAnimation();
       }}
-      href={`/repositories/${repo.id}`}
       className="cursor-target rounded-xl border border-border bg-surface-1 hover:border-brand/25 transition-all duration-150 p-5 group flex flex-col justify-between"
     >
       <div>
