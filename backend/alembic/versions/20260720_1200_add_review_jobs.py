@@ -1,4 +1,4 @@
-﻿"""add review_jobs table
+"""add review_jobs table
 
 Revision ID: 001_review_jobs
 Create Date: 2026-07-20
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "001_review_jobs"
-down_revision = None
+down_revision = "20260718_1200"
 branch_labels = None
 depends_on = None
 
