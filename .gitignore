@@ -39,7 +39,7 @@ venv/
 env/
 .venv/
 .env
-alembic.ini
+
 celerybeat-schedule
 *.sqlite3
 
@@ -90,7 +90,7 @@ venv/
 env/
 .venv/
 .env
-alembic.ini
+
 celerybeat-schedule
 *.sqlite3
 
