@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
+import Waves from '@/components/ui/Waves';
 
 const features = [
   {
@@ -53,19 +54,22 @@ export default function LandingPage() {
         </p>
       </StickyBanner>
 
-      {/* Static Background */}
-      <div 
-        className={cn(
-          "fixed inset-0 pointer-events-none z-0 transition-all duration-500",
-          isLight ? "opacity-20 mix-blend-multiply" : "opacity-30 mix-blend-screen"
-        )}
-        style={{
-          backgroundImage: 'url("https://picsum.photos/1920/1080?grayscale")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      />
+      {/* Waves Background */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <Waves
+          lineColor={isLight ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)"}
+          backgroundColor="transparent"
+          waveSpeedX={0.02}
+          waveSpeedY={0.01}
+          waveAmpX={40}
+          waveAmpY={20}
+          friction={0.9}
+          tension={0.01}
+          maxCursorMove={120}
+          xGap={12}
+          yGap={36}
+        />
+      </div>
 
 
 

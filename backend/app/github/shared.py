@@ -93,6 +93,8 @@ async def get_or_create_review_records(
     repository: dict,
     pull_request: dict,
     delivery_id: str,
+    status: str = "running",
+    find_existing_pending: bool = True,
 ) -> tuple[Review, Repository, PullRequest, str]:
     """Get or create Installation, Repository, PullRequest, and Review records.
 
@@ -152,17 +154,44 @@ async def get_or_create_review_records(
             db.add(db_pr)
             await db.commit()
             await db.refresh(db_pr)
+        else:
+            # Update the head sha in case this is a new push
+            if db_pr.head_sha != head_sha:
+                db_pr.head_sha = head_sha
+                db_pr.additions = pull_request.get("additions", db_pr.additions)
+                db_pr.deletions = pull_request.get("deletions", db_pr.deletions)
+                db_pr.changed_files = pull_request.get("changed_files", db_pr.changed_files)
+                await db.commit()
 
-        # Create Review record
-        db_review = Review(
-            pr_id=db_pr.id,
-            status="running",
-            started_at=datetime.now(timezone.utc),
-        )
-        db.add(db_review)
-        await db.commit()
-        await db.refresh(db_review)
-        logger.info(f"Created Review record {db_review.id} for PR #{pr_number}")
+        db_review = None
+        if find_existing_pending:
+            res = await db.execute(
+                select(Review).where(
+                    Review.pr_id == db_pr.id,
+                    Review.status == "pending"
+                ).order_by(Review.created_at.desc())
+            )
+            db_review = res.scalars().first()
+            if db_review:
+                if db_review.status != status:
+                    db_review.status = status
+                    if status == "running":
+                        db_review.started_at = datetime.now(timezone.utc)
+                    await db.commit()
+                    await db.refresh(db_review)
+                    logger.info(f"Updated pending Review {db_review.id} to {status} for PR #{pr_number}")
+
+        if not db_review:
+            # Create Review record
+            db_review = Review(
+                pr_id=db_pr.id,
+                status=status,
+                started_at=datetime.now(timezone.utc) if status == "running" else None,
+            )
+            db.add(db_review)
+            await db.commit()
+            await db.refresh(db_review)
+            logger.info(f"Created Review record {db_review.id} for PR #{pr_number} with status {status}")
 
         return db_review, db_repo, db_pr, user_id
 
