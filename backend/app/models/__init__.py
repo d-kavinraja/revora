@@ -23,6 +23,7 @@ from app.models.provider import ProviderRegistry
 from app.models.health import ApiKeyHealth, ProviderHealth, FailoverLog
 from app.models.token_usage import LlmTokenUsage, CostBudget
 from app.models.observability import LLMRequestLog
+from app.queue.models import ReviewJob
 from app.models.verification import (
     VerificationResultModel,
     ReviewEvidenceModel,

@@ -26,7 +26,7 @@ class ReviewJob(Base):
     base_sha = Column(String(40), nullable=True)
     delivery_id = Column(String(100), nullable=False, index=True)
     status = Column(
-        ENUM(JobStatus, name="job_status", create_type=False),
+        ENUM(JobStatus, name="job_status", create_type=False, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
         default=JobStatus.QUEUED,
         index=True,

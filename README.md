@@ -153,6 +153,34 @@ graph TB
 
 ---
 
+## Enterprise Architecture Evolution (v2)
+
+To scale Revora from a monolith into an enterprise-ready distributed system, we have executed a massive 7-Phase architectural evolution. This ensures Revora can handle heavy concurrent webhooks, large repository indexing, and multi-step agentic execution without dropping requests.
+
+### 1. Operational Hygiene & Security (Phases 1-2)
+- **Zero-Trust Ingress:** Integrated `slowapi` rate-limiting and payload size caps on webhooks to prevent saturation.
+- **Traceability:** Added `X-Request-ID` correlation middleware for end-to-end request tracing.
+- **Kubernetes-Ready Probes:** Introduced `/readyz` (DB connectivity) and `/livez` probes.
+
+### 2. Decoupled Worker & Queue (Phase 3)
+- **Fast-202 Webhooks:** The GitHub Webhook now returns an HTTP 202 instantly, pushing the payload into PostgreSQL `review_jobs`.
+- **Distributed Async Worker:** A dedicated Python worker container pulls from the queue using `SELECT FOR UPDATE SKIP LOCKED` for reliable, lock-contention-free distributed polling.
+- **PgBouncer Pooling:** Scaled DB connections via an integrated PgBouncer proxy container.
+
+### 3. Distributed Redis & SSE (Phase 3-4)
+- **Redis Pub/Sub SSE:** Progress updates (Server-Sent Events) are streamed across web nodes via Redis Pub/Sub, decoupling WebSocket/SSE connections from the worker process.
+- **L2 Graph Caching:** Repository indexes are hashed by `(repo_id, commit_sha)` and read-through cached in Redis, avoiding expensive re-cloning on identical commits.
+
+### 4. Verification & Checks API (Phases 4-5)
+- **Provenance Badging:** The frontend surfaces a **Machine Verified** badge to distinguish AI hallucinations from findings confirmed by the Revora engine.
+- **GitHub Checks API:** Background workers dynamically update GitHub Check Runs (`pending` -> `success`/`failure`), providing real-time feedback natively in the GitHub UI.
+
+### 5. Semantic & Agentic Engines (Phases 6-7)
+- **Tree-Sitter AST Indexing:** Migrated from fragile regex parsing to a robust semantic AST graph indexer (`tree_sitter_indexer.py`).
+- **LangGraph Retrieval:** Implemented the foundation for an `AgenticRetrievalEngine`, capable of iteratively traversing the dependency graph for hyper-accurate LLM prompts.
+
+---
+
 ## Review Pipeline Flow
 
 ```mermaid

@@ -89,11 +89,26 @@ class ReviewPipeline:
         emitter = SSEEmitter(str(review_id))
         metrics = {}
         repo_path = None
+        check_run_id = None
 
         try:
             # Stage 1: Prepare
             await emitter.emit("preparing_review", "running", EventType.STAGE_START)
             await emitter.emit_log("preparing_review", f"Starting review for PR #{pr_number}")
+            
+            try:
+                from app.github.client import GitHubClient
+                check_run = await GitHubClient().create_check_run(
+                    installation_id=installation_id,
+                    owner=owner,
+                    repo=repo_name,
+                    name="Revora AI Review",
+                    head_sha=head_sha,
+                    status="in_progress"
+                )
+                check_run_id = check_run.get("id")
+            except Exception as e:
+                logger.warning(f"Failed to create GitHub check run: {e}")
 
             # Stage 2: Clone repository
             repo_path = await self._stage_clone(emitter, clone_url, token, head_sha)
@@ -102,7 +117,7 @@ class ReviewPipeline:
             intelligence_data = await self._stage_intelligence(emitter, repo_path)
 
             # Stage 4: Indexing (if cloned)
-            index = await self._stage_indexing(emitter, repo_path)
+            index = await self._stage_indexing(emitter, repo_path, owner, repo_name, head_sha)
 
             # Cleanup cloned repo immediately after indexing
             # (Removed early cleanup so Verification Engine can access the files)
@@ -160,6 +175,24 @@ class ReviewPipeline:
                 **metrics,
             })
 
+            if check_run_id:
+                try:
+                    from app.github.client import GitHubClient
+                    await GitHubClient().update_check_run(
+                        installation_id=installation_id,
+                        owner=owner,
+                        repo=repo_name,
+                        check_run_id=check_run_id,
+                        status="completed",
+                        output={
+                            "title": "Revora Review Complete",
+                            "summary": f"Review completed in {duration_ms/1000:.1f}s. {verified.verified_count} findings verified.",
+                            "conclusion": "success"
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update check run: {e}")
+
             return {"status": "success", "duration_ms": duration_ms, "metrics": metrics}
 
         except Exception as e:
@@ -168,6 +201,24 @@ class ReviewPipeline:
 
             # Mark review as failed
             await self._save_failed(review_id, str(e))
+
+            if check_run_id:
+                try:
+                    from app.github.client import GitHubClient
+                    await GitHubClient().update_check_run(
+                        installation_id=installation_id,
+                        owner=owner,
+                        repo=repo_name,
+                        check_run_id=check_run_id,
+                        status="completed",
+                        output={
+                            "title": "Revora Review Failed",
+                            "summary": f"Pipeline error: {e}",
+                            "conclusion": "failure"
+                        }
+                    )
+                except Exception:
+                    pass
 
             return {"status": "failed", "error": str(e)}
 
@@ -225,21 +276,36 @@ class ReviewPipeline:
                              message=str(e))
             return {}
 
-    async def _stage_indexing(self, emitter, repo_path):
-        """Stage: Code graph indexing."""
+    async def _stage_indexing(self, emitter, repo_path, owner, repo_name, head_sha):
+        """Stage: Code graph indexing with Redis L2 read-through cache."""
         if not repo_path:
             await emitter.emit("indexing_repository", "skipped", EventType.STAGE_SKIPPED)
             return None
 
         await emitter.emit("indexing_repository", "running", EventType.STAGE_START)
 
+        # Retrieve repo_id
+        repo_id_str = f"{owner}/{repo_name}"
+        
         try:
+            from app.cache.graph_cache import graph_cache
+            
+            # Check cache
+            cached_index = await graph_cache.get_index(repo_id_str, head_sha)
+            if cached_index:
+                await emitter.emit("indexing_repository", "completed", EventType.STAGE_COMPLETE, metrics={"cache_hit": True})
+                return cached_index
+
             index = await repository_indexer.build_index(repo_path)
+            
+            # Save to cache
+            await graph_cache.set_index(repo_id_str, index, head_sha)
+
             await emitter.emit("building_dependency_graph", "completed")
             await emitter.emit("building_call_graph", "completed")
             await emitter.emit("building_import_graph", "completed")
             await emitter.emit("building_ast", "completed")
-            await emitter.emit("indexing_repository", "completed", EventType.STAGE_COMPLETE)
+            await emitter.emit("indexing_repository", "completed", EventType.STAGE_COMPLETE, metrics={"cache_hit": False})
             return index
         except Exception as e:
             logger.warning(f"Indexing failed: {e}")
@@ -462,6 +528,7 @@ class ReviewPipeline:
                         "provider": llm_response.provider,
                         "model": llm_response.model,
                         "verified_findings": verified.verified_count,
+                        "rejected_findings": verified.rejected_count,
                         **metrics,
                     }
                     await db.commit()

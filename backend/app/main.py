@@ -24,7 +24,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS
+from app.middleware.correlation import CorrelationIdMiddleware
+from app.middleware.rate_limit import limiter
+from app.middleware.size_limit import RequestSizeLimitMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+# Configure Middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(RequestSizeLimitMiddleware, max_upload_size=10 * 1024 * 1024)
+app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

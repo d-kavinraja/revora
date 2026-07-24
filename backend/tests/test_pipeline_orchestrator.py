@@ -145,6 +145,7 @@ def pipeline_mocks():
         "github_client": patch.object(orch_mod, "github_client"),
         "sse": patch.object(orch_mod, "SSEEmitter"),
         "db_session": patch.object(orch_mod, "AsyncSessionLocal"),
+        "graph_cache": patch("app.cache.graph_cache.graph_cache"),
     }
 
     mocks = {}
@@ -195,6 +196,10 @@ def configure_success_mocks(
     index_mock.nodes = []
     index_mock.edges = []
     mocks["indexer"].build_index = AsyncMock(return_value=index_mock)
+    
+    # Graph cache
+    mocks["graph_cache"].get_index = AsyncMock(return_value=None)
+    mocks["graph_cache"].set_index = AsyncMock(return_value=None)
 
     # Knowledge store
     mocks["knowledge"].load_or_generate_conventions = AsyncMock(
@@ -894,7 +899,7 @@ class TestPipelineIndividualStages:
         emitter = MagicMock()
         emitter.emit = AsyncMock()
 
-        result = await pipeline._stage_indexing(emitter, None)
+        result = await pipeline._stage_indexing(emitter, None, "test-owner", "test-repo", "abc1234")
 
         assert result is None
 

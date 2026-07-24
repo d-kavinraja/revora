@@ -140,6 +140,18 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-sm font-semibold text-foreground">{duration}s</div>
             </div>
           )}
+          {(review.stats as Record<string, any>)?.verified_findings !== undefined && (
+            <div>
+              <div className="text-[11px] text-brand font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1">
+                <TriangleAlertIcon size={10} className="text-brand" /> Machine Verified
+              </div>
+              <div className="text-sm font-semibold">
+                <span className="text-success">{(review.stats as Record<string, any>).verified_findings} verified</span>
+                {' '}
+                <span className="text-muted-foreground text-xs">/ {((review.stats as Record<string, any>).verified_findings || 0) + ((review.stats as Record<string, any>).rejected_findings || 0)} total</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

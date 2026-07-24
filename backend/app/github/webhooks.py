@@ -1,4 +1,4 @@
-﻿import hmac
+import hmac
 import hashlib
 import asyncio
 import httpx
@@ -163,145 +163,10 @@ async def get_pr_diff(owner: str, repo: str, pr_number: int, token: str) -> str:
         return res.text
 
 
-async def run_pr_review_pipeline(payload: Dict[str, Any], delivery_id: str):
-    """Execute the full review pipeline using the orchestrator.
-
-    This is the production code path that wires the 10-stage orchestrator
-    pipeline into the webhook handler.
-    """
-    review_id = None
-    check_run_id = None
-    owner = None
-    repo_name = None
-
-    try:
-        installation_id = payload["installation"]["id"]
-        repository = payload["repository"]
-        pull_request = payload["pull_request"]
-        owner = repository["owner"]["login"]
-        repo_name = repository["name"]
-        pr_number = pull_request["number"]
-        pr_title = pull_request["title"]
-        pr_body = pull_request.get("body", "") or ""
-        head_sha = pull_request["head"]["sha"]
-
-        # Get installation token
-        token = await github_app_auth.get_installation_token(installation_id)
-
-        # Get diff content
-        diff_content = await get_pr_diff(owner, repo_name, pr_number, token)
-
-        # Create review records and get user_id
-        db_review, db_repo, db_pr, user_id = await get_or_create_review_records(
-            installation_id, repository, pull_request, delivery_id
-        )
-        review_id = db_review.id
-
-        # Create GitHub check run
-        print(f"Creating check run for PR #{pr_number}...")
-        check_run = await github_client.create_check_run(
-            installation_id=installation_id,
-            owner=owner,
-            repo=repo_name,
-            name="Revora AI Review",
-            head_sha=head_sha,
-            status="in_progress",
-        )
-        check_run_id = check_run.get("id")
-
-        # Resolve provider/model config
-        async with AsyncSessionLocal() as db:
-            provider, model, api_key_id = await resolve_provider_config(db, user_id, db_repo)
-
-        # Build clone URL
-        clone_url = f"https://github.com/{owner}/{repo_name}.git"
-
-        # Execute the full 10-stage orchestrator pipeline
-        print(f"Running orchestrator pipeline for PR #{pr_number}...")
-        result = await review_pipeline.execute(
-            review_id=review_id,
-            installation_id=installation_id,
-            owner=owner,
-            repo_name=repo_name,
-            pr_number=pr_number,
-            pr_title=pr_title,
-            pr_description=pr_body,
-            head_sha=head_sha,
-            diff_content=diff_content,
-            user_id=user_id,
-            provider=provider,
-            model=model,
-            clone_url=clone_url,
-            token=token,
-            api_key_id=api_key_id,
-        )
-
-        # Update check run to completed
-        if check_run_id:
-            if result.get("status") == "success":
-                await github_client.update_check_run(
-                    installation_id=installation_id,
-                    owner=owner,
-                    repo=repo_name,
-                    check_run_id=check_run_id,
-                    status="completed",
-                    output={
-                        "title": "Review Complete",
-                        "summary": "Revora has successfully analyzed your pull request.",
-                        "conclusion": "success",
-                    },
-                )
-            else:
-                await github_client.update_check_run(
-                    installation_id=installation_id,
-                    owner=owner,
-                    repo=repo_name,
-                    check_run_id=check_run_id,
-                    status="completed",
-                    output={
-                        "title": "Review Failed",
-                        "summary": f"Review failed: {result.get('error', 'Unknown error')}",
-                        "conclusion": "failure",
-                    },
-                )
-
-    except Exception as e:
-        print(f"Error in run_pr_review_pipeline: {e}")
-        # Mark review as failed in DB
-        if review_id:
-            try:
-                async with AsyncSessionLocal() as db:
-                    res = await db.execute(select(Review).where(Review.id == review_id))
-                    db_review = res.scalars().first()
-                    if db_review:
-                        db_review.status = "failed"
-                        db_review.error_message = str(e)
-                        db_review.completed_at = datetime.now(timezone.utc)
-                        await db.commit()
-            except Exception:
-                pass
-
-        # Mark check run as failed on GitHub
-        if check_run_id and owner and repo_name:
-            try:
-                await github_client.update_check_run(
-                    installation_id=payload.get("installation", {}).get("id"),
-                    owner=owner,
-                    repo=repo_name,
-                    check_run_id=check_run_id,
-                    status="completed",
-                    output={
-                        "title": "Review Failed",
-                        "summary": f"An error occurred during review: {e}",
-                        "conclusion": "failure",
-                    },
-                )
-            except Exception:
-                pass
-
-
 async def handle_pr_opened(payload: Dict[str, Any], delivery_id: str):
-    asyncio.create_task(run_pr_review_pipeline(payload, delivery_id))
+    from app.queue.dispatcher import enqueue_review_job
+    async with AsyncSessionLocal() as db:
+        await enqueue_review_job(db, payload, delivery_id)
 
 
 class GitHubWebhookService:
