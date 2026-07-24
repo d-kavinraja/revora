@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
-import GridDistortion from '@/components/ui/GridDistortion';
+import Waves from '@/components/ui/Waves';
 
 const features = [
   {
@@ -54,17 +54,20 @@ export default function LandingPage() {
         </p>
       </StickyBanner>
 
-      {/* GridDistortion Background */}
-      <div className={cn(
-        "fixed inset-0 pointer-events-none z-0 transition-all duration-500",
-        isLight ? "opacity-20 mix-blend-multiply" : "opacity-30 mix-blend-screen"
-      )}>
-        <GridDistortion
-          imageSrc="https://picsum.photos/1920/1080?grayscale"
-          grid={12}
-          mouse={0.15}
-          strength={0.18}
-          relaxation={0.92}
+      {/* Waves Background */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <Waves
+          lineColor={isLight ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)"}
+          backgroundColor="transparent"
+          waveSpeedX={0.02}
+          waveSpeedY={0.01}
+          waveAmpX={40}
+          waveAmpY={20}
+          friction={0.9}
+          tension={0.01}
+          maxCursorMove={120}
+          xGap={12}
+          yGap={36}
         />
       </div>
 

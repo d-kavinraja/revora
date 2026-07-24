@@ -1,4 +1,4 @@
-﻿"""Integration test for pipeline wiring (Week 0).
+"""Integration test for pipeline wiring (Week 0).
 
 Verifies that the orchestrator pipeline is correctly wired as the
 production code path through the webhook handler.
@@ -14,10 +14,10 @@ class TestPipelineWiring:
     """Test that webhook handler invokes the orchestrator pipeline."""
 
     @pytest.mark.asyncio
-    async def test_webhook_calls_orchestrator(self):
-        """Verify handle_pr_opened delegates to the orchestrator pipeline."""
-        from app.github.webhooks import run_pr_review_pipeline
-
+    async def test_webhook_calls_enqueue(self):
+        """Verify handle_pr_opened delegates to the job queue."""
+        from app.github.webhooks import handle_pr_opened
+        
         # Mock the dependencies
         mock_payload = {
             "installation": {"id": 12345},
@@ -41,33 +41,20 @@ class TestPipelineWiring:
             },
         }
 
-        with patch("app.github.webhooks.github_app_auth") as mock_auth, \
-             patch("app.github.webhooks.get_pr_diff", new_callable=AsyncMock) as mock_diff, \
-             patch("app.github.webhooks.get_or_create_review_records", new_callable=AsyncMock) as mock_records, \
-             patch("app.github.webhooks.github_client") as mock_client, \
-             patch("app.github.webhooks.resolve_provider_config", new_callable=AsyncMock) as mock_resolve, \
-             patch("app.github.webhooks.review_pipeline") as mock_pipeline:
+        with patch("app.github.webhooks.AsyncSessionLocal") as mock_session_local, \
+             patch("app.queue.dispatcher.enqueue_review_job", new_callable=AsyncMock) as mock_enqueue:
+            
+            mock_db = MagicMock()
+            mock_session_local.return_value.__aenter__.return_value = mock_db
 
-            mock_auth.get_installation_token = AsyncMock(return_value="test-token")
-            mock_diff.return_value = "diff content"
-            mock_records.return_value = (
-                MagicMock(id=uuid.uuid4()),  # review
-                MagicMock(settings=None),    # repo
-                MagicMock(),                # pr
-                str(uuid.uuid4()),          # user_id
-            )
-            mock_client.create_check_run = AsyncMock(return_value={"id": 1})
-            mock_client.update_check_run = AsyncMock()
-            mock_resolve.return_value = ("gemini", "gemini-2.5-flash", None)
-            mock_pipeline.execute = AsyncMock(return_value={"status": "success"})
-
-            await run_pr_review_pipeline(mock_payload, "test-delivery-id")
+            await handle_pr_opened(mock_payload, "test-delivery-id")
 
             # Verify the orchestrator pipeline was called
-            mock_pipeline.execute.assert_called_once()
-            call_kwargs = mock_pipeline.execute.call_args[1]
-            assert call_kwargs["pr_number"] == 1
-            assert call_kwargs["provider"] == "gemini"
+            mock_enqueue.assert_called_once()
+            call_args = mock_enqueue.call_args[0]
+            assert call_args[0] == mock_db
+            assert call_args[1] == mock_payload
+            assert call_args[2] == "test-delivery-id"
 
     @pytest.mark.asyncio
     async def test_webhook_returns_202(self):

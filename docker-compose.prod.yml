@@ -43,6 +43,18 @@ services:
           memory: 256M
     restart: unless-stopped
 
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@db:5432/${POSTGRES_DB:-revora_db}
+      - MAX_CLIENT_CONN=100
+      - DEFAULT_POOL_SIZE=20
+      - POOL_MODE=transaction
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -51,7 +63,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@db:5432/${POSTGRES_DB:-revora_db}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@pgbouncer:5432/${POSTGRES_DB:-revora_db}
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - SECRET_KEY=${SECRET_KEY}
@@ -63,8 +75,8 @@ services:
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
     depends_on:
-      db:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
       redis:
         condition: service_healthy
     healthcheck:
@@ -85,7 +97,7 @@ services:
       dockerfile: Dockerfile
     command: python -m app.queue
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@db:5432/${POSTGRES_DB:-revora_db}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@pgbouncer:5432/${POSTGRES_DB:-revora_db}
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - SECRET_KEY=${SECRET_KEY}
@@ -97,8 +109,8 @@ services:
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
     depends_on:
-      db:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
       redis:
         condition: service_healthy
     deploy:

@@ -326,6 +326,7 @@ export const api = {
   getStats: () => apiClient.get<DashboardStats>('/dashboard/stats').then((r) => r.data),
   getReviews: (limit = 20) => apiClient.get<Review[]>(`/reviews?limit=${limit}`).then((r) => r.data),
   getReview: (id: string) => apiClient.get<Review>(`/reviews/${id}`).then((r) => r.data),
+  cancelReview: (id: string) => apiClient.post<{ status: string; message: string }>(`/reviews/${id}/cancel`).then((r) => r.data),
   getRepositories: () => apiClient.get<Repository[]>('/repositories').then((r) => r.data),
   syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
   syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),

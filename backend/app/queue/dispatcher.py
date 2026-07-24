@@ -1,4 +1,4 @@
-﻿"""Dispatcher for enqueuing review jobs with idempotency and supersede logic."""
+"""Dispatcher for enqueuing review jobs with idempotency and supersede logic."""
 
 import logging
 from typing import Dict, Any, Optional
@@ -76,6 +76,23 @@ async def enqueue_review_job(
     if job:
         await session.commit()
         logger.info(f"Enqueued review job {job.id} for PR #{pr_number}")
+        
+        # Create pending Review record immediately so UI shows "Pending"
+        try:
+            from app.github.shared import get_or_create_review_records
+            installation_id = installation.get("id")
+            if installation_id:
+                await get_or_create_review_records(
+                    installation_id=installation_id,
+                    repository=repository,
+                    pull_request=pull_request,
+                    delivery_id=delivery_id,
+                    status="pending",
+                    find_existing_pending=False # We want to create a new one for this job
+                )
+        except Exception as e:
+            logger.error(f"Failed to create pending Review record: {e}", exc_info=True)
+            
         return job
     else:
         logger.info(f"Duplicate job ignored: delivery={delivery_id} sha={head_sha[:12]}")

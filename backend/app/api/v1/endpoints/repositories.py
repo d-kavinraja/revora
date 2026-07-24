@@ -321,9 +321,8 @@ async def sync_repository(
                 local_review = local_rev_check.scalars().first()
 
                 if not has_bot_review and not local_review:
-                    # Trigger Revora review pipeline in background
-                    import asyncio
-                    from app.github.webhooks import run_pr_review_pipeline
+                    # Trigger Revora review pipeline via Postgres queue
+                    from app.queue.dispatcher import enqueue_review_job
                     
                     payload = {
                         "installation": {"id": installation.installation_id},
@@ -346,7 +345,7 @@ async def sync_repository(
                             "changed_files": changed_files,
                         }
                     }
-                    asyncio.create_task(run_pr_review_pipeline(payload, f"sync-{pr_number}"))
+                    await enqueue_review_job(db, payload, f"sync-{pr_number}")
                     triggered_reviews += 1
 
             # Update last synced time

@@ -11,7 +11,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
 import { ProviderIcon } from '@/components/ui/provider-icon';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -24,6 +24,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       return (data && (data.status === 'completed' || data.status === 'failed')) ? false : 5000;
     },
     retry: false, // Don't retry immediately so we can distinguish 404 from other errors quickly
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => api.cancelReview(id),
+    onSuccess: () => refetch(),
   });
 
   if (loading) {
@@ -140,12 +145,31 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-sm font-semibold text-foreground">{duration}s</div>
             </div>
           )}
+          {(review.stats as Record<string, any>)?.verified_findings !== undefined && (
+            <div>
+              <div className="text-[11px] text-brand font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1">
+                <TriangleAlertIcon size={10} className="text-brand" /> Machine Verified
+              </div>
+              <div className="text-sm font-semibold">
+                <span className="text-success">{(review.stats as Record<string, any>).verified_findings} verified</span>
+                {' '}
+                <span className="text-muted-foreground text-xs">/ {((review.stats as Record<string, any>).verified_findings || 0) + ((review.stats as Record<string, any>).rejected_findings || 0)} total</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Review Status States */}
       {review.status === 'running' && (
-        <div className="rounded-xl border border-info/20 bg-info/5 p-8 mb-5 text-center">
+        <div className="rounded-xl border border-info/20 bg-info/5 p-8 mb-5 text-center relative">
+          <button 
+            onClick={() => cancelMutation.mutate()} 
+            disabled={cancelMutation.isPending}
+            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
+          </button>
           <div className="w-12 h-12 mx-auto mb-4 relative">
             <div className="w-12 h-12 rounded-full border-2 border-info/20" />
             <div className="absolute inset-0 flex items-center justify-center text-info">
@@ -158,7 +182,14 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {review.status === 'pending' && (
-        <div className="rounded-xl border border-warning/20 bg-warning/5 p-6 mb-5 text-center">
+        <div className="rounded-xl border border-warning/20 bg-warning/5 p-6 mb-5 text-center relative">
+          <button 
+            onClick={() => cancelMutation.mutate()} 
+            disabled={cancelMutation.isPending}
+            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
+          </button>
           <p className="text-warning font-semibold text-lg">Review Queued</p>
           <p className="text-muted-foreground text-sm mt-1">Waiting to start processing...</p>
         </div>

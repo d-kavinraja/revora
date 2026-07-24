@@ -132,6 +132,11 @@ const TargetCursor = ({
         return;
       }
 
+      if (activeTarget && !document.body.contains(activeTarget)) {
+        if (currentLeaveHandler) currentLeaveHandler();
+        return;
+      }
+
       const strength = activeStrengthRef.current;
       if (strength === 0) return;
 

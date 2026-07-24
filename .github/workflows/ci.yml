@@ -85,4 +85,7 @@ jobs:
           JWT_SECRET_KEY: test-jwt-key-for-ci
           ENCRYPTION_KEY: CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=
           PYTHONPATH: .
-        run: cd backend && python -m alembic upgrade head
+        run: |
+          cd backend
+          python -m alembic upgrade head
+          python -m alembic check

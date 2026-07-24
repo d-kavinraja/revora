@@ -170,3 +170,55 @@ async def get_review(
         ),
         "repository": repo_info,
     }
+
+from sqlalchemy import update
+from app.queue.models import JobStatus
+
+@router.post("/{review_id}/cancel", response_model=Dict[str, Any])
+async def cancel_review(
+    review_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel an ongoing review."""
+    try:
+        rid = uuid.UUID(review_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid review ID")
+
+    review_result = await db.execute(select(Review).where(Review.id == rid))
+    review = review_result.scalars().first()
+
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    # Update review status
+    if review.status in ["pending", "running", "queued"]:
+        await db.execute(
+            update(Review)
+            .where(Review.id == rid)
+            .values(status="failed", error_message="Cancelled by user")
+        )
+
+        # Get PR to find repo and pr_number for the background job
+        pr_result = await db.execute(
+            select(PullRequest).where(PullRequest.id == review.pr_id)
+        )
+        pr = pr_result.scalars().first()
+
+        if pr:
+            # Update the review_jobs queue
+            from app.queue.models import ReviewJob
+            await db.execute(
+                update(ReviewJob)
+                .where(
+                    ReviewJob.repo_id == pr.repo_id,
+                    ReviewJob.pr_number == pr.pr_number,
+                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
+                )
+                .values(status=JobStatus.CANCELLED)
+            )
+
+        await db.commit()
+
+    return {"status": "success", "message": "Review cancelled"}
