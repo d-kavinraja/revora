@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from typing import List, Any, Dict
 import uuid
+import logging
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
+from app.queue.models import JobStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -171,8 +175,6 @@ async def get_review(
         "repository": repo_info,
     }
 
-from sqlalchemy import update
-from app.queue.models import JobStatus
 
 @router.post("/{review_id}/cancel", response_model=Dict[str, Any])
 async def cancel_review(
@@ -180,7 +182,7 @@ async def cancel_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cancel an ongoing review."""
+    """Cancel an ongoing review and immediately close the GitHub check run."""
     try:
         rid = uuid.UUID(review_id)
     except ValueError:
@@ -192,33 +194,74 @@ async def cancel_review(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # Update review status
-    if review.status in ["pending", "running", "queued"]:
+    if review.status not in ["pending", "running", "queued"]:
+        return {"status": "success", "message": "Review already in terminal state"}
+
+    # 1. Mark the Review as cancelled in our DB
+    await db.execute(
+        update(Review)
+        .where(Review.id == rid)
+        .values(status="failed", error_message="Cancelled by user")
+    )
+
+    # 2. Get PR → repo → installation to be able to call GitHub API
+    pr_result = await db.execute(
+        select(PullRequest).where(PullRequest.id == review.pr_id)
+    )
+    pr = pr_result.scalars().first()
+
+    if pr:
+        # 2a. Cancel the background job in the queue
+        from app.queue.models import ReviewJob
         await db.execute(
-            update(Review)
-            .where(Review.id == rid)
-            .values(status="failed", error_message="Cancelled by user")
-        )
-
-        # Get PR to find repo and pr_number for the background job
-        pr_result = await db.execute(
-            select(PullRequest).where(PullRequest.id == review.pr_id)
-        )
-        pr = pr_result.scalars().first()
-
-        if pr:
-            # Update the review_jobs queue
-            from app.queue.models import ReviewJob
-            await db.execute(
-                update(ReviewJob)
-                .where(
-                    ReviewJob.repo_id == pr.repo_id,
-                    ReviewJob.pr_number == pr.pr_number,
-                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
-                )
-                .values(status=JobStatus.CANCELLED)
+            update(ReviewJob)
+            .where(
+                ReviewJob.repo_id == pr.repo_id,
+                ReviewJob.pr_number == pr.pr_number,
+                ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
             )
+            .values(status=JobStatus.CANCELLED)
+        )
 
-        await db.commit()
+        # 2b. Tell GitHub to close the check run as "cancelled"
+        check_run_id = review.github_check_run_id
+        if check_run_id:
+            try:
+                repo_result = await db.execute(
+                    select(Repository).where(Repository.id == pr.repo_id)
+                )
+                repo = repo_result.scalars().first()
+
+                if repo:
+                    install_result = await db.execute(
+                        select(Installation).where(Installation.id == repo.installation_id)
+                    )
+                    installation = install_result.scalars().first()
+
+                    if installation:
+                        from app.github.client import GitHubClient
+                        owner, repo_name = repo.full_name.split("/", 1)
+                        try:
+                            await GitHubClient().update_check_run(
+                                installation_id=installation.installation_id,
+                                owner=owner,
+                                repo=repo_name,
+                                check_run_id=check_run_id,
+                                status="completed",
+                                output={
+                                    "title": "Revora Review Cancelled",
+                                    "summary": "The review was cancelled by the user.",
+                                    "conclusion": "cancelled"
+                                }
+                            )
+                            logger.info(
+                                f"Closed GitHub check run {check_run_id} as cancelled for review {review_id}"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to close GitHub check run on cancel: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error in cancel_review DB lookup: {e}")
+
+    await db.commit()
 
     return {"status": "success", "message": "Review cancelled"}

@@ -83,10 +83,11 @@ export default function ProvidersPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {providers.map((provider) => {
           const caps = capabilities[provider.slug] || [];
+          const isTesting = provider.slug !== 'gemini';
           return (
             <div
               key={provider.slug}
-              className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md relative overflow-hidden transition-all hover:border-white/[0.08]"
+              className={`cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md relative overflow-hidden transition-all hover:border-white/[0.08] ${isTesting ? 'opacity-60' : ''}`}
             >
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-purple-500 opacity-50" />
 
@@ -100,7 +101,11 @@ export default function ProvidersPage() {
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
                       {provider.litellm_provider}
                     </span>
-                    {provider.is_enabled ? (
+                    {isTesting ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 uppercase tracking-wide">
+                        Under Testing
+                      </span>
+                    ) : provider.is_enabled ? (
                       <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-success/5 border-success/20 text-success">
                         <CircleCheckIcon size={12} />
                         Enabled
@@ -135,14 +140,15 @@ export default function ProvidersPage() {
 
                 <div className="shrink-0">
                   <button
+                    disabled={isTesting}
                     onClick={() => handleToggle(provider.slug, !provider.is_enabled)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      provider.is_enabled ? 'bg-brand' : 'bg-surface-3'
-                    }`}
+                      provider.is_enabled && !isTesting ? 'bg-brand' : 'bg-surface-3'
+                    } ${isTesting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        provider.is_enabled ? 'translate-x-6' : 'translate-x-1'
+                        provider.is_enabled && !isTesting ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>

@@ -8,7 +8,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+    <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
       <div className="absolute top-[20%] right-[30%] w-[40%] h-[40%] bg-purple-600/20 blur-[120px] rounded-full pointer-events-none" />
 
       <motion.div

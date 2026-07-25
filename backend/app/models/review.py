@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Integer
+from sqlalchemy import String, ForeignKey, DateTime, Integer, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, JSON_TYPE
 
@@ -15,6 +15,7 @@ class Review(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    github_check_run_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     # Relationships
     pull_request: Mapped["PullRequest"] = relationship("PullRequest")

@@ -107,6 +107,17 @@ class ReviewPipeline:
                     status="in_progress"
                 )
                 check_run_id = check_run.get("id")
+                # Persist the check_run_id to DB immediately so the cancel endpoint can retrieve it
+                if check_run_id:
+                    async with AsyncSessionLocal() as db:
+                        from sqlalchemy import update as sa_update
+                        await db.execute(
+                            sa_update(Review)
+                            .where(Review.id == review_id)
+                            .values(github_check_run_id=check_run_id)
+                        )
+                        await db.commit()
+                        logger.info(f"Saved check_run_id={check_run_id} to review {review_id}")
             except Exception as e:
                 logger.warning(f"Failed to create GitHub check run: {e}")
 

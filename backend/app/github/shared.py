@@ -128,6 +128,11 @@ async def get_or_create_review_records(
             db.add(db_repo)
             await db.commit()
             await db.refresh(db_repo)
+        elif db_repo.installation_id != db_inst.id:
+            db_repo.installation_id = db_inst.id
+            db.add(db_repo)
+            await db.commit()
+            await db.refresh(db_repo)
 
         # Get or create PullRequest
         res = await db.execute(

@@ -140,6 +140,24 @@ export default function ReviewsPage() {
     return true;
   });
 
+  // Compute global queue positions for pending/running (oldest first = #1)
+  // Uses the full reviews array so position is stable regardless of current filters
+  const queuePositionMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const pendingCounter: Record<string, number> = {};
+    // Sort by created_at ascending so oldest queued item = #1
+    const sorted = [...reviews].sort((a, b) =>
+      new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()
+    );
+    for (const r of sorted) {
+      if (r.status === 'pending' || r.status === 'running') {
+        pendingCounter[r.status] = (pendingCounter[r.status] ?? 0) + 1;
+        map.set(r.id, pendingCounter[r.status]);
+      }
+    }
+    return map;
+  }, [reviews]);
+
   const hasDateFilter = Boolean(fromDate || toDate);
   const hasActiveFilters = Boolean(
     filter !== 'all' ||
@@ -326,7 +344,7 @@ export default function ReviewsPage() {
       ) : (
         <div className="space-y-2.5">
           {filteredReviews.map((review) => (
-            <ReviewItem key={review.id} review={review} />
+            <ReviewItem key={review.id} review={review} queuePosition={queuePositionMap.get(review.id)} />
           ))}
           <p className="text-center text-xs text-muted-foreground pt-2">
             {filteredReviews.length} review{filteredReviews.length !== 1 ? 's' : ''} shown

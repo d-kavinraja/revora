@@ -24,7 +24,7 @@ export default function ApiKeysSettingsPage() {
 
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
-  const [provider, setProvider] = useState('openai');
+  const [provider, setProvider] = useState('gemini');
   const [label, setLabel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -266,16 +266,16 @@ export default function ApiKeysSettingsPage() {
                   onChange={(e) => setProvider(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
                 >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Claude</option>
                   <option value="gemini">Gemini</option>
-                  <option value="groq">Groq</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="azure_openai">Azure OpenAI</option>
-                  <option value="ollama">Ollama</option>
-                  <option value="cohere">Cohere</option>
-                  <option value="mistral">Mistral</option>
+                  <option value="openai" disabled>OpenAI (Under Testing)</option>
+                  <option value="anthropic" disabled>Claude (Under Testing)</option>
+                  <option value="groq" disabled>Groq (Under Testing)</option>
+                  <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
+                  <option value="openrouter" disabled>OpenRouter (Under Testing)</option>
+                  <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
+                  <option value="ollama" disabled>Ollama (Under Testing)</option>
+                  <option value="cohere" disabled>Cohere (Under Testing)</option>
+                  <option value="mistral" disabled>Mistral (Under Testing)</option>
                 </select>
               </div>
 

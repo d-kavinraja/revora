@@ -1,13 +1,29 @@
 'use client';
 
+import { useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { DotGrid } from '@/components/ui/DotGrid';
 import TargetCursor from '@/components/ui/TargetCursor';
 import { useThemeStore } from '@/store/useThemeStore';
+import { checkHealth } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // On mount, check if the backend is alive.
+  // If it's sleeping (Render free tier), send user to the wake-up splash page.
+  useEffect(() => {
+    checkHealth().then(alive => {
+      if (!alive) {
+        router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   return (
     <div className="min-h-screen bg-background text-foreground flex w-full relative">
