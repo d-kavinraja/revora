@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
+import Lightfall from '@/components/ui/Lightfall';
+import { useThemeStore } from '@/store/useThemeStore';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_ATTEMPTS = 40; // ~2 minutes
@@ -17,6 +19,8 @@ function WakingUpContent() {
   const [status, setStatus] = useState<'waking' | 'alive' | 'timeout'>('waking');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { theme } = useThemeStore();
+  const isLight = theme === 'light';
 
   // Animate the dots
   useEffect(() => {
@@ -68,11 +72,24 @@ function WakingUpContent() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
-      {/* Ambient glow background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
-          style={{ background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)' }}
+      {/* Lightfall background */}
+      <div className="absolute inset-0 z-0">
+        <Lightfall
+          colors={isLight ? ['#6366f1', '#a855f7', '#ec4899'] : ['#A6C8FF', '#5227FF', '#FF9FFC']}
+          backgroundColor={isLight ? '#f8fafc' : '#030712'}
+          speed={0.8}
+          streakCount={isLight ? 4 : 8}
+          streakWidth={1}
+          streakLength={1.5}
+          glow={isLight ? 0.3 : 1}
+          density={isLight ? 0.4 : 0.8}
+          twinkle={1}
+          zoom={2.5}
+          backgroundGlow={isLight ? 0.1 : 0.6}
+          opacity={isLight ? 0.6 : 1}
+          mouseInteraction={true}
+          mouseStrength={isLight ? 0.3 : 1}
+          mouseRadius={0.6}
         />
       </div>
 
