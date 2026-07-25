@@ -1,4 +1,4 @@
-﻿"""Worker process for the review job queue."""
+"""Worker process for the review job queue."""
 
 import asyncio
 import logging
@@ -144,7 +144,19 @@ async def run_worker(poll_interval: float = 2.0):
                 )
                 await session.commit()
 
-            # Process outside the session lock
+            # Process outside the session lock — but first re-check status in case
+            # it was cancelled by the user between being claimed and execution starting.
+            async with AsyncSessionLocal() as check_session:
+                check_result = await check_session.execute(
+                    select(ReviewJob).where(ReviewJob.id == job_id)
+                )
+                current_job = check_result.scalars().first()
+
+            if current_job and current_job.status == JobStatus.CANCELLED:
+                logger.info(f"Worker {_worker_id} job {job_id} was cancelled before processing started — skipping.")
+                continue
+
+            # Process the job
             success = await process_job(job_row)
 
             # Update status
