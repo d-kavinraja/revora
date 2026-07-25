@@ -1,0 +1,184 @@
+'use client';
+
+import { useEffect, useState, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { checkHealth } from '@/lib/api';
+
+const POLL_INTERVAL_MS = 3000;
+const MAX_ATTEMPTS = 40; // ~2 minutes
+
+function WakingUpContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/dashboard';
+  const [dots, setDots] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'waking' | 'alive' | 'timeout'>('waking');
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Animate the dots
+  useEffect(() => {
+    dotsRef.current = setInterval(() => {
+      setDots(d => d.length >= 3 ? '' : d + '.');
+    }, 500);
+    return () => { if (dotsRef.current) clearInterval(dotsRef.current); };
+  }, []);
+
+  // Poll the health endpoint
+  useEffect(() => {
+    // Immediately check once on mount
+    checkHealth().then(alive => {
+      if (alive) {
+        setStatus('alive');
+        return;
+      }
+    });
+
+    intervalRef.current = setInterval(async () => {
+      setAttempt(a => {
+        const next = a + 1;
+        if (next >= MAX_ATTEMPTS) {
+          setStatus('timeout');
+          if (intervalRef.current) clearInterval(intervalRef.current);
+        }
+        return next;
+      });
+
+      const alive = await checkHealth();
+      if (alive) {
+        setStatus('alive');
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  // Redirect once server is alive
+  useEffect(() => {
+    if (status === 'alive') {
+      const t = setTimeout(() => router.replace(redirect), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [status, redirect, router]);
+
+  const progressPct = Math.min((attempt / MAX_ATTEMPTS) * 100, 100);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
+      {/* Ambient glow background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
+          style={{ background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)' }}
+        />
+      </div>
+
+      <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-6 text-center">
+        {/* Logo / Icon */}
+        <div className="relative">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-2xl"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+          >
+            {status === 'alive' ? (
+              // Checkmark when alive
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : status === 'timeout' ? (
+              // Warning when timeout
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            ) : (
+              // Server icon while waking
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+              </svg>
+            )}
+          </div>
+          {/* Pulse ring while waking */}
+          {status === 'waking' && (
+            <span className="absolute inset-0 rounded-2xl animate-ping opacity-30"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+            />
+          )}
+        </div>
+
+        {/* Text */}
+        {status === 'alive' ? (
+          <>
+            <h1 className="text-2xl font-bold text-foreground">Server is Ready!</h1>
+            <p className="text-muted-foreground text-sm">Redirecting you now{dots}</p>
+          </>
+        ) : status === 'timeout' ? (
+          <>
+            <h1 className="text-2xl font-bold text-foreground">Server Taking Too Long</h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              The server hasn't responded in 2 minutes. This can happen on the Render free tier during very high load.
+            </p>
+            <button
+              onClick={() => { setAttempt(0); setStatus('waking'); }}
+              className="mt-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+            >
+              Try Again
+            </button>
+          </>
+        ) : (
+          <>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                Server is Starting{dots}
+              </h1>
+              <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
+                Your Revora backend is waking up from sleep mode.<br />
+                This usually takes <span className="text-foreground font-medium">30–60 seconds</span>.
+              </p>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full">
+              <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden w-full">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${progressPct}%`,
+                    background: 'linear-gradient(90deg, #7c3aed, #3b82f6)',
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
+              </p>
+            </div>
+
+            {/* Info card */}
+            <div className="w-full p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] text-left">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <span className="text-foreground font-medium block mb-1">💡 Why is this happening?</span>
+                Free-tier Render services pause when inactive for 15 minutes to save resources. Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function WakingUpPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+      </div>
+    }>
+      <WakingUpContent />
+    </Suspense>
+  );
+}

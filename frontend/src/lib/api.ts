@@ -12,6 +12,16 @@ export const apiClient = axios.create({
   timeout: 15000, // 15s timeout to prevent UI freezing on slow/unresponsive backend
 });
 
+/** Ping the backend health endpoint. Returns true if server is alive, false if sleeping/unreachable. */
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // Attach JWT token on every request
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;

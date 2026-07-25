@@ -10,15 +10,20 @@ const statusConfig: Record<string, { label: string; cls: string; dot: string; sp
 interface StatusBadgeProps {
   status: ReviewStatus | string;
   size?: 'sm' | 'md';
+  queuePosition?: number;
 }
 
-export function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
+export function StatusBadge({ status, size = 'sm', queuePosition }: StatusBadgeProps) {
   const s = statusConfig[status] ?? { label: status, cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' };
   const sizeCls = size === 'md'
     ? 'px-3 py-1 text-sm gap-1.5'
     : 'px-2.5 py-0.5 text-xs gap-1.5';
   const dotSize = size === 'md' ? 'w-2 h-2' : 'w-1.5 h-1.5';
   const spinSize = size === 'md' ? 'w-3 h-3 border-[2.5px]' : 'w-2.5 h-2.5 border-2';
+
+  // Show numbered position badge for active statuses (pending/running)
+  const showPosition = queuePosition !== undefined && (status === 'pending' || status === 'running');
+  const label = showPosition ? `${s.label} #${queuePosition}` : s.label;
 
   return (
     <span className={`inline-flex items-center rounded-full font-medium border ${sizeCls} ${s.cls}`}>
@@ -35,7 +40,7 @@ export function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
       ) : (
         <span className={`${dotSize} rounded-full ${s.dot}`} />
       )}
-      {s.label}
+      {label}
     </span>
   );
 }

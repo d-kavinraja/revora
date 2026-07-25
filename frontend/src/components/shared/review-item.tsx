@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
 import { Review } from '@/lib/api';
 
-export function ReviewItem({ review }: { review: Review }) {
+export function ReviewItem({ review, queuePosition }: { review: Review; queuePosition?: number }) {
   const iconRef = useRef<any>(null);
   const arrowRef = useRef<any>(null);
   const content = (
@@ -24,7 +24,7 @@ export function ReviewItem({ review }: { review: Review }) {
           <span className="font-semibold text-foreground truncate text-sm">
             {review.pull_request?.title ?? 'Pull Request'}
           </span>
-          <StatusBadge status={review.status} />
+          <StatusBadge status={review.status} queuePosition={queuePosition} />
         </div>
         <div className="flex items-center gap-2 mt-1.5 text-xs flex-wrap">
           <span className="text-brand font-medium">{review.repository?.full_name}</span>
