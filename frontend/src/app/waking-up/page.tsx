@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
 import Lightfall from '@/components/ui/Lightfall';
-import { useThemeStore } from '@/store/useThemeStore';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_ATTEMPTS = 40; // ~2 minutes
@@ -19,8 +18,6 @@ function WakingUpContent() {
   const [status, setStatus] = useState<'waking' | 'alive' | 'timeout'>('waking');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { theme } = useThemeStore();
-  const isLight = theme === 'light';
 
   // Animate the dots
   useEffect(() => {
@@ -71,24 +68,24 @@ function WakingUpContent() {
   const progressPct = Math.min((attempt / MAX_ATTEMPTS) * 100, 100);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
-      {/* Lightfall background */}
+    <div className="dark min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
+      {/* Lightfall background (always dark mode configuration) */}
       <div className="absolute inset-0 z-0">
         <Lightfall
-          colors={isLight ? ['#6366f1', '#a855f7', '#ec4899'] : ['#A6C8FF', '#5227FF', '#FF9FFC']}
-          backgroundColor={isLight ? '#f8fafc' : '#030712'}
+          colors={['#A6C8FF', '#5227FF', '#FF9FFC']}
+          backgroundColor="#030712"
           speed={0.8}
-          streakCount={isLight ? 4 : 8}
+          streakCount={8}
           streakWidth={1}
           streakLength={1.5}
-          glow={isLight ? 0.3 : 1}
-          density={isLight ? 0.4 : 0.8}
+          glow={1}
+          density={0.8}
           twinkle={1}
           zoom={2.5}
-          backgroundGlow={isLight ? 0.1 : 0.6}
-          opacity={isLight ? 0.6 : 1}
+          backgroundGlow={0.6}
+          opacity={1}
           mouseInteraction={true}
-          mouseStrength={isLight ? 0.3 : 1}
+          mouseStrength={1}
           mouseRadius={0.6}
         />
       </div>
@@ -128,60 +125,66 @@ function WakingUpContent() {
 
         {/* Text */}
         {status === 'alive' ? (
-          <>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h1 className="text-2xl font-bold text-foreground">Server is Ready!</h1>
-            <p className="text-muted-foreground text-sm">Redirecting you now{dots}</p>
-          </>
+            <p className="text-muted-foreground text-sm mt-2">Redirecting you now{dots}</p>
+          </div>
         ) : status === 'timeout' ? (
-          <>
-            <h1 className="text-2xl font-bold text-foreground">Server Taking Too Long</h1>
-            <p className="text-muted-foreground text-sm leading-relaxed">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <h1 className="text-2xl font-bold text-foreground text-red-400">Server Taking Too Long</h1>
+            <p className="text-muted-foreground text-sm leading-relaxed mt-3">
               The server hasn't responded in 2 minutes. This can happen on the Render free tier during very high load.
             </p>
             <button
               onClick={() => { setAttempt(0); setStatus('waking'); }}
-              className="mt-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 cursor-pointer"
+              className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-indigo-500/25"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
             >
               Try Again
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                Server is Starting{dots}
-              </h1>
-              <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-                Your Revora backend is waking up from sleep mode.<br />
-                This usually takes <span className="text-foreground font-medium">30–60 seconds</span>.
-              </p>
-            </div>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+              Server is Starting<span className="inline-block w-6 text-left">{dots}</span>
+            </h1>
+            <p className="text-muted-foreground text-sm mt-4 leading-relaxed max-w-[320px] mx-auto">
+              Your Revora backend is waking up from sleep mode.<br />
+              This usually takes <span className="text-foreground font-semibold">30–60 seconds</span>.
+            </p>
+          </div>
+        )}
 
-            {/* Progress bar */}
-            <div className="w-full">
-              <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden w-full">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${progressPct}%`,
-                    background: 'linear-gradient(90deg, #7c3aed, #3b82f6)',
-                  }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
-              </p>
+        {/* Progress Bar & Status */}
+        {status === 'waking' && (
+          <div className="w-full max-w-sm mt-4 animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-150 fill-mode-both">
+            <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/10 backdrop-blur-md">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${progressPct}%`,
+                  background: 'linear-gradient(90deg, #7c3aed, #3b82f6)',
+                }}
+              />
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
+            </p>
+          </div>
+        )}
 
-            {/* Info card */}
-            <div className="w-full p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] text-left">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                <span className="text-foreground font-medium block mb-1">💡 Why is this happening?</span>
-                Free-tier Render services pause when inactive for 15 minutes to save resources. Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
-              </p>
+        {/* Educational Note */}
+        {status === 'waking' && (
+          <div className="mt-6 p-4 rounded-xl text-left border border-white/10 bg-white/5 backdrop-blur-md animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span role="img" aria-label="lightbulb">💡</span>
+              <h3 className="font-semibold text-sm text-foreground">Why is this happening?</h3>
             </div>
-          </>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Free-tier Render services pause when inactive for 15 minutes to save resources.
+              Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
+            </p>
+          </div>
         )}
       </div>
     </div>
