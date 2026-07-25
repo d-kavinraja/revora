@@ -1,24 +1,26 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { checkHealth } from '@/lib/api';
 
 const POLL_INTERVAL_MS = 10000; // Check every 10s during normal usage
 const RECOVERY_INTERVAL_MS = 3000; // Check every 3s when server is down
 
-// Pages where we should NOT show the overlay (login, waking-up, etc.)
-const EXCLUDED_PATHS = ['/', '/login', '/register', '/waking-up', '/auth/callback'];
+// Pages where we should NOT show the overlay or redirect (splash page itself, OAuth callback)
+const EXCLUDED_PATHS = ['/waking-up', '/auth/callback'];
 
 type ServerState = 'unknown' | 'alive' | 'down';
 
 export function ServerStatusOverlay() {
   const pathname = usePathname();
+  const router = useRouter();
   const [serverState, setServerState] = useState<ServerState>('unknown');
   const [dots, setDots] = useState('');
   const [recovering, setRecovering] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isInitialMount = useRef(true);
 
   const isExcluded = EXCLUDED_PATHS.some(p => pathname === p || pathname.startsWith('/auth'));
 
@@ -49,8 +51,15 @@ export function ServerStatusOverlay() {
           setServerState('alive');
         }
       } else {
-        setServerState('down');
+        if (isInitialMount.current) {
+          // If the server is asleep on the very first page load of any route, redirect to splash page
+          router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+        } else {
+          // If the server drops mid-session, just show the blur overlay
+          setServerState('down');
+        }
       }
+      isInitialMount.current = false;
     };
 
     // Run immediately on mount / pathname change
