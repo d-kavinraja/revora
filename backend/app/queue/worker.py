@@ -64,7 +64,7 @@ async def process_job(job_row) -> bool:
 
         # Create review records
         db_review, db_repo, db_pr, user_id = await get_or_create_review_records(
-            installation_id, repository, pull_request, job_row[3]  # delivery_id
+            installation_id, repository, pull_request, job_row[4], status="running"
         )
 
         # Resolve provider config
@@ -97,6 +97,33 @@ async def process_job(job_row) -> bool:
 
     except Exception as e:
         logger.error(f"Worker {_worker_id} job {job_id} failed: {e}", exc_info=True)
+        try:
+            from sqlalchemy import update
+            from app.db.session import AsyncSessionLocal
+            from app.models.github import PullRequest
+            from app.models.review import Review
+            
+            repo_id = job_row[1]
+            pr_num = job_row[2]
+            
+            async with AsyncSessionLocal() as db:
+                pr_result = await db.execute(
+                    select(PullRequest).where(
+                        PullRequest.repo_id == repo_id,
+                        PullRequest.pr_number == pr_num
+                    )
+                )
+                db_pr = pr_result.scalars().first()
+                if db_pr:
+                    await db.execute(
+                        update(Review)
+                        .where(Review.pr_id == db_pr.id, Review.status == "pending")
+                        .values(status="failed")
+                    )
+                    await db.commit()
+        except Exception as inner_e:
+            logger.error(f"Failed to update Review status to failed: {inner_e}")
+            
         return False
 
 
