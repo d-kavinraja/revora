@@ -46,7 +46,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+    <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
       {/* Background gradients and SoftAurora */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <SoftAurora

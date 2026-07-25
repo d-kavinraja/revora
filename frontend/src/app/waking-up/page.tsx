@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
 import Lightfall from '@/components/ui/Lightfall';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/ui/footer';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_ATTEMPTS = 40; // ~2 minutes
@@ -68,9 +70,12 @@ function WakingUpContent() {
   const progressPct = Math.min((attempt / MAX_ATTEMPTS) * 100, 100);
 
   return (
-    <div className="dark min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
-      {/* Lightfall background (always dark mode configuration) */}
-      <div className="absolute inset-0 z-0 opacity-80">
+    <div className="dark min-h-screen flex flex-col bg-background relative overflow-hidden">
+      <Header />
+
+      <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
+        {/* Lightfall background (always dark mode configuration) */}
+        <div className="absolute inset-0 z-0 opacity-80">
         <Lightfall
           colors={['#A6C8FF', '#5227FF', '#FF9FFC']}
           backgroundColor="#030712"
@@ -187,6 +192,12 @@ function WakingUpContent() {
           </div>
         )}
       </div>
+      </div>
+
+      <Footer 
+        logoSrc="/icon.png" 
+        className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]" 
+      />
     </div>
   );
 }
