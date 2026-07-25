@@ -46,15 +46,20 @@ async def process_job(job_row) -> bool:
         from app.github.shared import resolve_provider_config, get_or_create_review_records
         from app.db.session import AsyncSessionLocal
 
-        installation_id = payload["installation"]["id"]
-        repository = payload["repository"]
-        pull_request = payload["pull_request"]
-        owner = repository["owner"]["login"]
-        repo_name = repository["name"]
-        pr_number = pull_request["number"]
-        pr_title = pull_request["title"]
+        installation = payload.get("installation", {}) or {}
+        installation_id = installation.get("id")
+        repository = payload.get("repository", {}) or {}
+        pull_request = payload.get("pull_request", {}) or {}
+        
+        owner = repository.get("owner", {}).get("login", "")
+        repo_name = repository.get("name", "")
+        pr_number = pull_request.get("number", job_row[2])
+        pr_title = pull_request.get("title", "Pull Request")
         pr_body = pull_request.get("body", "") or ""
-        head_sha = pull_request["head"]["sha"]
+        head_sha = pull_request.get("head", {}).get("sha", job_row[3])
+
+        if not installation_id:
+            raise ValueError(f"Missing installation_id in payload for job {job_id}")
 
         # Get installation token
         token = await github_app_auth.get_installation_token(installation_id)
@@ -105,6 +110,7 @@ async def process_job(job_row) -> bool:
             
             repo_id = job_row[1]
             pr_num = job_row[2]
+            error_str = str(e) or f"Execution failed ({type(e).__name__})"
             
             async with AsyncSessionLocal() as db:
                 pr_result = await db.execute(
@@ -117,8 +123,15 @@ async def process_job(job_row) -> bool:
                 if db_pr:
                     await db.execute(
                         update(Review)
-                        .where(Review.pr_id == db_pr.id, Review.status == "pending")
-                        .values(status="failed")
+                        .where(
+                            Review.pr_id == db_pr.id,
+                            Review.status.in_(["pending", "running"])
+                        )
+                        .values(
+                            status="failed",
+                            error_message=error_str,
+                            completed_at=datetime.now(timezone.utc)
+                        )
                     )
                     await db.commit()
         except Exception as inner_e:
