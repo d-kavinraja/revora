@@ -70,23 +70,23 @@ function WakingUpContent() {
   return (
     <div className="dark min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
       {/* Lightfall background (always dark mode configuration) */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 opacity-80">
         <Lightfall
           colors={['#A6C8FF', '#5227FF', '#FF9FFC']}
           backgroundColor="#030712"
-          speed={0.8}
-          streakCount={8}
+          speed={0.6}
+          streakCount={6}
           streakWidth={1}
           streakLength={1.5}
-          glow={1}
-          density={0.8}
-          twinkle={1}
+          glow={0.5}
+          density={0.7}
+          twinkle={0}
           zoom={2.5}
-          backgroundGlow={0.6}
+          backgroundGlow={0.2}
           opacity={1}
-          mouseInteraction={true}
-          mouseStrength={1}
-          mouseRadius={0.6}
+          mouseInteraction={false}
+          mouseStrength={0}
+          mouseRadius={0}
         />
       </div>
 
