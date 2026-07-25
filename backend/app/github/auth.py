@@ -7,22 +7,33 @@ from app.core.config import settings
 
 class GitHubAppAuth:
     def __init__(self):
-        self.app_id = settings.GITHUB_APP_ID
-        self.private_key = settings.GITHUB_APP_PRIVATE_KEY
         self._token_cache: Dict[int, Tuple[str, datetime]] = {}
+
+    @property
+    def app_id(self) -> Optional[str]:
+        return settings.GITHUB_APP_ID
+
+    @property
+    def private_key(self) -> Optional[str]:
+        return settings.GITHUB_APP_PRIVATE_KEY
 
     def _create_app_jwt(self) -> str:
         """Create a JWT to authenticate as the GitHub App."""
-        if not self.app_id or not self.private_key:
-            raise ValueError("GitHub App ID or Private Key is missing.")
+        app_id = self.app_id
+        private_key = self.private_key
+
+        if not app_id:
+            raise ValueError("GITHUB_APP_ID is missing in server environment variables. Please add GITHUB_APP_ID to your Render Environment Variables.")
+        if not private_key:
+            raise ValueError("GITHUB_APP_PRIVATE_KEY is missing in server environment variables. Please add GITHUB_APP_PRIVATE_KEY to your Render Environment Variables.")
 
         now = int(time.time())
         payload = {
             "iat": now - 60,
             "exp": now + (10 * 60),
-            "iss": self.app_id,
+            "iss": str(app_id),
         }
-        key = self.private_key
+        key = private_key
         if "\\n" in key:
             key = key.replace("\\n", "\n")
         return jwt.encode(payload, key, algorithm="RS256")
