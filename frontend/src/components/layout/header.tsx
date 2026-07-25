@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   className?: string;
+  hideThemeToggle?: boolean;
 }
 
-export function Header({ className }: HeaderProps) {
+export function Header({ className, hideThemeToggle = false }: HeaderProps) {
   return (
     <header className={cn("flex items-center justify-between p-6 z-50 border-b border-border bg-background/50 backdrop-blur-md sticky top-0 w-full", className)}>
       <div className="flex items-center gap-2.5">
@@ -24,7 +25,7 @@ export function Header({ className }: HeaderProps) {
         </Link>
       </div>
       <nav className="flex items-center gap-3">
-        <ThemeToggle />
+        {!hideThemeToggle && <ThemeToggle />}
         <Link
           href="/login"
           className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]")}

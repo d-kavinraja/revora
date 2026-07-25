@@ -71,7 +71,7 @@ function WakingUpContent() {
 
   return (
     <div className="dark min-h-screen flex flex-col bg-background relative overflow-hidden">
-      <Header />
+      <Header hideThemeToggle={true} />
 
       <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
         {/* Lightfall background (always dark mode configuration) */}
