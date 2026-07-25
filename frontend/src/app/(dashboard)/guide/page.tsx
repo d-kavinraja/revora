@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import ScrollStack, { ScrollStackItem } from '@/components/ui/ScrollStack';
 import { CircleCheckIcon, GithubIcon, KeyIcon, SettingsIcon, FolderIcon } from '@animateicons/react/lucide';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -111,36 +111,39 @@ export default function SetupGuidePage() {
         </p>
       </div>
 
-      <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+      <ScrollStack 
+        useWindowScroll={true} 
+        itemDistance={30}
+        itemStackDistance={40}
+        stackPosition="20%"
+      >
         {steps.map((step, index) => {
           const Icon = step.icon;
           return (
-            <motion.div
+            <ScrollStackItem 
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active"
+              itemClassName="w-full p-8 rounded-[2rem] bg-background border border-border shadow-lg"
             >
-              {/* Icon / Marker */}
-              <div className="flex items-center justify-center w-10 h-10 rounded-full border-[3px] border-background bg-brand/10 text-brand shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm relative z-10">
-                <Icon size={18} isAnimated={true} />
-              </div>
-
-              {/* Card */}
-              <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-6 rounded-2xl bg-surface-1/50 backdrop-blur-md border border-border shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand/20 text-brand text-xs font-bold">
-                    {index + 1}
-                  </span>
-                  <h3 className="font-semibold text-lg text-foreground">{step.title}</h3>
+              <div className="flex flex-col md:flex-row md:items-start gap-6">
+                <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-brand/10 text-brand shrink-0 shadow-sm border border-brand/20">
+                  <Icon size={32} isAnimated={true} />
                 </div>
-                {step.content}
+                <div className="space-y-4 flex-1">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand text-primary-foreground text-sm font-bold shadow-sm">
+                      {index + 1}
+                    </span>
+                    <h3 className="font-bold text-2xl text-foreground tracking-tight">{step.title}</h3>
+                  </div>
+                  <div className="text-base">
+                    {step.content}
+                  </div>
+                </div>
               </div>
-            </motion.div>
+            </ScrollStackItem>
           );
         })}
-      </div>
+      </ScrollStack>
     </div>
   );
 }
