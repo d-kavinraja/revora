@@ -48,17 +48,20 @@ async def get_dashboard_stats(
         repo_ids = [r[0] for r in repo_ids_result.all()]
 
         if repo_ids:
-            # Count pull requests
-            prs_result = await db.execute(
-                select(func.count(PullRequest.id)).where(PullRequest.repo_id.in_(repo_ids))
-            )
-            total_prs_reviewed = prs_result.scalar() or 0
-
             # Get PR IDs
             pr_ids_result = await db.execute(
                 select(PullRequest.id).where(PullRequest.repo_id.in_(repo_ids))
             )
             pr_ids = [r[0] for r in pr_ids_result.all()]
+
+            if pr_ids:
+                # Count distinct pull requests that actually have reviews
+                prs_reviewed_result = await db.execute(
+                    select(func.count(func.distinct(Review.pr_id))).where(
+                        Review.pr_id.in_(pr_ids)
+                    )
+                )
+                total_prs_reviewed = prs_reviewed_result.scalar() or 0
 
             if pr_ids:
                 # Count completed reviews
