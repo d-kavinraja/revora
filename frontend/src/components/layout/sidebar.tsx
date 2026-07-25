@@ -6,12 +6,13 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon } from '@animateicons/react/lucide';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon } from '@animateicons/react/lucide';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useRef, useState, useEffect } from 'react';
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGridIcon },
+  { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
   { href: '/reviews', label: 'Reviews', icon: ClipboardIcon },
 ];
