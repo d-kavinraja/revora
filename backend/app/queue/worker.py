@@ -156,21 +156,57 @@ async def run_worker(poll_interval: float = 2.0):
                 logger.info(f"Worker {_worker_id} job {job_id} was cancelled before processing started — skipping.")
                 continue
 
-            # Process the job
-            success = await process_job(job_row)
+            # Process the job as a task so we can cancel it
+            job_task = asyncio.create_task(process_job(job_row))
+            
+            # Watcher task to poll for cancellation from the DB
+            async def watch_for_cancellation(task: asyncio.Task, jid: uuid.UUID):
+                while not task.done():
+                    await asyncio.sleep(3)
+                    try:
+                        async with AsyncSessionLocal() as s:
+                            res = await s.execute(select(ReviewJob).where(ReviewJob.id == jid))
+                            job_status = res.scalars().first()
+                            if job_status and job_status.status == JobStatus.CANCELLED:
+                                logger.info(f"Worker {_worker_id} job {jid} cancelled by user during execution. Aborting...")
+                                task.cancel()
+                                break
+                    except Exception as e:
+                        pass # Ignore temporary DB errors in watcher
+                        
+            watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))
+
+            try:
+                success = await job_task
+                new_status = JobStatus.COMPLETED if success else JobStatus.FAILED
+            except asyncio.CancelledError:
+                success = False
+                new_status = JobStatus.CANCELLED
+            finally:
+                watcher_task.cancel()
 
             # Update status
             async with AsyncSessionLocal() as session:
-                new_status = JobStatus.COMPLETED if success else JobStatus.FAILED
-                await session.execute(
-                    update(ReviewJob)
-                    .where(ReviewJob.id == job_id)
-                    .values(
-                        status=new_status,
-                        completed_at=datetime.now(timezone.utc),
-                        attempt_count=job_row[6] + 1,
+                # Only update if we didn't just get cancelled (which is already set in DB)
+                if new_status != JobStatus.CANCELLED:
+                    await session.execute(
+                        update(ReviewJob)
+                        .where(ReviewJob.id == job_id)
+                        .values(
+                            status=new_status,
+                            completed_at=datetime.now(timezone.utc),
+                            attempt_count=job_row[6] + 1,
+                        )
                     )
-                )
+                else:
+                    await session.execute(
+                        update(ReviewJob)
+                        .where(ReviewJob.id == job_id)
+                        .values(
+                            completed_at=datetime.now(timezone.utc),
+                            attempt_count=job_row[6] + 1,
+                        )
+                    )
                 await session.commit()
 
             logger.info(f"Worker {_worker_id} job {job_id} -> {new_status.value}")
