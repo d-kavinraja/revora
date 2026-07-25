@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Oxanium, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { Footer } from "@/components/ui/footer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -47,12 +46,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${oxanium.variable} min-h-screen flex flex-col bg-background text-foreground antialiased font-sans`} suppressHydrationWarning>
+      <body className={`${inter.variable} ${oxanium.variable} min-h-screen bg-background text-foreground antialiased font-sans`} suppressHydrationWarning>
         <Providers>
-          <main className="flex-1 flex flex-col w-full h-full">
-            {children}
-          </main>
-          <Footer logoSrc="/icon.png" />
+          {children}
         </Providers>
       </body>
     </html>

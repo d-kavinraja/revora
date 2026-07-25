@@ -13,6 +13,7 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
 import Waves from '@/components/ui/Waves';
+import { Footer } from '@/components/ui/footer';
 
 const features = [
   {
@@ -159,9 +160,10 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-border p-6 text-center text-xs text-muted-foreground z-10">
-        Revora &mdash; AI Code Review
-      </footer>
+      <Footer 
+        logoSrc="/icon.png" 
+        className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]" 
+      />
     </div>
   );
 }
