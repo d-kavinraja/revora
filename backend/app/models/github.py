@@ -20,7 +20,7 @@ class Installation(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User")
-    repositories: Mapped[List["Repository"]] = relationship("Repository", back_populates="installation", cascade="all, delete-orphan")
+    repositories: Mapped[List["Repository"]] = relationship("Repository", back_populates="installation")
 
 
 class Repository(Base):
