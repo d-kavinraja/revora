@@ -241,25 +241,26 @@ async def cancel_review(
                     if installation:
                         from app.github.client import GitHubClient
                         owner, repo_name = repo.full_name.split("/", 1)
-                        await GitHubClient().update_check_run(
-                            installation_id=installation.installation_id,
-                            owner=owner,
-                            repo=repo_name,
-                            check_run_id=check_run_id,
-                            status="completed",
-                            output={
-                                "title": "Revora Review Cancelled",
-                                "summary": "The review was cancelled by the user.",
-                                "conclusion": "cancelled"
-                            }
-                        )
-                        logger.info(
-                            f"Closed GitHub check run {check_run_id} as cancelled for review {review_id}"
-                        )
+                        try:
+                            await GitHubClient().update_check_run(
+                                installation_id=installation.installation_id,
+                                owner=owner,
+                                repo=repo_name,
+                                check_run_id=check_run_id,
+                                status="completed",
+                                output={
+                                    "title": "Revora Review Cancelled",
+                                    "summary": "The review was cancelled by the user.",
+                                    "conclusion": "cancelled"
+                                }
+                            )
+                            logger.info(
+                                f"Closed GitHub check run {check_run_id} as cancelled for review {review_id}"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to close GitHub check run on cancel: {e}")
             except Exception as e:
-                logger.warning(
-                    f"Failed to close GitHub check run on cancel: {e}"
-                )
+                logger.error(f"Unexpected error in cancel_review DB lookup: {e}")
 
     await db.commit()
 
