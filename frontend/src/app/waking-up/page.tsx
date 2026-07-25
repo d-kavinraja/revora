@@ -90,7 +90,7 @@ function WakingUpContent() {
         />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-6 text-center">
+      <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-8 py-12 text-center rounded-3xl bg-black/20 backdrop-blur-[2px] border border-white/5 shadow-2xl shadow-black/50">
         {/* Logo / Icon */}
         <div className="relative">
           <div
@@ -126,13 +126,13 @@ function WakingUpContent() {
         {/* Text */}
         {status === 'alive' ? (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <h1 className="text-2xl font-bold text-foreground">Server is Ready!</h1>
-            <p className="text-muted-foreground text-sm mt-2">Redirecting you now{dots}</p>
+            <h1 className="text-2xl font-bold text-white drop-shadow-md">Server is Ready!</h1>
+            <p className="text-white/80 text-sm mt-2">Redirecting you now{dots}</p>
           </div>
         ) : status === 'timeout' ? (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <h1 className="text-2xl font-bold text-foreground text-red-400">Server Taking Too Long</h1>
-            <p className="text-muted-foreground text-sm leading-relaxed mt-3">
+            <h1 className="text-2xl font-bold text-red-400 drop-shadow-md">Server Taking Too Long</h1>
+            <p className="text-white/80 text-sm leading-relaxed mt-3">
               The server hasn't responded in 2 minutes. This can happen on the Render free tier during very high load.
             </p>
             <button
@@ -145,12 +145,12 @@ function WakingUpContent() {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
               Server is Starting<span className="inline-block w-6 text-left">{dots}</span>
             </h1>
-            <p className="text-muted-foreground text-sm mt-4 leading-relaxed max-w-[320px] mx-auto">
+            <p className="text-white/80 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
               Your Revora backend is waking up from sleep mode.<br />
-              This usually takes <span className="text-foreground font-semibold">30–60 seconds</span>.
+              This usually takes <span className="text-white font-bold">30–60 seconds</span>.
             </p>
           </div>
         )}
@@ -167,7 +167,7 @@ function WakingUpContent() {
                 }}
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <p className="text-xs text-white/70 mt-3 font-medium">
               Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
             </p>
           </div>
@@ -175,12 +175,12 @@ function WakingUpContent() {
 
         {/* Educational Note */}
         {status === 'waking' && (
-          <div className="mt-6 p-4 rounded-xl text-left border border-white/10 bg-white/5 backdrop-blur-md animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both">
-            <div className="flex items-center gap-2 mb-1.5">
+          <div className="mt-4 p-5 rounded-xl text-left border border-white/10 bg-black/40 backdrop-blur-md animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both shadow-inner">
+            <div className="flex items-center gap-2 mb-2">
               <span role="img" aria-label="lightbulb">💡</span>
-              <h3 className="font-semibold text-sm text-foreground">Why is this happening?</h3>
+              <h3 className="font-semibold text-sm text-white">Why is this happening?</h3>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-white/80 leading-relaxed">
               Free-tier Render services pause when inactive for 15 minutes to save resources.
               Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
             </p>
