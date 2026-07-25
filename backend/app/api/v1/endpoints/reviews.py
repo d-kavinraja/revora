@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 import uuid
 import logging
+from datetime import datetime
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
@@ -15,6 +16,16 @@ from app.queue.models import JobStatus
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _fmt_dt(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    s = dt.isoformat()
+    # If the datetime is naive, assume UTC and append Z
+    if dt.tzinfo is None and not s.endswith("Z") and "+" not in s:
+        s += "Z"
+    return s
 
 
 @router.get("", response_model=List[Dict[str, Any]])
@@ -78,16 +89,10 @@ async def list_reviews(
                 "status": review.status,
                 "summary": review.summary,
                 "stats": review.stats or {},
-                "started_at": (
-                    review.started_at.isoformat() if review.started_at else None
-                ),
-                "completed_at": (
-                    review.completed_at.isoformat() if review.completed_at else None
-                ),
+                "started_at": _fmt_dt(review.started_at),
+                "completed_at": _fmt_dt(review.completed_at),
                 "error_message": review.error_message,
-                "created_at": (
-                    review.created_at.isoformat() if review.created_at else None
-                ),
+                "created_at": _fmt_dt(review.created_at),
                 "pull_request": {
                     "id": str(pr.id),
                     "pr_number": pr.pr_number,
@@ -150,12 +155,10 @@ async def get_review(
         "status": review.status,
         "summary": review.summary,
         "stats": review.stats or {},
-        "started_at": review.started_at.isoformat() if review.started_at else None,
-        "completed_at": (
-            review.completed_at.isoformat() if review.completed_at else None
-        ),
+        "started_at": _fmt_dt(review.started_at),
+        "completed_at": _fmt_dt(review.completed_at),
         "error_message": review.error_message,
-        "created_at": review.created_at.isoformat() if review.created_at else None,
+        "created_at": _fmt_dt(review.created_at),
         "pull_request": (
             {
                 "id": str(pr.id) if pr else None,
