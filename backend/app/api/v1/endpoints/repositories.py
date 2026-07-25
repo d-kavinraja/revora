@@ -138,6 +138,7 @@ async def sync_all_repositories(
                         db_repo.description = r.get("description")
                         db_repo.language = r.get("language")
                         db_repo.is_private = r.get("private", False)
+                        db_repo.reviews_enabled = True
                         db_repo.last_synced_at = datetime.now(timezone.utc)
                         db.add(db_repo)
                         print(f"Updated repository {r.get('full_name')} from API.")

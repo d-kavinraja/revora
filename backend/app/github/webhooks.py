@@ -66,6 +66,18 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
             await db.commit()
             await db.refresh(db_inst)
             print(f"Stored installation {inst_id} for user {user.email} (sender={sender_login})")
+        else:
+            db_inst.user_id = user.id
+            db_inst.account_id = account_id
+            db_inst.account_login = account_login
+            db_inst.account_type = account_type
+            db_inst.repository_selection = repository_selection
+            db_inst.permissions = permissions
+            db_inst.events = events
+            db.add(db_inst)
+            await db.commit()
+            await db.refresh(db_inst)
+            print(f"Updated existing installation {inst_id} for user {user.email}")
 
         for r in payload.get("repositories", []):
             repo_gid = r.get("id")
@@ -82,6 +94,14 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
                 )
                 db.add(db_repo)
                 print(f"Created repository {r.get('full_name')} from installation payload.")
+            else:
+                db_repo.installation_id = db_inst.id
+                db_repo.name = r.get("name")
+                db_repo.full_name = r.get("full_name")
+                db_repo.is_private = r.get("private", False)
+                db_repo.reviews_enabled = True
+                db.add(db_repo)
+                print(f"Re-linked repository {r.get('full_name')} to installation {db_inst.id}.")
         await db.commit()
 
 
@@ -97,12 +117,14 @@ async def handle_installation_deleted(payload: Dict[str, Any], delivery_id: str)
             repos_res = await db.execute(select(Repository).where(Repository.installation_id == db_inst.id))
             repos = repos_res.scalars().all()
             for r in repos:
-                await db.delete(r)
-                print(f"Deleted repository {r.full_name} due to app uninstallation.")
+                r.installation_id = None
+                r.reviews_enabled = False
+                db.add(r)
+                print(f"Unlinked repository {r.full_name} due to app uninstallation.")
 
             await db.delete(db_inst)
             await db.commit()
-            print(f"Successfully deleted installation {inst_id} and its repositories.")
+            print(f"Successfully removed installation {inst_id} while preserving repositories and historical reviews.")
 
 
 async def handle_installation_repositories(payload: Dict[str, Any], delivery_id: str):
@@ -137,6 +159,7 @@ async def handle_installation_repositories(payload: Dict[str, Any], delivery_id:
                 db_repo.name = r.get("name")
                 db_repo.full_name = r.get("full_name")
                 db_repo.is_private = r.get("private", False)
+                db_repo.reviews_enabled = True
                 db.add(db_repo)
                 print(f"Updated repository {r.get('full_name')} installation mapping.")
 
@@ -145,8 +168,10 @@ async def handle_installation_repositories(payload: Dict[str, Any], delivery_id:
             res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
             db_repo = res.scalars().first()
             if db_repo:
-                await db.delete(db_repo)
-                print(f"Removed repository {r.get('full_name')} from database via webhook.")
+                db_repo.installation_id = None
+                db_repo.reviews_enabled = False
+                db.add(db_repo)
+                print(f"Unlinked repository {r.get('full_name')} from installation via webhook.")
 
         await db.commit()
 
