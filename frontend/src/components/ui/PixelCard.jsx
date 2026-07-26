@@ -130,6 +130,7 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
   const pixelsRef = useRef([]);
   const animationRef = useRef(null);
   const timePreviousRef = useRef(performance.now());
+  const lastSizeRef = useRef({ width: 0, height: 0 });
   const reducedMotion = useRef(
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   ).current;
@@ -147,6 +148,8 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
     const width = Math.floor(rect.width);
     const height = Math.floor(rect.height);
     const ctx = canvasRef.current.getContext('2d');
+    
+    lastSizeRef.current = { width, height };
 
     canvasRef.current.width = width;
     canvasRef.current.height = height;
@@ -206,9 +209,15 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
     initPixels();
     handleAnimation('appear');
     
-    const observer = new ResizeObserver(() => {
-      initPixels();
-      handleAnimation('appear');
+    const observer = new ResizeObserver((entries) => {
+      if (!entries[0]) return;
+      const { width, height } = entries[0].contentRect;
+      
+      // Only re-init if the size changed significantly (ignores tiny layout shifts from text animation)
+      if (Math.abs(width - lastSizeRef.current.width) > 5 || Math.abs(height - lastSizeRef.current.height) > 5) {
+        initPixels();
+        handleAnimation('appear');
+      }
     });
     if (containerRef.current) {
       observer.observe(containerRef.current);
