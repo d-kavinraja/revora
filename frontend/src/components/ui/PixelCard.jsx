@@ -202,21 +202,13 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
     animationRef.current = requestAnimationFrame(() => doAnimate(name));
   };
 
-  const onMouseEnter = () => handleAnimation('appear');
-  const onMouseLeave = () => handleAnimation('disappear');
-  const onFocus = e => {
-    if (e.currentTarget.contains(e.relatedTarget)) return;
-    handleAnimation('appear');
-  };
-  const onBlur = e => {
-    if (e.currentTarget.contains(e.relatedTarget)) return;
-    handleAnimation('disappear');
-  };
-
   useEffect(() => {
     initPixels();
+    handleAnimation('appear');
+    
     const observer = new ResizeObserver(() => {
       initPixels();
+      handleAnimation('appear');
     });
     if (containerRef.current) {
       observer.observe(containerRef.current);
@@ -232,11 +224,6 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
     <div
       ref={containerRef}
       className={`pixel-card ${className}`}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      onFocus={finalNoFocus ? undefined : onFocus}
-      onBlur={finalNoFocus ? undefined : onBlur}
-      tabIndex={finalNoFocus ? -1 : 0}
     >
       <canvas className="pixel-canvas absolute inset-0 z-0" ref={canvasRef} />
       <div className="relative z-10 w-full h-full">
