@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
+import LetterGlitch from '@/components/ui/LetterGlitch';
 
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/ui/footer';
@@ -74,7 +75,14 @@ function WakingUpContent() {
       <Header hideThemeToggle={true} />
 
       <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
-
+        <div className="absolute inset-0 z-0 opacity-80">
+          <LetterGlitch
+            glitchSpeed={50}
+            centerVignette={true}
+            outerVignette={false}
+            smooth={true}
+          />
+        </div>
 
         <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-8 py-12 text-center rounded-3xl bg-black/20 backdrop-blur-[2px] border border-white/5 shadow-2xl shadow-black/50">
           {/* Logo / Icon */}
