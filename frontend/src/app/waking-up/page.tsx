@@ -151,10 +151,10 @@ function WakingUpContent() {
           ) : (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
               <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
-                Server is Starting or Server Down<span className="inline-block w-6 text-left">{dots}</span>
+                Server Down, Waking Up or Restarting<span className="inline-block w-6 text-left">{dots}</span>
               </h1>
               <p className="text-white/80 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
-                Your Revora backend is waking up from sleep mode.<br />
+                Your Revora backend is currently offline, restarting, or waking up from sleep mode.<br />
                 This usually takes <span className="text-white font-bold">30–60 seconds</span>.
               </p>
             </div>
