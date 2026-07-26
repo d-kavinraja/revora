@@ -140,6 +140,67 @@ async def process_job(job_row) -> bool:
         return False
 
 
+async def recover_orphaned_jobs(max_retries: int = 3):
+    """Detect and recover orphaned/stale jobs running from previous server crashes or restarts."""
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ReviewJob).where(ReviewJob.status == JobStatus.RUNNING)
+            )
+            orphaned_jobs = result.scalars().all()
+            
+            if not orphaned_jobs:
+                return
+            
+            logger.info(f"Crash Recovery: Found {len(orphaned_jobs)} orphaned job(s) in 'running' state.")
+            
+            for job in orphaned_jobs:
+                from app.models.github import PullRequest
+                from app.models.review import Review
+
+                pr_result = await session.execute(
+                    select(PullRequest).where(
+                        PullRequest.repo_id == job.repo_id,
+                        PullRequest.pr_number == job.pr_number
+                    )
+                )
+                db_pr = pr_result.scalars().first()
+
+                if job.attempt_count < max_retries:
+                    job.attempt_count += 1
+                    job.status = JobStatus.QUEUED
+                    job.worker_id = None
+                    session.add(job)
+
+                    if db_pr:
+                        await session.execute(
+                            update(Review)
+                            .where(Review.pr_id == db_pr.id, Review.status.in_(["pending", "running"]))
+                            .values(status="pending")
+                        )
+                    logger.info(f"Crash Recovery: Re-queued orphaned job {job.id} for PR #{job.pr_number} (Attempt {job.attempt_count}/{max_retries}).")
+                else:
+                    job.status = JobStatus.FAILED
+                    job.completed_at = datetime.now(timezone.utc)
+                    session.add(job)
+
+                    if db_pr:
+                        await session.execute(
+                            update(Review)
+                            .where(Review.pr_id == db_pr.id, Review.status.in_(["pending", "running"]))
+                            .values(
+                                status="failed",
+                                error_message="Server restarted mid-review; retry limit reached.",
+                                completed_at=datetime.now(timezone.utc)
+                            )
+                        )
+                    logger.warning(f"Crash Recovery: Job {job.id} for PR #{job.pr_number} exceeded max retries. Marked as failed.")
+
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Error during orphaned job recovery: {e}", exc_info=True)
+
+
 async def run_worker(poll_interval: float = 2.0):
     """Main worker loop. Polls for queued jobs and processes them.
 
@@ -150,8 +211,18 @@ async def run_worker(poll_interval: float = 2.0):
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
+    # Recover any jobs left in 'running' status from a previous server crash
+    await recover_orphaned_jobs()
+
+    last_recovery_check = datetime.now(timezone.utc)
+
     while not _shutdown:
         try:
+            # Periodically check for stale/orphaned jobs every 60s
+            if (datetime.now(timezone.utc) - last_recovery_check).total_seconds() > 60:
+                await recover_orphaned_jobs()
+                last_recovery_check = datetime.now(timezone.utc)
+
             async with AsyncSessionLocal() as session:
                 # Fetch one queued job with row-level locking
                 stmt = text("""
@@ -199,10 +270,10 @@ async def run_worker(poll_interval: float = 2.0):
             # Process the job as a task so we can cancel it
             job_task = asyncio.create_task(process_job(job_row))
             
-            # Watcher task to poll for cancellation from the DB
+            # Watcher task to poll for cancellation and update heartbeat timestamp
             async def watch_for_cancellation(task: asyncio.Task, jid: uuid.UUID):
                 while not task.done():
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(5)
                     try:
                         async with AsyncSessionLocal() as s:
                             res = await s.execute(select(ReviewJob).where(ReviewJob.id == jid))
@@ -211,7 +282,11 @@ async def run_worker(poll_interval: float = 2.0):
                                 logger.info(f"Worker {_worker_id} job {jid} cancelled by user during execution. Aborting...")
                                 task.cancel()
                                 break
-                    except Exception as e:
+                            elif job_status:
+                                job_status.updated_at = datetime.now(timezone.utc)
+                                s.add(job_status)
+                                await s.commit()
+                    except Exception:
                         pass # Ignore temporary DB errors in watcher
                         
             watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))
