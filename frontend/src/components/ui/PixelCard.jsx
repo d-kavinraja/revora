@@ -209,21 +209,20 @@ export default function PixelCard({ variant = 'default', gap, speed, colors, noF
     initPixels();
     handleAnimation('appear');
     
-    const observer = new ResizeObserver((entries) => {
-      if (!entries[0]) return;
-      const { width, height } = entries[0].contentRect;
-      
-      // Only re-init if the size changed significantly (ignores tiny layout shifts from text animation)
-      if (Math.abs(width - lastSizeRef.current.width) > 5 || Math.abs(height - lastSizeRef.current.height) > 5) {
+    let resizeTimeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
         initPixels();
         handleAnimation('appear');
-      }
-    });
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+      }, 200); // debounce window resize
+    };
+
+    window.addEventListener('resize', handleResize);
+    
     return () => {
-      observer.disconnect();
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
       cancelAnimationFrame(animationRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
