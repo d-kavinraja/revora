@@ -186,8 +186,8 @@ function WakingUpContent() {
                 <h3 className="font-semibold text-sm text-white">Why is this happening?</h3>
               </div>
               <p className="text-xs text-white/80 leading-relaxed">
-                Free-tier Render services pause when inactive for 15 minutes to save resources.
-                Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
+                Revora uses a Serverless architecture to reduce compute power and costs.
+                Services pause when inactive and automatically restart upon request. You only see this page when the server is cold-starting.
               </p>
             </div>
           )}
