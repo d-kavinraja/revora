@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
-import Lightfall from '@/components/ui/Lightfall';
+import LetterGlitch from '@/components/ui/LetterGlitch';
+import PixelCard from '@/components/ui/PixelCard';
+
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/ui/footer';
 
@@ -74,28 +75,17 @@ function WakingUpContent() {
       <Header hideThemeToggle={true} />
 
       <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
-        {/* Lightfall background (always dark mode configuration) */}
         <div className="absolute inset-0 z-0 opacity-80">
-          <Lightfall
-            colors={['#A6C8FF', '#5227FF', '#FF9FFC']}
-            backgroundColor="#030712"
-            speed={0.6}
-            streakCount={6}
-            streakWidth={1}
-            streakLength={1.5}
-            glow={0.5}
-            density={0.7}
-            twinkle={0}
-            zoom={2.5}
-            backgroundGlow={0.2}
-            opacity={1}
-            mouseInteraction={false}
-            mouseStrength={0}
-            mouseRadius={0}
+          <LetterGlitch
+            glitchSpeed={50}
+            centerVignette={true}
+            outerVignette={false}
+            smooth={true}
           />
         </div>
 
-        <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-8 py-12 text-center rounded-3xl bg-black/20 backdrop-blur-[2px] border border-white/5 shadow-2xl shadow-black/50">
+        <PixelCard variant="blue" className="relative z-10 max-w-md w-full rounded-3xl bg-black/40 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
+          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center">
           {/* Logo / Icon */}
           <div className="relative">
             <div
@@ -186,12 +176,13 @@ function WakingUpContent() {
                 <h3 className="font-semibold text-sm text-white">Why is this happening?</h3>
               </div>
               <p className="text-xs text-white/80 leading-relaxed">
-                Free-tier Render services pause when inactive for 15 minutes to save resources.
-                Once a request arrives, they automatically restart. You only see this page when the server is cold-starting.
+                Revora uses a Serverless architecture to reduce compute power and costs.
+                Services pause when inactive and automatically restart upon request. You only see this page when the server is cold-starting.
               </p>
             </div>
           )}
-        </div>
+          </div>
+        </PixelCard>
       </div>
 
       <Footer
