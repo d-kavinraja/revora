@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { checkHealth } from '@/lib/api';
-import LetterGlitch from '@/components/ui/LetterGlitch';
+import ASCIIText from '@/components/ui/ASCIIText';
 import PixelCard from '@/components/ui/PixelCard';
 
 import { Header } from '@/components/layout/header';
@@ -75,12 +75,11 @@ function WakingUpContent() {
       <Header hideThemeToggle={true} />
 
       <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
-        <div className="absolute inset-0 z-0 opacity-80">
-          <LetterGlitch
-            glitchSpeed={50}
-            centerVignette={true}
-            outerVignette={false}
-            smooth={true}
+        <div className="absolute inset-0 z-0 opacity-80 overflow-hidden">
+          <ASCIIText
+            text="revora_server"
+            enableWaves={true}
+            asciiFontSize={8}
           />
         </div>
 
