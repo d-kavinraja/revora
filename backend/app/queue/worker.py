@@ -249,6 +249,9 @@ async def run_worker(poll_interval: float = 2.0):
                     )
                 await session.commit()
 
+            import gc
+            gc.collect()
+
             logger.info(f"Worker {_worker_id} job {job_id} -> {new_status.value}")
 
         except Exception as e:
