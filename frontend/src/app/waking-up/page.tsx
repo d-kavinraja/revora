@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
 import { checkHealth } from '@/lib/api';
-import CardSwap, { Card } from '@/components/ui/CardSwap';
 import LetterGlitch from '@/components/ui/LetterGlitch';
+import PixelCard from '@/components/ui/PixelCard';
 
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/ui/footer';
@@ -85,7 +84,8 @@ function WakingUpContent() {
           />
         </div>
 
-        <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full px-8 py-12 text-center rounded-3xl bg-black/20 backdrop-blur-[2px] border border-white/5 shadow-2xl shadow-black/50">
+        <PixelCard variant="blue" className="relative z-10 max-w-md w-full rounded-3xl bg-black/40 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
+          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center">
           {/* Logo / Icon */}
           <div className="relative">
             <div
@@ -168,41 +168,21 @@ function WakingUpContent() {
             </div>
           )}
 
-          {/* Educational Note / Info Cards */}
+          {/* Educational Note */}
           {status === 'waking' && (
-            <div className="w-full mt-4 flex justify-center animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300" style={{ height: '220px', position: 'relative' }}>
-              <CardSwap
-                width={300}
-                height={160}
-                cardDistance={15}
-                verticalDistance={25}
-                delay={4000}
-              >
-                <Card className="flex flex-col items-center justify-center p-6 text-center shadow-lg border border-white/10 bg-black/60 backdrop-blur-md rounded-xl">
-                  <span role="img" aria-label="lightbulb" className="text-2xl mb-2">💡</span>
-                  <h3 className="font-semibold text-sm text-white mb-2">Serverless Architecture</h3>
-                  <p className="text-xs text-white/80 leading-relaxed">
-                    Revora uses a serverless model to reduce compute power and costs.
-                  </p>
-                </Card>
-                <Card className="flex flex-col items-center justify-center p-6 text-center shadow-lg border border-white/10 bg-black/60 backdrop-blur-md rounded-xl">
-                  <span role="img" aria-label="rocket" className="text-2xl mb-2">🚀</span>
-                  <h3 className="font-semibold text-sm text-white mb-2">Auto-Restart</h3>
-                  <p className="text-xs text-white/80 leading-relaxed">
-                    Services pause when inactive and automatically restart upon request.
-                  </p>
-                </Card>
-                <Card className="flex flex-col items-center justify-center p-6 text-center shadow-lg border border-white/10 bg-black/60 backdrop-blur-md rounded-xl">
-                  <span role="img" aria-label="clock" className="text-2xl mb-2">⏱️</span>
-                  <h3 className="font-semibold text-sm text-white mb-2">Cold Starting</h3>
-                  <p className="text-xs text-white/80 leading-relaxed">
-                    You only see this page when the server is cold-starting. It takes ~45 seconds.
-                  </p>
-                </Card>
-              </CardSwap>
+            <div className="mt-4 p-5 rounded-xl text-left border border-white/10 bg-black/40 backdrop-blur-md animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both shadow-inner">
+              <div className="flex items-center gap-2 mb-2">
+                <span role="img" aria-label="lightbulb">💡</span>
+                <h3 className="font-semibold text-sm text-white">Why is this happening?</h3>
+              </div>
+              <p className="text-xs text-white/80 leading-relaxed">
+                Revora uses a Serverless architecture to reduce compute power and costs.
+                Services pause when inactive and automatically restart upon request. You only see this page when the server is cold-starting.
+              </p>
             </div>
           )}
-        </div>
+          </div>
+        </PixelCard>
       </div>
 
       <Footer
