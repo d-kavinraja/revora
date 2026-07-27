@@ -204,6 +204,7 @@ export default function ApiKeysSettingsPage() {
       groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
       openrouter: 'OpenRouter', azure_openai: 'Azure OpenAI',
       ollama: 'Ollama', cohere: 'Cohere', mistral: 'Mistral',
+      nvidia: 'NVIDIA NIM', nvidia_nim: 'NVIDIA NIM',
     };
     return names[prov.toLowerCase()] || prov;
   };
@@ -267,6 +268,7 @@ export default function ApiKeysSettingsPage() {
                   className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
                 >
                   <option value="gemini">Gemini</option>
+                  <option value="nvidia">NVIDIA NIM</option>
                   <option value="openai" disabled>OpenAI (Under Testing)</option>
                   <option value="anthropic" disabled>Claude (Under Testing)</option>
                   <option value="groq" disabled>Groq (Under Testing)</option>

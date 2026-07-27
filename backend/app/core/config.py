@@ -1,4 +1,4 @@
-﻿"""Application configuration.
+"""Application configuration.
 
 All secrets are required via environment variables.
 No hardcoded defaults for security-sensitive values.
@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = Field(
         default=None,
         description="OpenAI API key"
+    )
+    NVIDIA_API_KEY: Optional[str] = Field(
+        default=None,
+        description="NVIDIA NIM API key"
     )
 
     # Rate Limiting

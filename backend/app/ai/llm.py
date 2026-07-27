@@ -60,15 +60,27 @@ class LLMService:
         model_to_use, canonical_model = self._resolve_model(provider, model)
 
         try:
+            kwargs = {
+                "model": model_to_use,
+                "messages": messages,
+                "api_key": api_key,
+            }
+
+            if provider in ["nvidia", "nvidia_nim"]:
+                kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
+                if "nemotron" in model_to_use.lower():
+                    kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}, "reasoning_budget": 16384}
+                    kwargs["temperature"] = 1
+                    kwargs["top_p"] = 0.95
+                    kwargs["max_tokens"] = 16384
+
             # Run synchronous completion in a thread pool with built-in retries
             # litellm 1.91.x: use max_retries instead of num_retries
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     completion,
-                    model=model_to_use,
-                    messages=messages,
-                    api_key=api_key,
-                                    ),
+                    **kwargs
+                ),
                 timeout=timeout,
             )
 
@@ -239,6 +251,8 @@ class LLMService:
             "gemini": getattr(settings, "GEMINI_API_KEY", None),
             "openai": getattr(settings, "OPENAI_API_KEY", None),
             "anthropic": getattr(settings, "ANTHROPIC_API_KEY", None),
+            "nvidia": getattr(settings, "NVIDIA_API_KEY", None),
+            "nvidia_nim": getattr(settings, "NVIDIA_API_KEY", None),
         }
         env_key = env_key_map.get(provider)
         if env_key:
@@ -255,6 +269,7 @@ class LLMService:
             "deepseek": "deepseek-chat",
             "groq": "llama-3.3-70b-versatile",
             "grok": "grok-2",
+            "nvidia": "nvidia/nemotron-3-ultra-550b-a55b",
         }
         
         if not model:
@@ -278,6 +293,9 @@ class LLMService:
             model = f"groq/{model}"
         elif provider == "grok" and not model.startswith("xai/"):
             model = f"xai/{model}"
+        elif provider in ["nvidia", "nvidia_nim"]:
+            if not model.startswith("nvidia_nim/"):
+                model = f"nvidia_nim/{model}"
 
         return model, None
 

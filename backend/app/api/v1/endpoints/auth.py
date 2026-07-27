@@ -90,11 +90,17 @@ async def github_login(
         if payload.redirect_uri:
             exchange_data["redirect_uri"] = payload.redirect_uri
 
-        token_res = await client.post(
-            "https://github.com/login/oauth/access_token",
-            headers={"Accept": "application/json"},
-            data=exchange_data
-        )
+        try:
+            token_res = await client.post(
+                "https://github.com/login/oauth/access_token",
+                headers={"Accept": "application/json"},
+                data=exchange_data
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Network error: Failed to connect to GitHub. Please check your internet connection and try again. Details: {e}"
+            )
         if not token_res.is_success:
             raise HTTPException(
                 status_code=400,
@@ -114,13 +120,19 @@ async def github_login(
             raise HTTPException(status_code=400, detail=token_data.get("error_description", "Invalid GitHub authorization code."))
 
         # 2. Fetch GitHub user profile
-        user_res = await client.get(
-            "https://api.github.com/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json"
-            }
-        )
+        try:
+            user_res = await client.get(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json"
+                }
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Network error: Failed to retrieve user profile from GitHub. Details: {e}"
+            )
         if not user_res.is_success:
             raise HTTPException(status_code=400, detail="Failed to retrieve user profile from GitHub.")
         

@@ -25,6 +25,7 @@ COST_TABLE = {
     "anthropic": {"input": 0.003,    "output": 0.015},
     "deepseek":  {"input": 0.00014,  "output": 0.00028},
     "groq":      {"input": 0.00059,  "output": 0.00079},
+    "nvidia":    {"input": 0.000,    "output": 0.000},
 }
 
 

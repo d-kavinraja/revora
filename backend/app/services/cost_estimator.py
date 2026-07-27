@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ PROVIDER_COST_TABLE = {
     "ollama": {"input": 0.0, "output": 0.0},           # Local, free
     "cohere": {"input": 0.0015, "output": 0.002},      # Command R+
     "mistral": {"input": 0.002, "output": 0.006},      # Mistral Large
+    "nvidia": {"input": 0.0, "output": 0.0},           # NVIDIA NIM (Free endpoints)
 }
 
 

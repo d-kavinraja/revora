@@ -18,6 +18,7 @@ PROVIDER_PRIORITY = [
     # ProviderConfig(name="anthropic", model="anthropic/claude-sonnet-4-20250514", priority=2, timeout_seconds=60),
     # ProviderConfig(name="deepseek", model="deepseek/deepseek-chat", priority=3, timeout_seconds=90),
     # ProviderConfig(name="groq", model="groq/llama-3.3-70b-versatile", priority=4, timeout_seconds=30),
+    ProviderConfig(name="nvidia", model="nvidia/nemotron-3-ultra-550b-a55b", priority=5, timeout_seconds=120),
 ]
 
 # Cost per 1K tokens (input/output) by provider
@@ -27,6 +28,7 @@ COST_TABLE = {
     "anthropic": {"input": 0.003, "output": 0.015},
     "deepseek": {"input": 0.00014, "output": 0.00028},
     "groq": {"input": 0.00059, "output": 0.00079},
+    "nvidia": {"input": 0.0, "output": 0.0},
 }
 
 
@@ -71,10 +73,11 @@ class LLMOrchestrator:
             # Get ALL keys for this provider to try on auth failure
             all_key_tuples = await llm_service._get_all_provider_keys(user_uuid, provider_config.name)
             all_key_ids = [str(k[0]) for k in all_key_tuples] if all_key_tuples else []
-            if api_key_id and api_key_id not in all_key_ids:
-                all_key_ids.insert(0, api_key_id)
-            if not all_key_ids:
-                all_key_ids = [api_key_id] if api_key_id else []
+            if api_key_id and provider_config.name == preferred_provider:
+                if api_key_id not in all_key_ids:
+                    all_key_ids.insert(0, api_key_id)
+            if not all_key_ids and provider_config.name == preferred_provider and api_key_id:
+                all_key_ids = [api_key_id]
             logger.info(f"Provider {provider_config.name}: {len(all_key_ids)} key(s) to try")
 
             for attempt in range(max(provider_config.max_retries, len(all_key_ids))):
@@ -85,7 +88,7 @@ class LLMOrchestrator:
                         await callback("sending_request_to_llm", "running")
 
                     # Cycle through available keys
-                    current_key_id = all_key_ids[attempt % len(all_key_ids)] if all_key_ids else api_key_id
+                    current_key_id = all_key_ids[attempt % len(all_key_ids)] if all_key_ids else None
                     response_text, real_input_tokens, real_output_tokens = await llm_service.get_completion(
                         user_id=user_uuid,
                         provider=provider_config.name,

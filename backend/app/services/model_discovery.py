@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
@@ -36,6 +36,7 @@ class ModelDiscoveryEngine:
         "ollama": "ollama",
         "cohere": "cohere",
         "mistral": "mistral",
+        "nvidia": "nvidia_nim",
     }
 
     # Terms indicating a model is not a chat model
@@ -77,13 +78,21 @@ class ModelDiscoveryEngine:
 
         live_models: List[str] = []
         try:
-            # Query the provider's actual API endpoint
-            live_models = await asyncio.to_thread(
-                litellm.get_valid_models,
-                check_provider_endpoint=True,
-                custom_llm_provider=litellm_prov,
-                api_key=raw_key,
-            )
+            if litellm_prov == "nvidia_nim":
+                # litellm get_valid_models doesn't auto-fetch Nvidia correctly via API yet, we do it directly or pass api_base
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get("https://integrate.api.nvidia.com/v1/models", headers={"Authorization": f"Bearer {raw_key}"}, timeout=10)
+                    resp.raise_for_status()
+                    live_models = [m["id"] for m in resp.json().get("data", [])]
+            else:
+                # Query the provider's actual API endpoint
+                live_models = await asyncio.to_thread(
+                    litellm.get_valid_models,
+                    check_provider_endpoint=True,
+                    custom_llm_provider=litellm_prov,
+                    api_key=raw_key,
+                )
         except Exception as e:
             error_str = str(e).lower()
             # Rate limiting is not a permanent failure - return empty but don't cache
@@ -169,6 +178,9 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"cohere/{canonical_model_name}"
         elif provider_lower == "mistral" and not model_name.startswith("mistral/"):
             litellm_model_name = f"mistral/{canonical_model_name}"
+        elif provider_lower == "nvidia":
+            if not model_name.startswith("nvidia_nim/"):
+                litellm_model_name = f"nvidia_nim/{canonical_model_name}"
 
         is_deprecated = any(term in m_lower for term in cls.DEPRECATED_TERMS)
         is_preview = any(term in m_lower for term in cls.PREVIEW_TERMS)
@@ -225,14 +237,20 @@ class ModelDiscoveryEngine:
         Returns True if successful, False if 429/403.
         """
         try:
+            kwargs = {
+                "model": canonical_model.litellm_model_name,
+                "messages": [{"role": "user", "content": "hi"}],
+                "api_key": raw_key,
+                "max_tokens": 1,
+                "drop_params": True
+            }
+            if canonical_model.provider.lower() in ["nvidia", "nvidia_nim"]:
+                kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
+
             await asyncio.wait_for(
                 asyncio.to_thread(
                     litellm.completion,
-                    model=canonical_model.litellm_model_name,
-                    messages=[{"role": "user", "content": "hi"}],
-                    api_key=raw_key,
-                    max_tokens=1,
-                    drop_params=True
+                    **kwargs
                 ),
                 timeout=5
             )
