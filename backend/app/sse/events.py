@@ -52,6 +52,8 @@ class PipelineEvent:
 
 PIPELINE_STAGES = [
     ("queued", "Queued"),
+    ("validating_ai_configuration", "Validating AI Configuration"),
+    ("execution_context_ready", "Execution Context Ready"),
     ("preparing_review", "Preparing Review"),
     ("cloning_repository", "Cloning Repository"),
     ("fetching_pull_request", "Fetching Pull Request"),
@@ -71,7 +73,6 @@ PIPELINE_STAGES = [
     ("ranking_context", "Ranking Context"),
     ("compressing_context", "Compressing Context"),
     ("building_prompt", "Building Prompt"),
-    ("selecting_ai_provider", "Selecting AI Provider"),
     ("sending_request_to_llm", "Sending Request to LLM"),
     ("receiving_ai_response", "Receiving AI Response"),
     ("running_verification_agent", "Running Verification Agent"),

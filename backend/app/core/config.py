@@ -75,14 +75,12 @@ class Settings(BaseSettings):
         description="GitHub webhook signature verification secret"
     )
 
-    # LLM API Keys (at least one required for AI reviews)
-    GEMINI_API_KEY: Optional[str] = Field(
-        default=None,
-        description="Google Gemini API key"
-    )
-    OPENAI_API_KEY: Optional[str] = Field(
-        default=None,
-        description="OpenAI API key"
+    # Usage & Analytics
+    # Temporarily disabled while redesigning model-level pricing.
+    # When False: recording is skipped, API returns disabled response.
+    USAGE_ANALYTICS_ENABLED: bool = Field(
+        default=False,
+        description="Master flag for usage tracking and analytics subsystem"
     )
 
     # Rate Limiting

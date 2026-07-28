@@ -2,6 +2,11 @@
 
 Orchestrates the full Context Engineering review pipeline with
 per-stage error handling and graceful degradation.
+
+BYOK Architecture:
+- Execution context (provider/model/key) is resolved ONCE before review starts.
+- The resolved context is IMMUTABLE for the entire review.
+- No provider fallback, no key cycling, no model switching.
 """
 
 import time
@@ -27,11 +32,13 @@ from app.retrieval.token_budget_engine import token_budget_engine
 from app.prompt_engine.builder import prompt_builder
 from app.prompt_engine.models import ReviewType
 from app.orchestrator.orchestrator import llm_orchestrator
+from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING
 from app.verification.engine import verification_engine
 from app.github_review.generator import github_review_generator
 from app.security.content_guard import sanitize_input
 from app.github.client import github_client
 from app.ai.git_utils import GitService
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +70,7 @@ class ReviewPipeline:
         clone_url: str = None,
         token: str = None,
         api_key_id: str = None,
+        config_source: str = CONFIG_SOURCE_ROUTING,
     ) -> dict:
         """Execute the full review pipeline.
 
@@ -92,7 +100,37 @@ class ReviewPipeline:
         check_run_id = None
 
         try:
-            # Stage 1: Prepare
+            # Stage 0: Validate AI Configuration
+            # This runs BEFORE any expensive operations (clone, indexing, etc.)
+            # If validation fails, we stop immediately with an actionable error.
+            await emitter.emit("validating_ai_configuration", "running", EventType.STAGE_START)
+            await emitter.emit_log("validating_ai_configuration",
+                                   f"Validating AI configuration: {provider}/{model}")
+
+            validation_source = {
+                CONFIG_SOURCE_REPO: "Repository Configuration",
+                CONFIG_SOURCE_ROUTING: "User Routing Preferences",
+            }.get(config_source, "Unknown")
+
+            await emitter.emit("validating_ai_configuration", "completed",
+                               EventType.STAGE_COMPLETE,
+                               metrics={
+                                   "provider": provider,
+                                   "model": model,
+                                   "source": config_source,
+                                   "source_label": validation_source,
+                               })
+
+            await emitter.emit("execution_context_ready", "completed",
+                               metrics={
+                                   "provider": provider,
+                                   "model": model,
+                                   "api_key_id": api_key_id or "",
+                                   "source": validation_source,
+                               })
+
+            # Stage 1: Prepare (create GitHub check run)
+            # Only reached if validation passed
             await emitter.emit("preparing_review", "running", EventType.STAGE_START)
             await emitter.emit_log("preparing_review", f"Starting review for PR #{pr_number}")
             
@@ -150,9 +188,9 @@ class ReviewPipeline:
                 diff_content, retrieval_result, provider
             )
 
-            # Stage 8: LLM call
+            # Stage 8: LLM call — immutable execution context
             llm_response = await self._stage_llm(
-                emitter, prompt, user_id, provider, model, api_key_id
+                emitter, prompt, user_id, provider, model, api_key_id, config_source
             )
             metrics.update({
                 "provider": llm_response.provider,
@@ -409,14 +447,15 @@ class ReviewPipeline:
                              message=str(e))
             raise  # This is critical - cannot proceed without prompt
 
-    async def _stage_llm(self, emitter, prompt, user_id, provider, model, api_key_id=None):
-        """Stage: LLM call."""
-        await emitter.emit("selecting_ai_provider", "running", EventType.STAGE_START)
+    async def _stage_llm(self, emitter, prompt, user_id, provider, model, api_key_id=None, config_source="user_routing"):
+        """Stage: LLM call — uses exactly the configured provider/model/key."""
+        await emitter.emit("sending_request_to_llm", "running", EventType.STAGE_START)
 
         try:
             llm_response = await llm_orchestrator.complete(
                 prompt=prompt,
                 user_id=user_id,
+                config_source=config_source,
                 preferred_provider=provider,
                 preferred_model=model,
                 api_key_id=api_key_id,
@@ -430,7 +469,7 @@ class ReviewPipeline:
             return llm_response
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
-            await emitter.emit("selecting_ai_provider", "failed", EventType.STAGE_FAILED,
+            await emitter.emit("sending_request_to_llm", "failed", EventType.STAGE_FAILED,
                              message=str(e))
             raise  # This is critical - cannot proceed without LLM response
 
@@ -547,78 +586,74 @@ class ReviewPipeline:
             logger.error(f"Failed to save review status: {e}")
 
         # --- 2. Record usage in a FRESH session ---
-        try:
-            from app.services.token_manager import token_manager
-            from app.services.usage_tracker import usage_tracker
-            import uuid as _uuid
+        if settings.USAGE_ANALYTICS_ENABLED:
+            try:
+                from app.services.token_manager import token_manager
+                from app.services.usage_tracker import usage_tracker
+                from app.services.cost_estimator import cost_estimator
+                import uuid as _uuid
 
-            input_tok  = llm_response.input_tokens  or 0
-            output_tok = llm_response.output_tokens or 0
+                input_tok  = llm_response.input_tokens  or 0
+                output_tok = llm_response.output_tokens or 0
 
-            logger.info(f"[usage] Logging for review {review_id}: provider={llm_response.provider} "
-                        f"input={input_tok} output={output_tok} user_id={user_id}")
+                logger.info(f"[usage] Logging for review {review_id}: provider={llm_response.provider} "
+                            f"input={input_tok} output={output_tok} user_id={user_id}")
 
-            COST_TABLE = {
-                "gemini":    {"input": 0.000075, "output": 0.0003},
-                "openai":    {"input": 0.0025,   "output": 0.01},
-                "anthropic": {"input": 0.003,    "output": 0.015},
-                "deepseek":  {"input": 0.00014,  "output": 0.00028},
-                "groq":      {"input": 0.00059,  "output": 0.00079},
-            }
-            rates = COST_TABLE.get(llm_response.provider, {"input": 0.001, "output": 0.003})
-            input_cost  = round((input_tok  * rates["input"])  / 1000, 8)
-            output_cost = round((output_tok * rates["output"]) / 1000, 8)
+                input_cost  = round(cost_estimator.estimate(llm_response.provider, input_tok, 0), 8)
+                output_cost = round(cost_estimator.estimate(llm_response.provider, 0, output_tok), 8)
 
-            parsed_user_id = None
-            if user_id:
-                try:
-                    parsed_user_id = _uuid.UUID(user_id) if isinstance(user_id, str) else user_id
-                except Exception:
-                    pass
+                parsed_user_id = None
+                if user_id:
+                    try:
+                        parsed_user_id = _uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+                    except Exception:
+                        pass
 
-            if parsed_user_id:
-                async with AsyncSessionLocal() as usage_db:
-                    await token_manager.record_usage(
-                        db=usage_db,
-                        user_id=parsed_user_id,
-                        provider=llm_response.provider,
-                        model=llm_response.model,
-                        input_tokens=input_tok,
-                        output_tokens=output_tok,
-                        input_cost_usd=input_cost,
-                        output_cost_usd=output_cost,
-                        feature="code_review",
-                        latency_ms=llm_response.latency_ms or 0.0,
-                        is_fallback=llm_response.is_fallback,
-                        review_id=review_id,
-                        api_key_id=api_key_id,
-                    )
-                    logger.info(f"[usage] token_manager.record_usage committed for review {review_id}")
+                if parsed_user_id:
+                    async with AsyncSessionLocal() as usage_db:
+                        await token_manager.record_usage(
+                            db=usage_db,
+                            user_id=parsed_user_id,
+                            provider=llm_response.provider,
+                            model=llm_response.model,
+                            input_tokens=input_tok,
+                            output_tokens=output_tok,
+                            input_cost_usd=input_cost,
+                            output_cost_usd=output_cost,
+                            feature="code_review",
+                            latency_ms=llm_response.latency_ms or 0.0,
+                            is_fallback=llm_response.is_fallback,
+                            review_id=review_id,
+                            api_key_id=api_key_id,
+                        )
+                        logger.info(f"[usage] token_manager.record_usage committed for review {review_id}")
 
-                async with AsyncSessionLocal() as log_db:
-                    await usage_tracker.log_request(
-                        db=log_db,
-                        request_id=str(_uuid.uuid4()),
-                        user_id=parsed_user_id,
-                        provider=llm_response.provider,
-                        model=llm_response.model,
-                        feature="code_review",
-                        messages=[],
-                        status="success",
-                        latency_ms=llm_response.latency_ms or 0.0,
-                        input_tokens=input_tok,
-                        output_tokens=output_tok,
-                        cost_usd=input_cost + output_cost,
-                        started_at=datetime.now(timezone.utc),
-                        was_fallback=llm_response.is_fallback,
-                        api_key_id=api_key_id,
-                        review_id=review_id,
-                    )
-                    logger.info(f"[usage] usage_tracker.log_request committed for review {review_id}")
-            else:
-                logger.warning(f"[usage] No valid user_id for review {review_id}, skipping usage log")
-        except Exception as ue:
-            logger.error(f"[usage] Failed to record usage stats: {ue}", exc_info=True)
+                    async with AsyncSessionLocal() as log_db:
+                        await usage_tracker.log_request(
+                            db=log_db,
+                            request_id=str(_uuid.uuid4()),
+                            user_id=parsed_user_id,
+                            provider=llm_response.provider,
+                            model=llm_response.model,
+                            feature="code_review",
+                            messages=[],
+                            status="success",
+                            latency_ms=llm_response.latency_ms or 0.0,
+                            input_tokens=input_tok,
+                            output_tokens=output_tok,
+                            cost_usd=input_cost + output_cost,
+                            started_at=datetime.now(timezone.utc),
+                            was_fallback=llm_response.is_fallback,
+                            api_key_id=api_key_id,
+                            review_id=review_id,
+                        )
+                        logger.info(f"[usage] usage_tracker.log_request committed for review {review_id}")
+                else:
+                    logger.warning(f"[usage] No valid user_id for review {review_id}, skipping usage log")
+            except Exception as ue:
+                logger.error(f"[usage] Failed to record usage stats: {ue}", exc_info=True)
+        else:
+            logger.debug("[usage] USAGE_ANALYTICS_ENABLED=False, skipping usage recording")
 
 
     async def _save_failed(self, review_id, error_message):

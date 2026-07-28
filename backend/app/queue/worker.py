@@ -72,14 +72,72 @@ async def process_job(job_row) -> bool:
             installation_id, repository, pull_request, job_row[4], status="running"
         )
 
-        # Resolve provider config
+        # Resolve provider config — captures the config source for BYOK enforcement
         async with AsyncSessionLocal() as db:
-            provider, model, api_key_id = await resolve_provider_config(db, user_id, db_repo)
+            provider, model, api_key_id, config_source = await resolve_provider_config(db, user_id, db_repo)
+
+        # MODE 3: Nothing configured — stop immediately with actionable error
+        if config_source == "none" or not provider:
+            error_msg = (
+                "## AI Review could not start\n\n"
+                "**Reason:** No AI configuration found for this repository.\n\n"
+                "---\n\n"
+                "### To fix this:\n\n"
+                "1. **Add an API Key** in Settings > API Keys\n"
+                "2. **Select a Provider and Model** in Repository Settings > Config\n"
+                "3. **Re-run the Pull Request**\n\n"
+                "---\n\n"
+                "*If you continue to see this error, contact support.*"
+            )
+            logger.warning(f"MODE 3: No AI config for job {job_id}. PR #{pr_number}")
+            try:
+                from app.github.client import GitHubClient
+                check_run = await GitHubClient().create_check_run(
+                    installation_id=installation_id,
+                    owner=owner,
+                    repo=repo_name,
+                    name="Revora AI Review",
+                    head_sha=head_sha,
+                    status="completed",
+                    output={
+                        "title": "AI Review could not start",
+                        "summary": error_msg,
+                        "conclusion": "failure",
+                    },
+                )
+                logger.info(f"Created failure check run for MODE 3: {check_run.get('id')}")
+            except Exception as e:
+                logger.error(f"Failed to create MODE 3 check run: {e}")
+            # Mark review as failed in DB
+            try:
+                async with AsyncSessionLocal() as db:
+                    from sqlalchemy import update as sa_update
+                    from app.models.review import Review
+                    await db.execute(
+                        sa_update(Review)
+                        .where(Review.id == db_review.id)
+                        .values(
+                            status="failed",
+                            error_message=error_msg,
+                            completed_at=datetime.now(timezone.utc),
+                        )
+                    )
+                    await db.commit()
+            except Exception as e:
+                logger.error(f"Failed to mark review as failed for MODE 3: {e}")
+            return False
 
         # Build clone URL
         clone_url = f"https://github.com/{owner}/{repo_name}.git"
 
-        # Execute the full pipeline
+        # Log the execution mode
+        mode_label = {
+            "repo_config": "MODE 1 (Explicit Repo Config)",
+            "user_routing": "MODE 2 (User Routing)",
+        }.get(config_source, "UNKNOWN")
+        logger.info(f"Execution mode: {mode_label} — {provider}/{model}")
+
+        # Execute the full pipeline with immutable execution context
         result = await review_pipeline.execute(
             review_id=db_review.id,
             installation_id=installation_id,
@@ -96,6 +154,7 @@ async def process_job(job_row) -> bool:
             clone_url=clone_url,
             token=token,
             api_key_id=api_key_id,
+            config_source=config_source,
         )
 
         return result.get("status") == "success"

@@ -14,78 +14,125 @@ from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
 from app.models.user import User
+from app.models.provider import ProviderRegistry
 from app.services.api_key_service import api_key_service
+from app.services.provider_registry import provider_registry_service
+from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING, CONFIG_SOURCE_NONE
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-
-COST_TABLE = {
-    "gemini":    {"input": 0.000075, "output": 0.0003},
-    "openai":    {"input": 0.0025,   "output": 0.01},
-    "anthropic": {"input": 0.003,    "output": 0.015},
-    "deepseek":  {"input": 0.00014,  "output": 0.00028},
-    "groq":      {"input": 0.00059,  "output": 0.00079},
-}
 
 
 async def resolve_provider_config(
     db_session,
     user_id: str,
     db_repo: Optional[Repository] = None,
-) -> tuple[str, str, Optional[str]]:
+) -> tuple[Optional[str], Optional[str], Optional[str], str]:
     """Resolve LLM provider, model, and API key ID.
 
-    Priority: repo settings > user routing preferences > env defaults.
+    Priority: repo settings > user routing preferences.
 
     Returns:
-        Tuple of (provider, model, api_key_id)
+        Tuple of (provider, model, api_key_id, config_source)
+        config_source is one of:
+            "repo_config"  — MODE 1: repo has explicit mapping (fail-fast)
+            "user_routing" — MODE 2: user routing preferences applied
+            "none"         — MODE 3: nothing configured (caller must stop)
     """
     provider = None
     model = None
     api_key_id = None
+    config_source = CONFIG_SOURCE_NONE
 
-    # 1. Repo-level config
+    # 1. Repo-level config (MODE 1)
     if db_repo and db_repo.settings:
         provider = db_repo.settings.get("assigned_provider")
         model = db_repo.settings.get("assigned_model")
         api_key_id = db_repo.settings.get("assigned_key_id")
-
-    # 2. User routing preferences
-    if not provider or not model:
-        try:
-            user_result = await db_session.execute(
-                select(User).where(User.id == user_id)
+        if provider and model:
+            # Verify the referenced API key still exists before committing to MODE 1
+            key_valid = False
+            if api_key_id:
+                try:
+                    db_key = await api_key_service.get_by_id(
+                        db_session, uuid.UUID(api_key_id)
+                    )
+                    if db_key and str(db_key.user_id) == user_id and db_key.is_valid:
+                        key_valid = True
+                except Exception:
+                    pass
+            if not api_key_id or key_valid:
+                config_source = CONFIG_SOURCE_REPO
+                logger.info(f"MODE 1 (repo config): {provider}/{model}")
+                return provider, model, api_key_id, config_source
+            # Key was deleted or invalid — auto-clean the stale mapping and fall through
+            logger.warning(
+                f"MODE 1 key id={api_key_id} not found or invalid for user={user_id}. "
+                f"Clearing stale repo mapping and falling through to MODE 2."
             )
-            db_user = user_result.scalars().first()
-            if db_user and db_user.settings:
-                routing_prefs = db_user.settings.get("model_routing", {})
-                code_review_pref = routing_prefs.get("code_review", {})
-                pref_provider = code_review_pref.get("provider")
-                pref_model = code_review_pref.get("model")
-                if pref_provider and pref_model:
-                    provider = pref_provider
-                    model = pref_model
-                    user_keys = await api_key_service.get_all_usable_keys(db_session, user_id)
-                    if provider in user_keys:
-                        api_key_id = str(user_keys[provider].id)
-                    logger.info(f"Using default routing preference: {provider}/{model}")
-        except Exception as e:
-            logger.warning(f"Error reading routing preferences: {e}")
+            try:
+                merged_repo = await db_session.merge(db_repo)
+                new_settings = dict(merged_repo.settings or {})
+                new_settings.pop("assigned_provider", None)
+                new_settings.pop("assigned_model", None)
+                new_settings.pop("assigned_key_id", None)
+                merged_repo.settings = new_settings
+                await db_session.commit()
+            except Exception as cleanup_e:
+                logger.warning(f"Failed to auto-clean stale repo mapping: {cleanup_e}")
 
-    # 3. Env defaults
-    if not provider or not model:
-        from app.core.config import settings
-        if settings.GEMINI_API_KEY:
-            provider = "gemini"
-            model = "gemini-2.5-flash"
-        elif settings.OPENAI_API_KEY:
-            provider = "openai"
-            model = "gpt-4o"
-        else:
-            provider = "gemini"
-            model = "gemini-2.5-flash"
+    # 2. User routing preferences (MODE 2)
+    try:
+        user_result = await db_session.execute(
+            select(User).where(User.id == user_id)
+        )
+        db_user = user_result.scalars().first()
+        if db_user and db_user.settings:
+            routing_prefs = db_user.settings.get("model_routing", {})
+            code_review_pref = routing_prefs.get("code_review", {})
+            pref_provider = code_review_pref.get("provider")
+            pref_model = code_review_pref.get("model")
+            if pref_provider and pref_model:
+                provider = pref_provider
+                model = pref_model
+                user_keys = await api_key_service.get_all_usable_keys(db_session, user_id)
+                if provider in user_keys:
+                    api_key_id = str(user_keys[provider].id)
+                    config_source = CONFIG_SOURCE_ROUTING
+                    logger.info(f"MODE 2 (user routing): {provider}/{model}")
+                    return provider, model, api_key_id, config_source
+                # Routing prefs exist but no usable key for this provider — fall through
+                logger.warning(
+                    f"MODE 2 routing prefers {provider} but no usable key found. "
+                    f"Falling through."
+                )
+    except Exception as e:
+        logger.warning(f"Error reading routing preferences: {e}")
 
-    return provider, model, api_key_id
+    return None, None, None, CONFIG_SOURCE_NONE
+
+
+async def build_available_providers_for_user(
+    db_session,
+    user_id: str,
+) -> list[tuple[str, str, str]]:
+    """Discover available providers from user's configured API keys.
+
+    Used for MODE 2 routing when the repo has no explicit config.
+    Returns sorted list of (provider, default_model, api_key_id).
+    """
+    user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    user_keys = await api_key_service.get_all_usable_keys(db_session, user_uuid)
+    providers = await provider_registry_service.get_enabled(db_session)
+
+    available = []
+    for provider in providers:
+        if provider.name in user_keys:
+            key = user_keys[provider.name]
+            available.append((provider.name, provider.default_model, str(key.id)))
+
+    # Already ordered by provider_registry.priority (from get_enabled)
+    return available
 
 
 async def get_or_create_review_records(
@@ -213,13 +260,16 @@ async def record_usage_stats(
     api_key_id: Optional[str] = None,
 ):
     """Record token usage for analytics and usage dashboards."""
+    if not settings.USAGE_ANALYTICS_ENABLED:
+        logger.debug("[usage] USAGE_ANALYTICS_ENABLED=False, skipping record_usage_stats")
+        return
     try:
         from app.services.token_manager import token_manager
         from app.services.usage_tracker import usage_tracker
+        from app.services.cost_estimator import cost_estimator
 
-        rates = COST_TABLE.get(provider, {"input": 0.001, "output": 0.003})
-        input_cost = round((input_tokens * rates["input"]) / 1000, 8)
-        output_cost = round((output_tokens * rates["output"]) / 1000, 8)
+        input_cost = round(cost_estimator.estimate(provider, input_tokens, 0), 8)
+        output_cost = round(cost_estimator.estimate(provider, 0, output_tokens), 8)
 
         parsed_user_id = None
         if user_id:

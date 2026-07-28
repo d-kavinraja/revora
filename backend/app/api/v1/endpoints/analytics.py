@@ -3,12 +3,26 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.services.usage_tracker import usage_tracker
+from fastapi import HTTPException
 
 router = APIRouter()
+
+
+async def require_usage_enabled():
+    if not settings.USAGE_ANALYTICS_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "disabled",
+                "message": "Usage analytics are temporarily disabled while we redesign model-level pricing. "
+                          "No data has been lost; this feature will be re-enabled in a future release.",
+            },
+        )
 
 
 @router.get("/requests")
@@ -23,6 +37,7 @@ async def list_requests(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     """Get paginated request log."""
     requests = await usage_tracker.get_user_requests(
@@ -41,6 +56,7 @@ async def get_errors(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     """Get error summary."""
     return await usage_tracker.get_error_summary(
@@ -58,6 +74,7 @@ async def get_latency(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     """Get latency statistics."""
     return await usage_tracker.get_latency_stats(
@@ -75,6 +92,7 @@ async def get_feature_usage(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     """Get feature usage breakdown."""
     return await usage_tracker.get_feature_usage(
@@ -92,6 +110,7 @@ async def get_provider_comparison(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     """Get provider performance comparison."""
     return await usage_tracker.get_provider_comparison(

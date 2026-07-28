@@ -1,5 +1,6 @@
 ﻿import uuid
 import asyncio
+import logging
 import litellm
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
@@ -8,10 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.models.github import Installation, Repository
 from app.services.api_key_service import api_key_service
+from sqlalchemy import select
 from app.schemas.api_key import ApiKey as ApiKeySchema, ApiKeyCreate, ApiKeyUpdate
 from app.schemas.usage import ApiKeyHealthRead, ApiKeyRotate, BulkValidateResult
 from app.core.security import encryption_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -153,7 +158,7 @@ async def delete_api_key(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete an API key."""
+    """Delete an API key and clean up repo mappings."""
     db_key = await api_key_service.get_by_id(db, key_id)
     if not db_key or db_key.user_id != current_user.id:
         raise HTTPException(
@@ -161,6 +166,32 @@ async def delete_api_key(
             detail="API key not found or not owned by user",
         )
     await api_key_service.delete(db, db_key)
+
+    # Clean up repository mappings that reference the deleted key
+    key_id_str = str(key_id)
+    try:
+        inst_result = await db.execute(
+            select(Installation).where(Installation.user_id == current_user.id)
+        )
+        installations = inst_result.scalars().all()
+        for inst in installations:
+            repo_result = await db.execute(
+                select(Repository).where(Repository.installation_id == inst.id)
+            )
+            repos = repo_result.scalars().all()
+            for repo in repos:
+                if repo.settings and repo.settings.get("assigned_key_id") == key_id_str:
+                    new_settings = dict(repo.settings)
+                    new_settings.pop("assigned_provider", None)
+                    new_settings.pop("assigned_model", None)
+                    new_settings.pop("assigned_key_id", None)
+                    repo.settings = new_settings
+                    db.add(repo)
+        await db.commit()
+        logger.info(f"Cleaned up repo mappings for deleted key {key_id_str}")
+    except Exception as e:
+        logger.error(f"Failed to clean up repo mappings for key {key_id_str}: {e}")
+
     return None
 
 

@@ -2,99 +2,119 @@ import uuid
 import time
 import asyncio
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.health_monitor import health_monitor
-from app.services.token_manager import token_manager
 from app.services.cost_estimator import cost_estimator
 from app.services.api_key_service import api_key_service
-from app.ai.llm import LLMService
+from app.ai.llm import llm_service
 from app.orchestrator.models import LLMResponse
 
 logger = logging.getLogger(__name__)
 
+# Transient errors where retrying the SAME provider/key/model may succeed
+_TRANSIENT_ERRORS = {"timeout", "connection", "service_unavailable", "503", "500", "502", "504"}
+
+
+def _is_transient_error(error_str: str) -> bool:
+    return any(code in error_str.lower() for code in _TRANSIENT_ERRORS)
+
 
 class RetryFailoverService:
+    """Single-provider execution with optional transient retry.
+
+    BYOK-compliant: Never switches provider, model, or API key.
+    Retries only for transient transport errors on the SAME configuration.
+    """
+
     def __init__(self):
-        self.llm_service = LLMService()
+        self.llm_service = llm_service
 
-    async def execute_with_fallback(
+    async def execute(
         self,
-        db: AsyncSession,
         user_id: uuid.UUID,
-        feature: str,
+        provider: str,
+        model: str,
         messages: list,
-        routes: List[Tuple[str, str, Optional[str]]],  # (provider, model, api_key_id)
-        max_retries: int = 2,
+        api_key_id: Optional[str] = None,
+        max_retries: int = 1,
     ) -> LLMResponse:
-        last_error = None
-        overall_start = time.time()
+        """Execute exactly one LLM call with the given provider/model/key.
 
-        for attempt_idx, (provider, model, api_key_id) in enumerate(routes):
-            if not await health_monitor.should_allow_request(db, provider):
-                logger.warning(f"Circuit breaker open for {provider}, skipping")
-                continue
+        Args:
+            user_id: User UUID.
+            provider: Provider name.
+            model: Model name.
+            messages: List of message dicts.
+            api_key_id: Specific API key ID.
+            max_retries: Max retries for transient errors (default 1 = 2 total attempts).
 
-            for retry in range(max_retries):
-                try:
-                    start = time.time()
-                    response_text, real_input_tokens, real_output_tokens = await self.llm_service.get_completion(
+        Returns:
+            LLMResponse with content and usage stats.
+        """
+        last_error: Optional[Exception] = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                start = time.time()
+                response_text, real_input_tokens, real_output_tokens = (
+                    await self.llm_service.get_completion(
                         user_id=user_id,
                         provider=provider,
                         messages=messages,
                         model=model,
                         api_key_id=api_key_id,
                     )
-                    latency_ms = (time.time() - start) * 1000
+                )
+                latency_ms = (time.time() - start) * 1000
 
-                    if response_text:
-                        await health_monitor.record_success(db, provider, latency_ms)
-
-                        # Use real token counts from API if available; fall back to estimates
-                        input_tokens = real_input_tokens if real_input_tokens > 0 else sum(len(m.get("content", "")) // 4 for m in messages) if messages else 0
-                        output_tokens = real_output_tokens if real_output_tokens > 0 else len(response_text) // 4
-
-                        # Mark key as used
-                        if api_key_id:
-                            try:
-                                await api_key_service.mark_last_used(db, uuid.UUID(api_key_id))
-                            except Exception:
-                                pass
-
-                        return LLMResponse(
-                            content=response_text,
-                            provider=provider,
-                            model=model,
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                            latency_ms=latency_ms,
-                            estimated_cost_usd=cost_estimator.estimate(provider, input_tokens, output_tokens),
-                            is_fallback=attempt_idx > 0,
-                        )
-
-                except Exception as e:
-                    last_error = str(e)
-                    logger.warning(f"Provider {provider} attempt {retry+1} failed: {e}")
-                    await health_monitor.record_failure(db, provider, type(e).__name__, str(e))
-
-                    if retry < max_retries - 1:
-                        await asyncio.sleep(min(2 ** retry, 8))
-
-            if attempt_idx < len(routes) - 1:
-                next_provider = routes[attempt_idx + 1][0]
-                await health_monitor.log_failover(
-                    db, user_id, feature,
-                    failed_provider=provider,
-                    failed_model=model,
-                    failure_reason=last_error or "Unknown error",
-                    fallback_provider=next_provider,
-                    fallback_model=routes[attempt_idx + 1][1],
-                    attempt_number=attempt_idx + 1,
-                    total_latency_ms=(time.time() - overall_start) * 1000,
+                input_tokens = (
+                    real_input_tokens
+                    if real_input_tokens > 0
+                    else sum(len(m.get("content", "")) // 4 for m in messages) if messages else 0
+                )
+                output_tokens = (
+                    real_output_tokens
+                    if real_output_tokens > 0
+                    else len(response_text) // 4 if response_text else 0
                 )
 
-        raise RuntimeError(f"All providers failed. Last error: {last_error}")
+                if api_key_id:
+                    try:
+                        await api_key_service.mark_last_used(None, uuid.UUID(api_key_id))
+                    except Exception:
+                        pass
+
+                return LLMResponse(
+                    content=response_text,
+                    provider=provider,
+                    model=model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                    estimated_cost_usd=cost_estimator.estimate(provider, input_tokens, output_tokens),
+                    is_fallback=False,
+                )
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                logger.warning(
+                    f"Provider {provider} attempt {attempt + 1}/{max_retries + 1} failed: {e}"
+                )
+
+                if attempt < max_retries and _is_transient_error(error_str):
+                    backoff = min(2 ** attempt, 4)
+                    logger.info(
+                        f"Transient error, retrying {provider} in {backoff}s..."
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+
+                raise  # Non-transient or out of retries
+
+        # Should never reach here
+        raise RuntimeError(str(last_error) if last_error else f"Provider {provider} failed.")
 
 
 retry_failover = RetryFailoverService()
