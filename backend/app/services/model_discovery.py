@@ -243,25 +243,10 @@ class ModelDiscoveryEngine:
                 logger.warning(f"Quota verification failed for {canonical_model.canonical_model_name}: {e}")
                 return False
 
-            # If LiteLLM doesn't support the mapping, try native fallback for Gemini
-            if canonical_model.provider.lower() == "gemini" and ("404" in error_str or "not found" in error_str or "unsupported" in error_str):
-                try:
-                    from app.ai.llm import llm_service
-                    await asyncio.wait_for(
-                        llm_service._native_gemini_fallback(
-                            canonical_model.canonical_model_name,
-                            [{"role": "user", "content": "hi"}],
-                            raw_key,
-                            timeout=5
-                        ),
-                        timeout=5
-                    )
-                    return True
-                except Exception as fallback_e:
-                    f_error_str = str(fallback_e).lower()
-                    if "429" in f_error_str or "quota" in f_error_str or "403" in f_error_str:
-                        logger.warning(f"Native fallback quota verification failed for {canonical_model.canonical_model_name}: {fallback_e}")
-                        return False
+            # If LiteLLM doesn't support the model mapping, mark as inaccessible
+            if "404" in error_str or "not found" in error_str or "unsupported" in error_str:
+                logger.warning(f"Model {canonical_model.canonical_model_name} not supported by LiteLLM: {e}")
+                return False
 
             # If it fails for other reasons (e.g. 500, timeout), assume it's accessible
             return True

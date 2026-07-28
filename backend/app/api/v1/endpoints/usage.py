@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
@@ -14,6 +15,18 @@ from app.schemas.usage import (
 )
 
 router = APIRouter()
+
+
+async def require_usage_enabled():
+    if not settings.USAGE_ANALYTICS_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "disabled",
+                "message": "Usage analytics are temporarily disabled while we redesign model-level pricing. "
+                          "No data has been lost; this feature will be re-enabled in a future release.",
+            },
+        )
 
 
 def _parse_period(period: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None):
@@ -42,6 +55,7 @@ async def get_usage_summary(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     start, end = _parse_period(period, start_date, end_date)
     breakdown = await token_manager.get_cost_breakdown(
@@ -75,6 +89,7 @@ async def get_usage_trend(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     if start_date and end_date:
         delta = (end_date - start_date).days
@@ -124,6 +139,7 @@ async def get_usage_breakdown(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     start, end = _parse_period(period, start_date, end_date)
     return await token_manager.get_cost_breakdown(
@@ -143,6 +159,7 @@ async def get_usage_records(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     records = await token_manager.get_usage_by_user(
         db, current_user.id, start=start_date, end=end_date, 
@@ -157,6 +174,7 @@ async def get_usage_records(
 async def list_budgets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     return await cost_estimator.get_budgets(db, current_user.id)
 
@@ -166,6 +184,7 @@ async def create_budget(
     data: CostBudgetCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     return await cost_estimator.create_budget(db, current_user.id, data.model_dump())
 
@@ -176,6 +195,7 @@ async def update_budget(
     data: CostBudgetUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     import uuid
     budget = await cost_estimator.update_budget(db, uuid.UUID(budget_id), data.model_dump(exclude_unset=True))
@@ -189,6 +209,7 @@ async def delete_budget(
     budget_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_usage_enabled),
 ):
     import uuid
     deleted = await cost_estimator.delete_budget(db, uuid.UUID(budget_id))

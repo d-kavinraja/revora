@@ -8,7 +8,6 @@ from app.models.api_key import ApiKey
 from app.models.user import User
 from app.services.provider_registry import provider_registry_service
 from app.services.api_key_service import api_key_service
-from app.services.health_monitor import health_monitor
 from app.services.cost_estimator import cost_estimator
 from app.schemas.health import ModelRoute
 
@@ -52,9 +51,6 @@ class ModelRouter:
         routes = []
         for provider in providers:
             if provider.name not in user_keys:
-                continue
-
-            if not await health_monitor.should_allow_request(db, provider.name):
                 continue
 
             # Apply feature requirements filtering

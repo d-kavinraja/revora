@@ -16,6 +16,7 @@ from app.services.cost_estimator import cost_estimator
 from app.services.usage_tracker import usage_tracker
 from app.orchestrator.models import LLMResponse
 from app.security.content_guard import sanitize_messages, detect_injection
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -59,93 +60,103 @@ async def execute_llm(
                     detail="Potential prompt injection detected. Please revise your input.",
                 )
 
-    routes = await model_router.route(
-        db, current_user.id, data.feature,
-        data.preferred_provider, data.preferred_model,
-    )
+    # Resolve provider: prefer explicit user preference, otherwise use routing
+    provider = data.preferred_provider
+    model = data.preferred_model
+    api_key_id = data.api_key_id
 
-    if not routes:
-        raise HTTPException(
-            status_code=404,
-            detail="No available routes. Add an API key for a supported provider.",
+    if not provider or not model:
+        routes = await model_router.route(
+            db, current_user.id, data.feature,
+            data.preferred_provider, data.preferred_model,
         )
-
-    route_tuples = [(r.provider, r.model, r.api_key_id) for r in routes]
+        if not routes:
+            raise HTTPException(
+                status_code=404,
+                detail="No available routes. Add an API key for a supported provider.",
+            )
+        # Use the best route — single provider, no fallback
+        best_route = routes[0]
+        provider = best_route.provider
+        model = best_route.model
+        api_key_id = best_route.api_key_id
 
     start_time = time.time()
     request_id = hashlib.sha256(f"{current_user.id}:{time.time()}".encode()).hexdigest()[:16]
 
     try:
-        result = await retry_failover.execute_with_fallback(
-            db=db,
+        result = await retry_failover.execute(
             user_id=current_user.id,
-            feature=data.feature,
+            provider=provider,
+            model=model,
             messages=sanitized_messages,
-            routes=route_tuples,
+            api_key_id=api_key_id,
         )
 
-        # Record token usage
-        if result.input_tokens > 0 or result.output_tokens > 0:
-            await token_manager.record_usage(
+        if settings.USAGE_ANALYTICS_ENABLED:
+            # Record token usage
+            if result.input_tokens > 0 or result.output_tokens > 0:
+                await token_manager.record_usage(
+                    db=db,
+                    user_id=current_user.id,
+                    provider=result.provider,
+                    model=result.model,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    input_cost_usd=cost_estimator.estimate(result.provider, result.input_tokens, 0),
+                    output_cost_usd=cost_estimator.estimate(result.provider, 0, result.output_tokens),
+                    feature=data.feature,
+                    latency_ms=result.latency_ms,
+                    api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
+                    request_id=request_id,
+                    is_fallback=False,
+                )
+
+            # Record budget spend (atomic)
+            await cost_estimator.record_spend(
+                db, current_user.id, result.estimated_cost_usd,
+                result.provider, data.feature,
+            )
+
+            # Log request for observability
+            await usage_tracker.log_request(
                 db=db,
+                request_id=request_id,
                 user_id=current_user.id,
                 provider=result.provider,
                 model=result.model,
+                feature=data.feature,
+                messages=sanitized_messages,
+                status="success",
+                latency_ms=result.latency_ms,
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
-                input_cost_usd=cost_estimator.estimate(result.provider, result.input_tokens, 0),
-                output_cost_usd=cost_estimator.estimate(result.provider, 0, result.output_tokens),
-                feature=data.feature,
-                latency_ms=result.latency_ms,
-                api_key_id=uuid.UUID(route_tuples[0][2]) if route_tuples[0][2] else None,
-                request_id=request_id,
-                is_fallback=result.is_fallback,
+                cost_usd=result.estimated_cost_usd,
+                started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
+                response_text=result.content,
+                was_fallback=result.is_fallback,
             )
-
-        # Record budget spend (atomic)
-        await cost_estimator.record_spend(
-            db, current_user.id, result.estimated_cost_usd,
-            result.provider, data.feature,
-        )
-
-        # Log request for observability
-        await usage_tracker.log_request(
-            db=db,
-            request_id=request_id,
-            user_id=current_user.id,
-            provider=result.provider,
-            model=result.model,
-            feature=data.feature,
-            messages=sanitized_messages,
-            status="success",
-            latency_ms=result.latency_ms,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            cost_usd=result.estimated_cost_usd,
-            started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-            response_text=result.content,
-            was_fallback=result.is_fallback,
-        )
 
         return result
 
     except Exception as e:
-        # Log failed request
-        await usage_tracker.log_request(
-            db=db,
-            request_id=request_id,
-            user_id=current_user.id,
-            provider=data.preferred_provider or "unknown",
-            model=data.preferred_model or "unknown",
-            feature=data.feature,
-            messages=sanitized_messages,
-            status="error",
-            latency_ms=(time.time() - start_time) * 1000,
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=0,
-            started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-            error_type=type(e).__name__,
-            error_message=str(e),
-        )
+        if settings.USAGE_ANALYTICS_ENABLED:
+            # Log failed request
+            await usage_tracker.log_request(
+                db=db,
+                request_id=request_id,
+                user_id=current_user.id,
+                provider=data.preferred_provider or "unknown",
+                model=data.preferred_model or "unknown",
+                feature=data.feature,
+                messages=sanitized_messages,
+                status="error",
+                latency_ms=(time.time() - start_time) * 1000,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0,
+                started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
         raise HTTPException(status_code=500, detail=str(e))
