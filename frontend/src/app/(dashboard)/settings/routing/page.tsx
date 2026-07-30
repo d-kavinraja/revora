@@ -89,6 +89,7 @@ export default function RoutingPage() {
       ollama: 'Ollama',
       cohere: 'Cohere',
       mistral: 'Mistral',
+      nvidia: 'NVIDIA NIM',
     };
     return names[p] || p;
   };

@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { api, Repository, ApiKey, ModelMetadata } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
+import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon, CircleCheckIcon } from '@animateicons/react/lucide';
+import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -47,14 +48,20 @@ function ConfigModal({
     return (saved && providers.includes(saved)) ? saved : (providers[0] ?? '');
   });
   
-  const providerKeys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
-  
+  const matchProvider = (p1: string, p2: string) => {
+    const norm1 = (p1 || '').toLowerCase().replace('_nim', '');
+    const norm2 = (p2 || '').toLowerCase().replace('_nim', '');
+    return norm1 === norm2;
+  };
+
+  const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid);
+
   const [selectedKeyId, setSelectedKeyId] = useState(() => {
     const saved = repo.settings?.assigned_key_id;
     return (saved && providerKeys.some(k => k.id === saved)) ? saved : (providerKeys[0]?.id ?? '');
   });
 
-  const allModels = availableModels[selectedProvider] || [];
+  const allModels = availableModels[selectedProvider] || availableModels[selectedProvider === 'nvidia' ? 'nvidia_nim' : 'nvidia'] || [];
 
   const [showDeprecated, setShowDeprecated] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -79,7 +86,7 @@ function ConfigModal({
   const { toast } = useToast();
 
   useEffect(() => {
-    const keys = apiKeys.filter(k => k.provider.toLowerCase() === selectedProvider.toLowerCase() && k.is_valid);
+    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid);
     if (keys.length > 0 && !keys.some(k => k.id === selectedKeyId)) {
       setSelectedKeyId(keys[0].id);
     } else if (keys.length === 0) {
@@ -131,6 +138,8 @@ function ConfigModal({
     }
   };
 
+  const isReviewActive = repo.active_review_status === 'pending' || repo.active_review_status === 'running';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -143,14 +152,32 @@ function ConfigModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 id="modal-title" className="text-lg font-semibold text-foreground">Configure Model</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{repo.full_name}</p>
+          <div className="flex items-center gap-3">
+            {selectedProvider && (
+              <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center shrink-0 shadow-sm">
+                <ProviderIcon slug={selectedProvider} size={20} />
+              </div>
+            )}
+            <div>
+              <h3 id="modal-title" className="text-lg font-semibold text-foreground flex items-center gap-2">
+                Configure Model
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{repo.full_name}</p>
+            </div>
           </div>
           <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer" aria-label="Close dialog">
             <XIcon size={18} />
           </button>
         </div>
+
+        {isReviewActive && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-400 leading-relaxed">
+            <Lock size={16} className="shrink-0 mt-0.5 text-amber-400" />
+            <div>
+              <strong>Configuration Locked:</strong> A Pull Request review is currently <strong>{repo.active_review_status}</strong> on this repository. Model settings cannot be changed until the review completes.
+            </div>
+          </div>
+        )}
 
         {providers.length === 0 ? (
           <div className="text-center py-6">
@@ -162,16 +189,25 @@ function ConfigModal({
             {/* Provider Selector */}
             <div>
               <label htmlFor="provider-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Provider</label>
-              <select
-                id="provider-select"
-                value={selectedProvider}
-                onChange={(e) => setSelectedProvider(e.target.value)}
-                className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
-              >
-                {providers.map((p) => (
-                  <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                ))}
-              </select>
+              <div className="relative flex items-center mt-1.5">
+                <div className="absolute left-3 pointer-events-none flex items-center justify-center">
+                  <ProviderIcon slug={selectedProvider} size={16} />
+                </div>
+                <select
+                  id="provider-select"
+                  value={selectedProvider}
+                  disabled={isReviewActive}
+                  onChange={(e) => setSelectedProvider(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {providers.map((p) => {
+                    const labelName = (p === 'nvidia' || p === 'nvidia_nim') ? 'NVIDIA NIM' : p.charAt(0).toUpperCase() + p.slice(1);
+                    return (
+                      <option key={p} value={p}>{labelName}</option>
+                    );
+                  })}
+                </select>
+              </div>
             </div>
 
             {/* API Key Selector */}
@@ -181,8 +217,9 @@ function ConfigModal({
                 <select
                   id="key-select"
                   value={selectedKeyId}
+                  disabled={isReviewActive}
                   onChange={(e) => setSelectedKeyId(e.target.value)}
-                  className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
+                  className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {providerKeys.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -195,40 +232,71 @@ function ConfigModal({
 
             {/* Model Selector */}
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
                 <div className="flex gap-2">
                   <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
-                    <input type="checkbox" checked={showPreview} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
+                    <input type="checkbox" checked={showPreview} disabled={isReviewActive} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
                   </label>
                   <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
-                    <input type="checkbox" checked={showDeprecated} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
+                    <input type="checkbox" checked={showDeprecated} disabled={isReviewActive} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
                   </label>
                   <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
-                    <input type="checkbox" checked={showUnavailable} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
+                    <input type="checkbox" checked={showUnavailable} disabled={isReviewActive} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
                   </label>
                 </div>
               </div>
-              <select
-                id="model-select"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full mt-1.5 px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer"
-              >
-                {models.map((m) => {
-                  let badge = '';
-                  if (!m.accessible) badge = ' [Unavailable]';
-                  else if (m.deprecated) badge = ' [Deprecated]';
-                  else if (m.preview || m.experimental) badge = ' [Preview]';
-                  else if (m.enterprise_only) badge = ' [Enterprise]';
-                  
+              <div className="relative flex items-center">
+                <div className="absolute left-3 pointer-events-none flex items-center justify-center">
+                  <ProviderIcon slug={selectedProvider} size={16} />
+                </div>
+                <select
+                  id="model-select"
+                  value={selectedModel}
+                  disabled={isReviewActive}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {models.map((m, idx) => {
+                    let badge = '';
+                    if (!m.accessible) badge = ' [Unavailable]';
+                    else if (idx < 5) badge = ' [Recommended]';
+                    else if (m.deprecated) badge = ' [Deprecated]';
+                    else if (m.preview || m.experimental) badge = ' [Preview]';
+                    else if (m.enterprise_only) badge = ' [Enterprise]';
+                    else badge = ' [High Load Server]';
+                    
+                    return (
+                      <option key={m.model_name} value={m.model_name} disabled={!m.accessible} title={!m.accessible ? 'This model is inaccessible with your current API key permissions.' : ''}>
+                        {m.model_name}{badge}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Dynamic Model Status Banner */}
+              {selectedModel && (!isReviewActive) && (() => {
+                const selectedIdx = models.findIndex(m => m.model_name === selectedModel);
+                if (selectedIdx >= 0 && selectedIdx < 5) {
                   return (
-                    <option key={m.model_name} value={m.model_name} disabled={!m.accessible} title={!m.accessible ? 'This model is inaccessible with your current API key permissions.' : ''}>
-                      {m.model_name}{badge}
-                    </option>
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs text-emerald-400">
+                      <Star size={14} className="shrink-0 text-amber-400 fill-amber-400" />
+                      <span><strong>Recommended Model:</strong> High throughput, optimized for fast code reviews with low latency.</span>
+                    </div>
                   );
-                })}
-              </select>
+                } else if (selectedIdx >= 5) {
+                  return (
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2 text-xs text-amber-400 leading-relaxed">
+                      <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-400" />
+                      <div>
+                        <strong>High Load Notice:</strong> Non-recommended models on open public API servers may experience server queue load, higher response latency, or timeouts. For fast reviews, select a Recommended model.
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {/* Reviews Toggle */}
@@ -239,10 +307,11 @@ function ConfigModal({
               </div>
               <button
                 role="switch"
+                disabled={isReviewActive}
                 aria-checked={reviewsEnabled}
                 aria-labelledby="reviews-label"
-                onClick={() => setReviewsEnabled(!reviewsEnabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${reviewsEnabled ? 'bg-brand' : 'bg-muted'}`}
+                onClick={() => !isReviewActive && setReviewsEnabled(!reviewsEnabled)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${isReviewActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${reviewsEnabled ? 'bg-brand' : 'bg-muted'}`}
               >
                 <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${reviewsEnabled ? 'left-5.5 translate-x-0' : 'left-0.5'}`} />
               </button>
@@ -251,10 +320,10 @@ function ConfigModal({
             {/* Save Button */}
             <button
               onClick={handleSave}
-              disabled={saving || !selectedModel}
-              className="w-full py-2.5 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+              disabled={saving || !selectedModel || isReviewActive}
+              className="w-full py-2.5 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
-              {saving ? 'Saving...' : 'Save Configuration'}
+              {isReviewActive ? '🔒 Configuration Locked (Review Active)' : saving ? 'Saving...' : 'Save Configuration'}
             </button>
           </div>
         )}
@@ -287,6 +356,8 @@ function RepositoryCard({
   const assignedKeyId = repo.settings?.assigned_key_id;
   const keyObj = apiKeys.find(k => k.id === assignedKeyId);
   const keyLabel = keyObj ? ` (${keyObj.label})` : '';
+
+  const isReviewActive = repo.active_review_status === 'pending' || repo.active_review_status === 'running';
 
   return (
     <div
@@ -322,11 +393,21 @@ function RepositoryCard({
           <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{repo.description}</p>
         )}
 
+        {isReviewActive && (
+          <div className="mb-2.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+              <Lock className="w-3 h-3 text-amber-400" />
+              Review {repo.active_review_status === 'pending' ? 'Pending' : 'Running'} (Locked)
+            </span>
+          </div>
+        )}
+
         {assignedModel && (
           <div className="mb-3">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand/10 text-brand border border-brand/20">
-              {assignedProvider && <ProviderIcon slug={assignedProvider} size={10} />}
-              {assignedProvider}: {assignedModel}{keyLabel}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand/10 text-brand border border-brand/20">
+              {assignedProvider && <ProviderIcon slug={assignedProvider} size={14} />}
+              {assignedProvider && (assignedProvider === 'nvidia' || assignedProvider === 'nvidia_nim' ? 'NVIDIA NIM' : (assignedProvider.charAt(0).toUpperCase() + assignedProvider.slice(1)))}: {assignedModel}{keyLabel}
             </span>
           </div>
         )}
@@ -342,10 +423,10 @@ function RepositoryCard({
 
         <div className="flex items-center gap-2">
           <button
-            disabled={configuringRepoId === repo.id || syncingRepoId === repo.id}
+            disabled={configuringRepoId === repo.id || syncingRepoId === repo.id || isReviewActive}
             onClick={() => onConfigure(repo)}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer disabled:opacity-50"
-            title="Configure model"
+            className={`p-1.5 rounded-lg transition-colors ${isReviewActive ? 'opacity-40 cursor-not-allowed text-muted-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04] cursor-pointer disabled:opacity-50'}`}
+            title={isReviewActive ? `Model configuration is locked while a review is ${repo.active_review_status} on this repository.` : "Configure model"}
           >
             {configuringRepoId === repo.id ? (
               <LoaderIcon size={14} className="text-muted-foreground" animate />

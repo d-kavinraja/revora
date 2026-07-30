@@ -1,4 +1,4 @@
-﻿from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any
 from sqlalchemy import String, Boolean, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,7 +22,7 @@ class ProviderRegistry(Base):
     # Configuration
     base_url_template: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     default_model: Mapped[str] = mapped_column(String(100), nullable=False)
-    timeout_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=300)
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
     priority: Mapped[int] = mapped_column(Integer, default=0)
 

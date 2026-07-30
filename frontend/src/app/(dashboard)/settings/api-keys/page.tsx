@@ -204,6 +204,8 @@ export default function ApiKeysSettingsPage() {
       groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
       openrouter: 'OpenRouter', azure_openai: 'Azure OpenAI',
       ollama: 'Ollama', cohere: 'Cohere', mistral: 'Mistral',
+      nvidia: 'NVIDIA NIM',
+      nvidia_nim: 'NVIDIA NIM',
     };
     return names[prov.toLowerCase()] || prov;
   };
@@ -261,22 +263,28 @@ export default function ApiKeysSettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Provider</label>
-                <select
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
-                >
-                  <option value="gemini">Gemini</option>
-                  <option value="openai" disabled>OpenAI (Under Testing)</option>
-                  <option value="anthropic" disabled>Claude (Under Testing)</option>
-                  <option value="groq" disabled>Groq (Under Testing)</option>
-                  <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
-                  <option value="openrouter" disabled>OpenRouter (Under Testing)</option>
-                  <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
-                  <option value="ollama" disabled>Ollama (Under Testing)</option>
-                  <option value="cohere" disabled>Cohere (Under Testing)</option>
-                  <option value="mistral" disabled>Mistral (Under Testing)</option>
-                </select>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 pointer-events-none flex items-center justify-center">
+                    <ProviderIcon slug={provider} size={16} />
+                  </div>
+                  <select
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors cursor-pointer"
+                  >
+                    <option value="gemini">Gemini</option>
+                    <option value="openai" disabled>OpenAI (Under Testing)</option>
+                    <option value="anthropic" disabled>Claude (Under Testing)</option>
+                    <option value="groq" disabled>Groq (Under Testing)</option>
+                    <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
+                    <option value="openrouter" disabled>OpenRouter (Under Testing)</option>
+                    <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
+                    <option value="ollama" disabled>Ollama (Under Testing)</option>
+                    <option value="cohere" disabled>Cohere (Under Testing)</option>
+                    <option value="mistral" disabled>Mistral (Under Testing)</option>
+                    <option value="nvidia">NVIDIA NIM</option>
+                  </select>
+                </div>
               </div>
 
               <div>

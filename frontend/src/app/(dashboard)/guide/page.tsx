@@ -58,13 +58,13 @@ export default function SetupGuidePage() {
         <div className="space-y-4 text-muted-foreground leading-relaxed">
           <p>
             Revora uses powerful AI models to analyze your code. You need to provide your own API key to power the analysis.
-            Currently, <strong>Google Gemini</strong> is the fully supported and available model.
+            Currently, <strong>Google Gemini</strong> and <strong>NVIDIA NIM</strong> (e.g. <code>meta/llama-3.3-70b-instruct</code>, <code>deepseek-ai/deepseek-v4-flash</code>) are fully supported.
           </p>
           <ol className="list-decimal list-inside space-y-2 ml-2">
             <li>Go to the <Link href="/settings/api-keys" className="text-brand hover:underline font-semibold">API Keys</Link> page.</li>
             <li>Click <strong>Add API Key</strong>.</li>
-            <li>Select <strong>Gemini</strong> as the provider.</li>
-            <li>Paste your Gemini API key and save it.</li>
+            <li>Select your preferred provider (e.g., <strong>Gemini</strong> or <strong>NVIDIA NIM</strong>).</li>
+            <li>Paste your API key (NVIDIA keys must start with <code>nvapi-</code>, obtainable from <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">build.nvidia.com</a>) and save it.</li>
           </ol>
         </div>
       )

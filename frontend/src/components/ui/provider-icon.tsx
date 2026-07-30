@@ -10,6 +10,7 @@ import {
   Ollama,
   Cohere,
   Mistral,
+  Nvidia,
 } from '@lobehub/icons';
 
 export function ProviderIcon({ slug, size = 24, className = '' }: { slug?: string; size?: number; className?: string }) {
@@ -25,6 +26,8 @@ export function ProviderIcon({ slug, size = 24, className = '' }: { slug?: strin
     case 'ollama': return <Ollama size={size} className={className} />;
     case 'cohere': return <Cohere.Color size={size} className={className} />;
     case 'mistral': return <Mistral.Color size={size} className={className} />;
+    case 'nvidia':
+    case 'nvidia_nim': return <Nvidia.Color size={size} className={className} />;
     default: return <GlobeIcon size={size} className={`text-muted-foreground ${className}`} />;
   }
 }
