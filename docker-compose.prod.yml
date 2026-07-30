@@ -14,13 +14,13 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-revora}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-revora_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-revora_db}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U revora"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-revora}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,7 +46,7 @@ services:
   pgbouncer:
     image: edoburu/pgbouncer:latest
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@db:5432/${POSTGRES_DB:-revora_db}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - MAX_CLIENT_CONN=100
       - DEFAULT_POOL_SIZE=20
       - POOL_MODE=transaction
@@ -63,7 +63,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@pgbouncer:5432/${POSTGRES_DB:-revora_db}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - SECRET_KEY=${SECRET_KEY}
@@ -97,7 +97,7 @@ services:
       dockerfile: Dockerfile
     command: python -m app.queue
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD:-revora_pass}@pgbouncer:5432/${POSTGRES_DB:-revora_db}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - SECRET_KEY=${SECRET_KEY}
