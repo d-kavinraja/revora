@@ -41,7 +41,7 @@ class ProviderConfig:
     name: str
     model: str
     priority: int = 0
-    timeout_seconds: int = 60
+    timeout_seconds: int = 300
 
 
 @dataclass

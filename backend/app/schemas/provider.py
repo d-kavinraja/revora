@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ class ProviderRegistryRead(BaseModel):
     api_key_min_length: int = 15
     base_url_template: Optional[str] = None
     default_model: str
-    timeout_seconds: int = 60
+    timeout_seconds: int = 300
     max_retries: int = 3
     priority: int = 0
     supports_streaming: bool = True

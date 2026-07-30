@@ -25,6 +25,23 @@ async def test_create_api_key(client: TestClient, test_db: AsyncSession):
     assert data["masked_key"] == "sk-1...cdef"
     assert "api_key" not in data
 
+@pytest.mark.asyncio
+async def test_api_keys_nvidia_prevalidation(client: TestClient):
+    # Missing nvapi-
+    response = client.post(
+        "/api/v1/api-keys",
+        json={"provider": "nvidia", "label": "test", "api_key": "sk-1234567890abcdef"},
+    )
+    assert response.status_code == 422
+    assert "nvapi-" in response.json()["detail"]
+    
+    # Valid nvapi-
+    response = client.post(
+        "/api/v1/api-keys",
+        json={"provider": "nvidia", "label": "test", "api_key": "nvapi-1234567890abcdef"},
+    )
+    assert response.status_code == 201
+
     # Verify storage in DB is encrypted
     key_id = uuid.UUID(data["id"])
     result = await test_db.execute(select(ApiKey).where(ApiKey.id == key_id))

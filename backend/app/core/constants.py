@@ -118,8 +118,8 @@ SSE_MAX_CONNECTION_LIFETIME: int = 300
 # SSE heartbeat interval (in seconds)
 SSE_HEARTBEAT_INTERVAL: int = 30
 
-# LLM call timeout (in seconds)
-LLM_DEFAULT_TIMEOUT: int = 60
+# LLM call timeout (in seconds) - 300s (5 minutes) allows deep PR reviews for complex/slow models
+LLM_DEFAULT_TIMEOUT: int = 300
 
 # GitHub API timeout (in seconds)
 GITHUB_API_TIMEOUT: int = 30

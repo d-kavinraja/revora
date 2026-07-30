@@ -79,6 +79,7 @@ export interface Repository {
   is_private: boolean;
   reviews_enabled: boolean;
   total_reviews: number;
+  active_review_status?: 'pending' | 'running' | null;
   last_synced_at: string | null;
   settings?: {
     assigned_provider?: string;

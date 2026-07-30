@@ -63,6 +63,12 @@ class LLMService:
 
         model_to_use, _ = self._resolve_model(provider, model)
 
+        display_model = model
+        if model_to_use.startswith("nvidia_nim/"):
+            display_model = model_to_use[len("nvidia_nim/"):]
+
+        effective_timeout = max(timeout or 300, 300)
+
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -70,12 +76,13 @@ class LLMService:
                     model=model_to_use,
                     messages=messages,
                     api_key=api_key,
+                    num_retries=2,
                 ),
-                timeout=timeout,
+                timeout=effective_timeout,
             )
 
             if isinstance(response, dict):
-                logger.warning(f"litellm returned dict for {model_to_use}: {response}")
+                logger.warning(f"litellm returned dict for {display_model}: {response}")
                 error_msg = (
                     response.get("error", {}).get("message", "")
                     if isinstance(response.get("error"), dict)
@@ -104,13 +111,18 @@ class LLMService:
 
         except asyncio.TimeoutError:
             raise RuntimeError(
-                f"LLM call to {provider}/{model_to_use} timed out after {timeout}s"
+                f"LLM call to {provider}/{display_model} timed out after {effective_timeout}s"
             )
         except Exception as e:
             error_str = str(e).lower()
-            if "429" in error_str or "rate" in error_str or "quota" in error_str:
+            if "overloaded" in error_str or "503" in error_str or "busy" in error_str or "capacity" in error_str:
                 raise RuntimeError(
-                    f"Rate limit exceeded for model '{model_to_use}'. "
+                    f"NVIDIA NIM server is temporarily overloaded for '{display_model}'. "
+                    f"NVIDIA's API is experiencing high traffic. Please try again in a moment."
+                ) from e
+            elif "429" in error_str or "rate" in error_str or "quota" in error_str:
+                raise RuntimeError(
+                    f"Rate limit exceeded for model '{display_model}'. "
                     f"Provider error: {e}"
                 ) from e
             elif "401" in error_str or "unauthorized" in error_str:
@@ -120,17 +132,17 @@ class LLMService:
                 ) from e
             elif "403" in error_str or "forbidden" in error_str:
                 raise RuntimeError(
-                    f"API access denied for model '{model_to_use}'. "
+                    f"API access denied for model '{display_model}'. "
                     f"Your API key may not have the required permissions."
                 ) from e
             elif "404" in error_str or "not found" in error_str:
                 raise RuntimeError(
-                    f"Model '{model_to_use}' not found or deprecated by the provider. "
+                    f"Model '{display_model}' not found or deprecated by the provider. "
                     f"Please check your provider settings."
                 ) from e
             elif "timeout" in error_str:
                 raise RuntimeError(
-                    f"AI provider timed out for '{model_to_use}'. "
+                    f"AI provider timed out for '{display_model}'. "
                     f"Please try again later."
                 ) from e
             elif "connection" in error_str or "connect" in error_str:
@@ -140,7 +152,7 @@ class LLMService:
                 ) from e
             else:
                 raise RuntimeError(
-                    f"AI provider error for '{model_to_use}': {e}"
+                    f"AI provider error for '{display_model}': {e}"
                 ) from e
 
     async def _resolve_api_key(
@@ -250,6 +262,8 @@ class LLMService:
             model = f"groq/{model}"
         elif provider == "grok" and not model.startswith("xai/"):
             model = f"xai/{model}"
+        elif provider == "nvidia" and not model.startswith("nvidia_nim/"):
+            model = f"nvidia_nim/{model}"
 
         return model, None
 

@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
@@ -36,14 +36,29 @@ class ModelDiscoveryEngine:
         "ollama": "ollama",
         "cohere": "cohere",
         "mistral": "mistral",
+        "nvidia": "nvidia_nim",
     }
 
     # Terms indicating a model is not a chat model
     NON_CHAT_EXCLUSIONS = [
-        "dall-e", "whisper", "embedding", "tts", "veo", "imagen", "lyria",
+        "dall-e", "whisper", "embedding", "embed", "tts", "veo", "imagen", "lyria",
         "moderation", "speech", "audio", "video", "clip", "rerank",
         "image-generation", "image-preview", "1024-x", "1536-x", "512-x",
-        "learnlm", "aqa", "bison", "chat-bison", "text-bison", "gecko"
+        "learnlm", "aqa", "bison", "chat-bison", "text-bison", "gecko",
+        "reward", "guardrail", "bge-", "deplot", "diffusion"
+    ]
+
+    RECOMMENDED_MODELS = [
+        "meta/llama-3.3-70b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
+        "minimaxai/minimax-m3",
+        "meta/llama-3.1-70b-instruct",
+        "nvidia/llama-3.1-nemotron-70b-instruct",
+        "deepseek-ai/deepseek-r1",
+        "mistralai/mistral-large-2-instruct",
+        "bigcode/starcoder2-15b",
+        "qwen/qwen2.5-coder-32b-instruct",
+        "meta/llama-3.1-8b-instruct",
     ]
 
     # Gemini 2.0/2.5 models have severe rate limits on both free and paid tiers
@@ -77,13 +92,37 @@ class ModelDiscoveryEngine:
 
         live_models: List[str] = []
         try:
-            # Query the provider's actual API endpoint
-            live_models = await asyncio.to_thread(
-                litellm.get_valid_models,
-                check_provider_endpoint=True,
-                custom_llm_provider=litellm_prov,
-                api_key=raw_key,
-            )
+            if litellm_prov == "nvidia_nim":
+                try:
+                    import httpx
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get("https://integrate.api.nvidia.com/v1/models", headers=headers)
+                        if resp.status_code in (200, 401, 403):
+                            data = resp.json().get("data", [])
+                            live_models = [m["id"] for m in data if isinstance(m, dict) and "id" in m]
+                except Exception as e:
+                    logger.warning(f"Direct NVIDIA API model fetch failed: {e}")
+
+                if not live_models:
+                    live_models = [
+                        "meta/llama-3.3-70b-instruct",
+                        "meta/llama-3.1-70b-instruct",
+                        "meta/llama-3.1-8b-instruct",
+                        "deepseek-ai/deepseek-v4-flash",
+                        "deepseek-ai/deepseek-r1",
+                        "nvidia/llama-3.1-nemotron-70b-instruct",
+                        "mistralai/mistral-large-2-instruct",
+                        "bigcode/starcoder2-15b",
+                    ]
+            else:
+                # Query the provider's actual API endpoint
+                live_models = await asyncio.to_thread(
+                    litellm.get_valid_models,
+                    check_provider_endpoint=True,
+                    custom_llm_provider=litellm_prov,
+                    api_key=raw_key,
+                )
         except Exception as e:
             error_str = str(e).lower()
             # Rate limiting is not a permanent failure - return empty but don't cache
@@ -123,6 +162,15 @@ class ModelDiscoveryEngine:
 
         # Filter out models that failed the quota check
         final_models = [m for m in validated_models if m["accessible"]]
+
+        # Sort so recommended models appear at the top
+        def get_model_priority(m: dict) -> int:
+            name = m.get("canonical_model_name", "")
+            if name in cls.RECOMMENDED_MODELS:
+                return cls.RECOMMENDED_MODELS.index(name)
+            return 999
+
+        final_models.sort(key=get_model_priority)
 
         # Update cache with hashed key
         _MODEL_CACHE[cache_key] = {
@@ -169,6 +217,8 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"cohere/{canonical_model_name}"
         elif provider_lower == "mistral" and not model_name.startswith("mistral/"):
             litellm_model_name = f"mistral/{canonical_model_name}"
+        elif provider_lower == "nvidia" and not model_name.startswith("nvidia_nim/"):
+            litellm_model_name = f"nvidia_nim/{canonical_model_name}"
 
         is_deprecated = any(term in m_lower for term in cls.DEPRECATED_TERMS)
         is_preview = any(term in m_lower for term in cls.PREVIEW_TERMS)
@@ -222,7 +272,7 @@ class ModelDiscoveryEngine:
     async def verify_model_quota(cls, canonical_model: CanonicalModel, raw_key: str) -> bool:
         """
         Executes a 1-token smoke test to verify if the API key has quota for this model.
-        Returns True if successful, False if 429/403.
+        Returns True if successful, False if 404/unsupported.
         """
         try:
             await asyncio.wait_for(
@@ -239,16 +289,12 @@ class ModelDiscoveryEngine:
             return True
         except Exception as e:
             error_str = str(e).lower()
-            if "429" in error_str or "quota" in error_str or "rate" in error_str or "403" in error_str or "forbidden" in error_str:
-                logger.warning(f"Quota verification failed for {canonical_model.canonical_model_name}: {e}")
-                return False
-
-            # If LiteLLM doesn't support the model mapping, mark as inaccessible
             if "404" in error_str or "not found" in error_str or "unsupported" in error_str:
-                logger.warning(f"Model {canonical_model.canonical_model_name} not supported by LiteLLM: {e}")
+                logger.warning(f"Model {canonical_model.canonical_model_name} not supported: {e}")
                 return False
 
-            # If it fails for other reasons (e.g. 500, timeout), assume it's accessible
+            # If it fails due to transient 403, 429, timeout or server error, retain model as accessible
+            logger.info(f"Smoke test soft failure for {canonical_model.canonical_model_name}: {e}")
             return True
 
     @classmethod

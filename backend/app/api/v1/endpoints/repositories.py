@@ -42,18 +42,29 @@ async def list_repositories(
 
     result = []
     for repo in repos:
-        # Count reviews for this repo via pull_requests
+        # Count reviews & check active review status for this repo via pull_requests
         pr_ids_result = await db.execute(
             select(PullRequest.id).where(PullRequest.repo_id == repo.id)
         )
         pr_ids = [r[0] for r in pr_ids_result.all()]
 
         total_reviews = 0
+        active_review_status = None
         if pr_ids:
             count_result = await db.execute(
                 select(func.count(Review.id)).where(Review.pr_id.in_(pr_ids))
             )
             total_reviews = count_result.scalar() or 0
+
+            active_rev_result = await db.execute(
+                select(Review.status)
+                .where(
+                    Review.pr_id.in_(pr_ids),
+                    Review.status.in_(["pending", "running"])
+                )
+                .order_by(Review.created_at.desc())
+            )
+            active_review_status = active_rev_result.scalars().first()
 
         result.append({
             "id": str(repo.id),
@@ -64,6 +75,7 @@ async def list_repositories(
             "is_private": repo.is_private,
             "reviews_enabled": repo.reviews_enabled,
             "total_reviews": total_reviews,
+            "active_review_status": active_review_status,
             "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
             "settings": repo.settings or {},
         })
@@ -441,6 +453,26 @@ async def update_repository_config(
     repo = repo_result.scalars().first()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
+
+    # Check if a review is currently pending or running for this repo
+    pr_ids_check = await db.execute(
+        select(PullRequest.id).where(PullRequest.repo_id == repo.id)
+    )
+    existing_pr_ids = [r[0] for r in pr_ids_check.all()]
+    if existing_pr_ids:
+        active_rev_check = await db.execute(
+            select(Review.status)
+            .where(
+                Review.pr_id.in_(existing_pr_ids),
+                Review.status.in_(["pending", "running"])
+            )
+        )
+        active_status = active_rev_check.scalars().first()
+        if active_status:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model configuration is locked while a Pull Request review is currently {active_status}. Please wait until the review completes."
+            )
 
     # Validate model if assigned_model and assigned_key_id are provided
     if config.assigned_provider and config.assigned_model and config.assigned_key_id:
