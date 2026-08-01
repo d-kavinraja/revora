@@ -560,7 +560,8 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
 
             async with AsyncSessionLocal() as session:
                 # Fetch one queued job with row-level locking
-                stmt = text("""
+                stmt = text(
+                    """
                     SELECT id, repo_id, pr_number, head_sha, delivery_id, payload,
                            attempt_count, created_at
                     FROM review_jobs
@@ -568,7 +569,8 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                     ORDER BY created_at ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
-                """)
+                """
+                )
                 result = await session.execute(stmt)
                 job_row = result.fetchone()
 
