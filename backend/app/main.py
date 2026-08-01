@@ -6,12 +6,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.core.config import settings
-from app.api.v1.router import api_router
 from app.ai.model_registry import canonical_registry
+from app.api.v1.router import api_router
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.services.recovery import recover_stale_reviews_on_startup
-from app.services.sync_engine import run_sync_pass, sync_loop, SYNC_REASON_STARTUP
+from app.services.sync_engine import SYNC_REASON_STARTUP, run_sync_pass, sync_loop
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     try:
         await recover_stale_reviews_on_startup()
     except Exception as e:
-        logger.error(f"Startup recovery failed: {e}", exc_info=True)
+        logger.exception(f"Startup recovery failed: {e}")
 
     # Automatic recovery after downtime: one full sync pass — discovers new /
     # removed repositories, new / reopened / closed / merged PRs, new commits,
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
             result = await run_sync_pass(SYNC_REASON_STARTUP)
             logger.info(f"Startup sync pass complete: {result.get('status')}")
         except Exception as e:
-            logger.error(f"Startup sync pass failed: {e}", exc_info=True)
+            logger.exception(f"Startup sync pass failed: {e}")
             
     startup_sync_task = asyncio.create_task(startup_sync())
 
@@ -66,11 +66,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.middleware.correlation import CorrelationIdMiddleware
 from app.middleware.rate_limit import limiter
 from app.middleware.size_limit import RequestSizeLimitMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 # Configure Middleware
 app.state.limiter = limiter
@@ -112,7 +113,7 @@ async def readiness():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=503,
