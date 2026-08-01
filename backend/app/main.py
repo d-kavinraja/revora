@@ -115,13 +115,17 @@ async def readiness():
         return {"status": "ready", "database": "connected"}
     except Exception as e:  # noqa: BLE001
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             status_code=503,
-            content={"status": "not_ready", "database": "disconnected", "error": str(e)},
+            content={
+                "status": "not_ready",
+                "database": "disconnected",
+                "error": str(e),
+            },
         )
 
 
 @app.get("/")
 async def root():
     return {"message": "Welcome to Revora API. Visit /docs for the API documentation."}
-
