@@ -9,6 +9,7 @@ export MALLOC_TRIM_THRESHOLD_=65536
 export PYTHONUNBUFFERED=1
 export PYTHONOPTIMIZE=1
 export PYTHONHASHSEED=0
+export WEB_CONCURRENCY=1
 
 echo "Running Alembic migrations..."
 alembic upgrade head

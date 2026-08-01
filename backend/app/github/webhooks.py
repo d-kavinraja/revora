@@ -7,6 +7,15 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from sqlalchemy import select
 
+import hmac
+import hashlib
+import asyncio
+import httpx
+import uuid
+from datetime import datetime, timezone
+from typing import Dict, Any
+from sqlalchemy import select
+
 from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
@@ -14,7 +23,6 @@ from app.models.user import User
 from app.github.auth import github_app_auth
 from app.github.client import github_client
 from app.github.shared import resolve_provider_config, get_or_create_review_records, record_usage_stats
-from app.pipeline.orchestrator import review_pipeline
 from app.services.github_service import github_service
 from app.services.sync_engine import _has_required_permissions
 
