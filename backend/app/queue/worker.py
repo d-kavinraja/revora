@@ -468,15 +468,16 @@ async def recover_orphaned_jobs(max_retries: int = 3, queue_timeout_minutes: int
         logger.error(f"Error during orphaned job recovery: {e}", exc_info=True)
 
 
-async def run_worker(poll_interval: float = 2.0):
+async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
     """Main worker loop. Polls for queued jobs and processes them.
 
     Uses SELECT FOR UPDATE SKIP LOCKED for safe concurrent access.
     """
     logger.info(f"Worker {_worker_id} started (poll_interval={poll_interval}s)")
 
-    signal.signal(signal.SIGINT, _handle_shutdown)
-    signal.signal(signal.SIGTERM, _handle_shutdown)
+    if standalone:
+        signal.signal(signal.SIGINT, _handle_shutdown)
+        signal.signal(signal.SIGTERM, _handle_shutdown)
 
     # Recover any jobs left in 'running' status from a previous server crash
     await recover_orphaned_jobs()

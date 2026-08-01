@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.services.recovery import recover_stale_reviews_on_startup
 from app.services.sync_engine import SYNC_REASON_STARTUP, run_sync_pass, sync_loop
+from app.queue.worker import run_worker
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +46,21 @@ async def lifespan(app: FastAPI):
     if settings.SYNC_RECOVERY_INTERVAL_MINUTES > 0:
         sync_task = asyncio.create_task(sync_loop())
 
+    worker_task = asyncio.create_task(run_worker(standalone=False))
+
     try:
         yield
     finally:
+        worker_task.cancel()
         if sync_task:
             sync_task.cancel()
         if startup_sync_task and not startup_sync_task.done():
             startup_sync_task.cancel()
             try:
-                await sync_task
+                if sync_task:
+                    await sync_task
                 await startup_sync_task
+                await worker_task
             except asyncio.CancelledError:
                 pass
 
