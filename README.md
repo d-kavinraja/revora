@@ -1110,9 +1110,9 @@ return hmac.compare_digest(expected, signature)
 | `pull_request` | `reopened` | Triggers AI review pipeline |
 | `pull_request` | `synchronize` | Triggers AI review pipeline |
 | `installation` | `created` | Links installation to user |
-| `installation` | `deleted` | Removes installation and repos |
-| `installation_repositories` | `added` | Adds repositories to database |
-| `installation_repositories` | `removed` | Removes repositories from database |
+| `installation` | `deleted` | Marks installation suspended and its repos as removed (history preserved) |
+| `installation_repositories` | `added` | Adds repositories to database (or re-links a previously removed repo) |
+| `installation_repositories` | `removed` | Marks repositories as removed (history preserved) |
 
 ---
 

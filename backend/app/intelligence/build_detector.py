@@ -6,6 +6,7 @@ Uses the shared RepoWalker for efficient filesystem access.
 
 from typing import List
 
+from app.intelligence._async_util import run_async
 from app.intelligence.models import BuildInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 
@@ -85,7 +86,6 @@ class BuildDetector(BaseDetector):
 # Legacy function interface for backward compatibility
 def detect_build_tools(repo_path: str) -> BuildInfo:
     """Detect build tools in a repository (legacy interface)."""
-    import asyncio
     from app.intelligence.repo_walker import RepoWalker
 
     async def _detect():
@@ -100,13 +100,4 @@ def detect_build_tools(repo_path: str) -> BuildInfo:
             docker_compose=data.get("has_docker_compose", False),
         )
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _detect()).result()
-        else:
-            return loop.run_until_complete(_detect())
-    except RuntimeError:
-        return asyncio.run(_detect())
+    return run_async(_detect())

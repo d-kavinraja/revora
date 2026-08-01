@@ -31,10 +31,11 @@ async def get_dashboard_stats(
     total_failed_reviews = 0
 
     if installation_ids:
-        # Count repos
+        # Count repos (removed repos keep history but are not "connected")
         repos_result = await db.execute(
             select(func.count(Repository.id)).where(
-                Repository.installation_id.in_(installation_ids)
+                Repository.installation_id.in_(installation_ids),
+                Repository.removed_at.is_(None),
             )
         )
         connected_repos = repos_result.scalar() or 0
@@ -42,7 +43,8 @@ async def get_dashboard_stats(
         # Get repo IDs
         repo_ids_result = await db.execute(
             select(Repository.id).where(
-                Repository.installation_id.in_(installation_ids)
+                Repository.installation_id.in_(installation_ids),
+                Repository.removed_at.is_(None),
             )
         )
         repo_ids = [r[0] for r in repo_ids_result.all()]

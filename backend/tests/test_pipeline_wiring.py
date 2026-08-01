@@ -45,6 +45,14 @@ class TestPipelineWiring:
              patch("app.queue.dispatcher.enqueue_review_job", new_callable=AsyncMock) as mock_enqueue:
             
             mock_db = MagicMock()
+            mock_db.execute = AsyncMock(
+                return_value=MagicMock(
+                    scalars=MagicMock(
+                        return_value=MagicMock(first=MagicMock(return_value=None))
+                    )
+                )
+            )
+            mock_db.commit = AsyncMock()
             mock_session_local.return_value.__aenter__.return_value = mock_db
 
             await handle_pr_opened(mock_payload, "test-delivery-id")

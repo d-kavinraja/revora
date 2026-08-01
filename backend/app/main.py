@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,13 +10,47 @@ from app.core.config import settings
 from app.api.v1.router import api_router
 from app.ai.model_registry import canonical_registry
 from app.db.session import AsyncSessionLocal
+from app.services.recovery import recover_stale_reviews_on_startup
+from app.services.sync_engine import run_sync_pass, sync_loop, SYNC_REASON_STARTUP
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: startup and shutdown hooks."""
+    """Application lifespan: startup recovery, full sync, background sync, shutdown."""
     canonical_registry.discover_models()
-    yield
+
+    # Fail reviews stuck in active statuses with no backing job so the
+    # per-PR active-review lock is always released after a restart.
+    try:
+        await recover_stale_reviews_on_startup()
+    except Exception as e:
+        logger.error(f"Startup recovery failed: {e}", exc_info=True)
+
+    # Automatic recovery after downtime: one full sync pass — discovers new /
+    # removed repositories, new / reopened / closed / merged PRs, new commits,
+    # and enqueues the reviews that were missed while the server was down.
+    try:
+        result = await run_sync_pass(SYNC_REASON_STARTUP)
+        logger.info(f"Startup sync pass complete: {result.get('status')}")
+    except Exception as e:
+        logger.error(f"Startup sync pass failed: {e}", exc_info=True)
+
+    # Background tiered sync (missed webhooks / dropped SSE connections).
+    sync_task = None
+    if settings.SYNC_RECOVERY_INTERVAL_MINUTES > 0:
+        sync_task = asyncio.create_task(sync_loop())
+
+    try:
+        yield
+    finally:
+        if sync_task:
+            sync_task.cancel()
+            try:
+                await sync_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(
@@ -81,3 +117,4 @@ async def readiness():
 @app.get("/")
 async def root():
     return {"message": "Welcome to Revora API. Visit /docs for the API documentation."}
+

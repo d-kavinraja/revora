@@ -232,6 +232,9 @@ def configure_success_mocks(
 
     # GitHub Client (async methods)
     mocks["github_client"].create_pr_review = AsyncMock(return_value=MagicMock())
+    # Comment upsert flow (single editable top-level comment)
+    mocks["github_client"].create_issue_comment = AsyncMock(return_value={"id": 123456})
+    mocks["github_client"].update_issue_comment = AsyncMock(return_value={"id": 123456})
 
     # SSE Emitter
     mock_sse_instance = MagicMock()

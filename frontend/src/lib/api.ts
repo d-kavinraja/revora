@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@/store/useAuthStore';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -42,7 +42,7 @@ apiClient.interceptors.response.use(
   }
 );
 
-export type ReviewStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ReviewStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'stopped' | 'timed_out' | 'waiting' | 'skipped' | 'queued';
 
 export interface PullRequestInfo {
   id: string;
@@ -66,8 +66,24 @@ export interface Review {
   completed_at: string | null;
   error_message: string | null;
   created_at: string | null;
+  github_pr_state: string;
+  pr_has_active_review: boolean;
+  latest_review_id?: string | null;
   pull_request: PullRequestInfo;
   repository: { id?: string; name: string; full_name: string };
+}
+
+export interface ReviewExecution {
+  id: string;
+  execution_number: number;
+  trigger: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  model: string | null;
+  provider: string | null;
+  tokens: Record<string, unknown>;
 }
 
 export interface Repository {
@@ -77,15 +93,44 @@ export interface Repository {
   description: string | null;
   language: string | null;
   is_private: boolean;
+  is_archived: boolean;
   reviews_enabled: boolean;
   total_reviews: number;
-  active_review_status?: 'pending' | 'running' | null;
+  active_review_status?: 'queued' | 'pending' | 'running' | null;
   last_synced_at: string | null;
+  last_reviewed_at: string | null;
+  removed_at: string | null;
+  permissions_ok: boolean;
+  status?: 'active' | 'removed' | 'permission_required' | 'disabled';
+  last_sync?: {
+    completed_at: string | null;
+    status: string | null;
+    error: string | null;
+    reason: string | null;
+  } | null;
   settings?: {
     assigned_provider?: string;
     assigned_model?: string;
     assigned_key_id?: string;
   };
+}
+
+export interface SyncRun {
+  id: string;
+  reason: 'startup' | 'background' | 'manual' | 'webhook' | 'recovery' | string;
+  status: 'running' | 'success' | 'partial' | 'failed' | string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  repo_count: number;
+  repos_added: number;
+  repos_updated: number;
+  repos_removed: number;
+  repos_failed: number;
+  prs_found: number;
+  prs_updated: number;
+  jobs_enqueued: number;
+  details: Record<string, string> | null;
 }
 
 export interface DashboardStats {
@@ -333,12 +378,34 @@ const buildFilterQuery = (filters?: UsageFilters) => {
 };
 
 export const api = {
+  // Repository Lifecycle
+  refreshInstallation: () => apiClient.post<{ status: string; message: string; new_count: number; removed_count: number; updated_count: number; synced: string[] }>('/repositories/refresh-installation').then((r) => r.data),
+  getRepositoryStatus: (id: string) => apiClient.get<{ id: string; full_name: string; status: string; reviews_enabled: boolean; last_synced_at: string | null; settings: Record<string, unknown>; permissions: Record<string, unknown> }>(`/repositories/${id}/status`).then((r) => r.data),
+
+  // Review Lifecycle
+  rerunReview: (id: string) => apiClient.post<{ status: string; message: string; new_review_id: string }>(`/reviews/${id}/rerun`).then((r) => r.data),
+  retryReview: (id: string) => apiClient.post<{ status: string; message: string; new_review_id: string }>(`/reviews/${id}/retry`).then((r) => r.data),
+  restartReview: (id: string) => apiClient.post<{ status: string; message: string; new_review_id: string }>(`/reviews/${id}/restart`).then((r) => r.data),
+  getReviewHistory: (id: string) =>
+    apiClient
+      .get<{
+        current_review_id: string;
+        current_status: string;
+        history: Review[];
+        executions: ReviewExecution[];
+      }>(`/reviews/${id}/history`)
+      .then((r) => r.data),
+  getReviewTimeline: (id: string) => apiClient.get<{ review_id: string; timeline: Array<{ id: string; stage: string; status: string; started_at: string | null; completed_at: string | null; duration_ms: number | null; message: string | null; metrics: Record<string, unknown> }> }>(`/reviews/${id}/timeline`).then((r) => r.data),
+
   // Existing
   getStats: () => apiClient.get<DashboardStats>('/dashboard/stats').then((r) => r.data),
   getReviews: (limit = 20) => apiClient.get<Review[]>(`/reviews?limit=${limit}`).then((r) => r.data),
   getReview: (id: string) => apiClient.get<Review>(`/reviews/${id}`).then((r) => r.data),
   cancelReview: (id: string) => apiClient.post<{ status: string; message: string }>(`/reviews/${id}/cancel`).then((r) => r.data),
-  getRepositories: () => apiClient.get<Repository[]>('/repositories').then((r) => r.data),
+  getRepositories: (includeRemoved = false) =>
+    apiClient.get<Repository[]>('/repositories', { params: { include_removed: includeRemoved } }).then((r) => r.data),
+  getSyncRuns: (limit = 50) =>
+    apiClient.get<SyncRun[]>('/repositories/sync-runs', { params: { limit } }).then((r) => r.data),
   syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
   syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),
   getApiKeys: () => apiClient.get<ApiKey[]>('/api-keys').then((r) => r.data),

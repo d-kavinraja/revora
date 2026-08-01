@@ -1,29 +1,39 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { api } from '@/lib/api';
+import { api, Review } from '@/lib/api';
 import { GitBranchIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
-import { CalendarIcon, FolderGit2, GitPullRequest, RotateCcw } from 'lucide-react';
+import { CalendarIcon, FolderGit2, GitPullRequest, RotateCcw, LockIcon } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ReviewItem } from '@/components/shared/review-item';
+import { ReviewActions } from '@/components/shared/review-actions';
 import { DateRangeFilter } from '@/components/shared/date-range-filter';
+import { useToast } from '@/components/ui/toaster';
+import { useReviewStream, reviewsStreamUrl } from '@/lib/events';
 
 const filterOptions = [
   { label: 'All Statuses', value: 'all' },
+  { label: 'Queued', value: 'queued' },
   { label: 'Running', value: 'running' },
   { label: 'Completed', value: 'completed' },
   { label: 'Failed', value: 'failed' },
   { label: 'Pending', value: 'pending' },
+  { label: 'Cancelled', value: 'cancelled' },
+  { label: 'Stopped', value: 'stopped' },
+  { label: 'Timed Out', value: 'timed_out' },
 ];
 
 /* ─── Main Page ─── */
 export default function ReviewsPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRepo, setSelectedRepo] = useState<string>('all');
   const [selectedPR, setSelectedPR] = useState<string>('all');
+  const [actioningReview, setActioningReview] = useState<{ id: string; action: string } | null>(null);
 
   // Date range state
   const [fromDate, setFromDate] = useState('');
@@ -33,17 +43,69 @@ export default function ReviewsPage() {
   const [useTime, setUseTime] = useState(false);
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  // Fetch reviews
+  // Fetch reviews — SSE pushes status changes, 30s polling is the fallback
   const { data: reviews = [], isLoading, error } = useQuery({
     queryKey: ['reviews'],
     queryFn: () => api.getReviews(100),
-    refetchInterval: 5000,
+    refetchInterval: 30000,
+  });
+
+  // Real-time: refresh the list the moment any review or PR state changes
+  useReviewStream(reviewsStreamUrl(), (event) => {
+    if (event.type === 'review.updated' || event.type === 'pr.state') {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+    }
   });
 
   // Fetch connected repositories
   const { data: repositories = [] } = useQuery({
     queryKey: ['repositories'],
     queryFn: () => api.getRepositories(),
+  });
+
+  // Lifecycle mutations — the same review row is reused, so refresh the list in place
+  const rerunMutation = useMutation({
+    mutationFn: (id: string) => api.rerunReview(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast({ title: 'Rerun initiated', type: 'success' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Rerun failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: (id: string) => api.retryReview(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast({ title: 'Retry initiated', type: 'success' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Retry failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    },
+  });
+
+  const restartMutation = useMutation({
+    mutationFn: (id: string) => api.restartReview(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast({ title: 'Restart initiated', type: 'success' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Restart failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api.cancelReview(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast({ title: 'Review cancelled', type: 'success' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Cancel failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    },
   });
 
   // Build Connected Repowise options
@@ -99,46 +161,53 @@ export default function ReviewsPage() {
     clearDateFilter();
   };
 
-  const filteredReviews = reviews.filter((review) => {
-    // 1. Status Filter
-    if (filter !== 'all' && review.status !== filter) return false;
+  // Each Review row is one PR lifecycle: opened/reopened create a new row (new
+  // card), while rerun/retry/restart/synchronize mutate the same row in place.
+  // No deduping — every lifecycle gets its own card, previous ones stay as
+  // historical data. The API already returns rows newest-first.
+  const filteredReviews = useMemo(() => {
+    // Apply filters to the full list
+    return reviews.filter((review) => {
+      // 1. Status Filter
+      if (filter !== 'all' && review.status !== filter) return false;
 
-    // 2. Search Query Filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const title = (review.pull_request?.title || '').toLowerCase();
-      const repo = (review.repository?.full_name || '').toLowerCase();
-      const author = (review.pull_request?.author || '').toLowerCase();
-      const prNum = `#${review.pull_request?.pr_number || ''}`;
-      if (!title.includes(q) && !repo.includes(q) && !author.includes(q) && !prNum.includes(q)) return false;
-    }
+      // 2. Search Query Filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const title = (review.pull_request?.title || '').toLowerCase();
+        const repo = (review.repository?.full_name || '').toLowerCase();
+        const author = (review.pull_request?.author || '').toLowerCase();
+        const prNum = `#${review.pull_request?.pr_number || ''}`;
+        if (!title.includes(q) && !repo.includes(q) && !author.includes(q) && !prNum.includes(q)) return false;
+      }
 
-    // 3. Connected Repowise Filter
-    if (selectedRepo !== 'all') {
-      const repoFullName = review.repository?.full_name || '';
-      const repoName = review.repository?.name || '';
-      if (repoFullName !== selectedRepo && repoName !== selectedRepo) return false;
-    }
+      // 3. Connected Repository Filter
+      if (selectedRepo !== 'all') {
+        const repoFullName = review.repository?.full_name || '';
+        const repoName = review.repository?.name || '';
+        if (repoFullName !== selectedRepo && repoName !== selectedRepo) return false;
+      }
 
-    // 4. Pull Request Wise Filter
-    if (selectedPR !== 'all') {
-      if (String(review.pull_request?.pr_number) !== String(selectedPR)) return false;
-    }
+      // 4. Pull Request Wise Filter
+      if (selectedPR !== 'all') {
+        if (String(review.pull_request?.pr_number) !== String(selectedPR)) return false;
+      }
 
-    // 5. Date Range Filter
-    if (fromDate) {
-      const reviewDate = new Date(review.created_at ?? '');
-      const startStr = useTime && fromTime ? `${fromDate}T${fromTime}:00` : `${fromDate}T00:00:00`;
-      if (reviewDate < new Date(startStr)) return false;
-    }
-    if (toDate) {
-      const reviewDate = new Date(review.created_at ?? '');
-      const endStr = useTime && toTime ? `${toDate}T${toTime}:59` : `${toDate}T23:59:59`;
-      if (reviewDate > new Date(endStr)) return false;
-    }
+      // 5. Date Range Filter
+      if (fromDate) {
+        const reviewDate = new Date(review.created_at ?? '');
+        const startStr = useTime && fromTime ? `${fromDate}T${fromTime}:00` : `${fromDate}T00:00:00`;
+        if (reviewDate < new Date(startStr)) return false;
+      }
+      if (toDate) {
+        const reviewDate = new Date(review.created_at ?? '');
+        const endStr = useTime && toTime ? `${toDate}T${toTime}:59` : `${toDate}T23:59:59`;
+        if (reviewDate > new Date(endStr)) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [reviews, filter, searchQuery, selectedRepo, selectedPR, fromDate, toDate, fromTime, toTime, useTime]);
 
   // Compute global queue positions for pending/running (oldest first = #1)
   // Uses the full reviews array so position is stable regardless of current filters
@@ -166,6 +235,37 @@ export default function ReviewsPage() {
     selectedPR !== 'all' ||
     hasDateFilter
   );
+
+  const handleLifecycleAction = async (reviewId: string, action: string) => {
+    // Mirror the backend's per-PR active-review lock: a terminal review cannot
+    // rerun/retry/restart while another review for the same PR is active.
+    const target = reviews.find((r) => r.id === reviewId);
+    if (target?.pr_has_active_review && action !== 'cancel') return;
+    setActioningReview({ id: reviewId, action });
+    try {
+      switch (action) {
+        case 'rerun': await rerunMutation.mutateAsync(reviewId); break;
+        case 'retry': await retryMutation.mutateAsync(reviewId); break;
+        case 'restart': await restartMutation.mutateAsync(reviewId); break;
+        case 'cancel': await cancelMutation.mutateAsync(reviewId); break;
+      }
+    } finally {
+      setActioningReview(null);
+    }
+  };
+
+  /* ─── PR State indicator ─── */
+  const PRStateIndicator = ({ state }: { state: string }) => {
+    if (state === 'open') return null;
+    if (state === 'unknown') return null;
+    const label = state === 'closed' ? 'Closed' : state === 'merged' ? 'Merged' : state;
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-error/10 text-error border border-error/20 ml-auto shrink-0" title={`PR is ${label}`}>
+        <LockIcon size={8} />
+        {label}
+      </span>
+    );
+  };
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
@@ -344,7 +444,13 @@ export default function ReviewsPage() {
       ) : (
         <div className="space-y-2.5">
           {filteredReviews.map((review) => (
-            <ReviewItem key={review.id} review={review} queuePosition={queuePositionMap.get(review.id)} />
+            <div key={review.id} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <ReviewItem review={review} queuePosition={queuePositionMap.get(review.id)} />
+              </div>
+              <PRStateIndicator state={review.github_pr_state} />
+              <ReviewActions review={review} onAction={handleLifecycleAction} isActioning={actioningReview?.id === review.id} actioningAction={actioningReview?.action ?? null} variant="compact" />
+            </div>
           ))}
           <p className="text-center text-xs text-muted-foreground pt-2">
             {filteredReviews.length} review{filteredReviews.length !== 1 ? 's' : ''} shown
@@ -357,4 +463,3 @@ export default function ReviewsPage() {
     </div>
   );
 }
-

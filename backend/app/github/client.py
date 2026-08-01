@@ -75,4 +75,71 @@ class GitHubClient:
             response.raise_for_status()
             return response.json()
 
+    async def create_issue_comment(
+        self, installation_id: int, owner: str, repo: str, issue_number: int, body: str
+    ) -> Dict[str, Any]:
+        """Create a top-level comment on the issue/pull request thread.
+
+        Issue comments are editable (PATCH), so a single comment can be reused
+        and updated across reruns instead of creating duplicates.
+        """
+        headers = await self._get_headers(installation_id)
+        url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json={"body": body})
+            response.raise_for_status()
+            return response.json()
+
+    async def update_issue_comment(
+        self, installation_id: int, owner: str, repo: str, comment_id: int, body: str
+    ) -> Dict[str, Any]:
+        """Edit an existing issue comment (replaces its body)."""
+        headers = await self._get_headers(installation_id)
+        url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{comment_id}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(url, headers=headers, json={"body": body})
+            response.raise_for_status()
+            return response.json()
+
+
+    async def list_pr_reviews(
+        self, installation_id: int, owner: str, repo: str, pull_number: int
+    ) -> List[Dict[str, Any]]:
+        """List all reviews submitted on a pull request."""
+        headers = await self._get_headers(installation_id)
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+
+    async def update_pr_review(
+        self, installation_id: int, owner: str, repo: str, pull_number: int, review_id: int, body: str
+    ) -> Dict[str, Any]:
+        """Update the body of an existing pull request review."""
+        headers = await self._get_headers(installation_id)
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"
+
+        payload = {"body": body}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    async def delete_pr_review(
+        self, installation_id: int, owner: str, repo: str, pull_number: int, review_id: int
+    ) -> Dict[str, Any]:
+        """Delete a pull request review."""
+        headers = await self._get_headers(installation_id)
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+
 github_client = GitHubClient()

@@ -93,6 +93,31 @@ class Settings(BaseSettings):
         description="JWT token expiry in minutes"
     )
 
+    # Real-time / background sync
+    PR_STATE_SYNC_INTERVAL_MINUTES: int = Field(
+        default=3,
+        description="DEPRECATED — alias for SYNC_RECOVERY_INTERVAL_MINUTES (kept for back-compat)",
+    )
+    # Tier 1: repos with open PRs / new repos — every N minutes.
+    SYNC_RECOVERY_INTERVAL_MINUTES: int = Field(
+        default=3,
+        description="Minutes between background sync passes for active repos (0 disables)",
+    )
+    # Tier 2: repos updated in the last SYNC_TIER2_ACTIVE_DAYS days.
+    SYNC_TIER2_INTERVAL_MINUTES: int = Field(
+        default=15,
+        description="Minutes between sync passes for recently-updated repos (0 disables)",
+    )
+    # Tier 3: everything else.
+    SYNC_TIER3_INTERVAL_MINUTES: int = Field(
+        default=60,
+        description="Minutes between sync passes for remaining repos (0 disables)",
+    )
+    SYNC_TIER2_ACTIVE_DAYS: int = Field(
+        default=7,
+        description="A repo counts as 'recently updated' if synced within this many days",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

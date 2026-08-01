@@ -75,7 +75,10 @@ class LLMOrchestrator:
             raise RuntimeError(f"No model configured for provider '{preferred_provider}'.")
 
         is_explicit = config_source == CONFIG_SOURCE_REPO
-        user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        try:
+            user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        except ValueError:
+            raise ValueError(f"Invalid user ID format: {user_id}")
 
         # ── Single attempt (MODE 1) or transient-retry (MODE 2) ──────
         # For MODE 1: exactly 1 attempt, no retry, no key cycling.

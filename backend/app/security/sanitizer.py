@@ -42,13 +42,14 @@ def detect_prompt_injection(text: str) -> bool:
 def sanitize_content(text: str) -> str:
     text = redact_secrets(text)
     if detect_prompt_injection(text):
-        logger.warning("Prompt injection detected in content — flagging")
+        logger.warning("Prompt injection detected in content — blocking")
+        return "[Content flagged for potential prompt injection — redacted]"
     return text
 
 
 def sanitize_file_content(content: str, file_path: str) -> str:
-    if file_path.endswith((".md", ".txt", ".rst")):
-        if detect_prompt_injection(content):
-            logger.warning(f"Prompt injection detected in {file_path} — sanitizing")
-            return "[Content flagged for potential prompt injection — redacted]"
-    return redact_secrets(content)
+    text = redact_secrets(content)
+    if detect_prompt_injection(text):
+        logger.warning(f"Prompt injection detected in {file_path} — blocking")
+        return "[Content flagged for potential prompt injection — redacted]"
+    return text

@@ -17,6 +17,15 @@ class Installation(Base):
     permissions: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     events: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     suspended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True while the installation has every permission Revora needs to review.
+    # When False, repos under this installation are gated (status "permission_required").
+    permissions_ok: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Last sync pass state for this installation (powers the UI "last synchronized" line).
+    last_sync_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    last_sync_error: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_sync_reason: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User")
@@ -37,6 +46,11 @@ class Repository(Base):
     reviews_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     settings: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
     last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the repository is removed from the GitHub App installation.
+    # The row and all history (PRs, reviews, executions) are preserved.
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Mirrors GitHub's archived flag; archived repos are skipped for new reviews.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     installation: Mapped[Optional["Installation"]] = relationship("Installation", back_populates="repositories")
