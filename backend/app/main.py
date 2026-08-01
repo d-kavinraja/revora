@@ -31,11 +31,14 @@ async def lifespan(app: FastAPI):
     # Automatic recovery after downtime: one full sync pass — discovers new /
     # removed repositories, new / reopened / closed / merged PRs, new commits,
     # and enqueues the reviews that were missed while the server was down.
-    try:
-        result = await run_sync_pass(SYNC_REASON_STARTUP)
-        logger.info(f"Startup sync pass complete: {result.get('status')}")
-    except Exception as e:
-        logger.error(f"Startup sync pass failed: {e}", exc_info=True)
+    async def startup_sync():
+        try:
+            result = await run_sync_pass(SYNC_REASON_STARTUP)
+            logger.info(f"Startup sync pass complete: {result.get('status')}")
+        except Exception as e:
+            logger.error(f"Startup sync pass failed: {e}", exc_info=True)
+            
+    startup_sync_task = asyncio.create_task(startup_sync())
 
     # Background tiered sync (missed webhooks / dropped SSE connections).
     sync_task = None
@@ -47,8 +50,11 @@ async def lifespan(app: FastAPI):
     finally:
         if sync_task:
             sync_task.cancel()
+        if startup_sync_task and not startup_sync_task.done():
+            startup_sync_task.cancel()
             try:
                 await sync_task
+                await startup_sync_task
             except asyncio.CancelledError:
                 pass
 
