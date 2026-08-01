@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     try:
         await recover_stale_reviews_on_startup()
     except Exception as e:
-        logger.exception(f"Startup recovery failed: {e}")
+        logger.exception("Startup recovery failed")
 
     # Automatic recovery after downtime: one full sync pass — discovers new /
     # removed repositories, new / reopened / closed / merged PRs, new commits,
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
             result = await run_sync_pass(SYNC_REASON_STARTUP)
             logger.info(f"Startup sync pass complete: {result.get('status')}")
         except Exception as e:
-            logger.exception(f"Startup sync pass failed: {e}")
+            logger.exception("Startup sync pass failed")
             
     startup_sync_task = asyncio.create_task(startup_sync())
 
