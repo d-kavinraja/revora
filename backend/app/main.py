@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
             logger.info(f"Startup sync pass complete: {result.get('status')}")
         except Exception:
             logger.exception("Startup sync pass failed")
-            
+
     startup_sync_task = asyncio.create_task(startup_sync())
 
     # Background tiered sync (missed webhooks / dropped SSE connections).
