@@ -31,6 +31,11 @@ from app.models.verification import (
     FalsePositiveReportModel,
     VerificationMetricModel,
 )
+from app.models.audit import AuditLog
+from app.models.timeline import ReviewTimeline
+from app.models.exec_context import ReviewExecutionContext
+from app.models.execution import ReviewExecution
+from app.models.sync_run import SyncRun
 
 __all__ = [
     "User",
@@ -67,4 +72,9 @@ __all__ = [
     "HallucinationReportModel",
     "FalsePositiveReportModel",
     "VerificationMetricModel",
+    "AuditLog",
+    "ReviewTimeline",
+    "ReviewExecutionContext",
+    "ReviewExecution",
+    "SyncRun",
 ]

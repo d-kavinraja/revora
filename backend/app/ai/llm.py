@@ -176,8 +176,14 @@ class LLMService:
                     )
                     from app.core.security import encryption_service
 
+                    try:
+                        key_uuid = uuid.UUID(api_key_id)
+                    except ValueError:
+                        logger.warning(f"Invalid API key ID format: {api_key_id}")
+                        return None
+
                     db_key = await api_key_service.get_by_id(
-                        db, uuid.UUID(api_key_id)
+                        db, key_uuid
                     )
                     if db_key and db_key.user_id == user_id and db_key.is_valid:
                         decrypted = encryption_service.decrypt(db_key.encrypted_key)

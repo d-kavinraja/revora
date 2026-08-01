@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { api, Repository, ApiKey, ModelMetadata } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon, CircleCheckIcon } from '@animateicons/react/lucide';
-import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, Power } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -25,6 +25,20 @@ function LangBadge({ lang }: { lang: string | null }) {
       {lang}
     </span>
   );
+}
+
+function timeAgo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function ConfigModal({
@@ -138,7 +152,7 @@ function ConfigModal({
     }
   };
 
-  const isReviewActive = repo.active_review_status === 'pending' || repo.active_review_status === 'running';
+  const isReviewActive = repo.active_review_status === 'queued' || repo.active_review_status === 'pending' || repo.active_review_status === 'running';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -351,13 +365,17 @@ function RepositoryCard({
   const reviewsRef = useRef<any>(null);
   const settingsRef = useRef<any>(null);
 
+  const removed = repo.status === 'removed';
+
   const assignedModel = repo.settings?.assigned_model;
   const assignedProvider = repo.settings?.assigned_provider;
   const assignedKeyId = repo.settings?.assigned_key_id;
   const keyObj = apiKeys.find(k => k.id === assignedKeyId);
   const keyLabel = keyObj ? ` (${keyObj.label})` : '';
 
-  const isReviewActive = repo.active_review_status === 'pending' || repo.active_review_status === 'running';
+  const isReviewActive = repo.active_review_status === 'queued' || repo.active_review_status === 'pending' || repo.active_review_status === 'running';
+
+  const lastSyncText = timeAgo(repo.last_sync?.completed_at ?? repo.last_synced_at);
 
   return (
     <div
@@ -371,7 +389,7 @@ function RepositoryCard({
         reviewsRef.current?.stopAnimation();
         settingsRef.current?.stopAnimation();
       }}
-      className="cursor-target rounded-xl border border-border bg-surface-1 hover:border-brand/25 transition-all duration-150 p-5 group flex flex-col justify-between"
+      className={`cursor-target rounded-xl border border-border bg-surface-1 hover:border-brand/25 transition-all duration-150 p-5 group flex flex-col justify-between ${removed ? 'opacity-75 hover:border-border' : ''}`}
     >
       <div>
         <div className="flex items-start justify-between mb-2 gap-2">
@@ -380,6 +398,12 @@ function RepositoryCard({
             <span className="font-semibold text-foreground text-sm truncate">{repo.full_name}</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {repo.status === 'permission_required' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30" title="The GitHub App installation is missing required permissions — reviews are paused until they are granted.">
+                <ShieldAlert className="w-3 h-3" />
+                Permission Required
+              </span>
+            )}
             <LangBadge lang={repo.language} />
             {repo.is_private && (
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
@@ -393,6 +417,14 @@ function RepositoryCard({
           <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{repo.description}</p>
         )}
 
+        {removed && (
+          <div className="mb-2.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
+              Removed from Revora {timeAgo(repo.removed_at) ?? ''} — history preserved
+            </span>
+          </div>
+        )}
+
         {isReviewActive && (
           <div className="mb-2.5">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
@@ -403,7 +435,7 @@ function RepositoryCard({
           </div>
         )}
 
-        {assignedModel && (
+        {assignedModel && !removed && (
           <div className="mb-3">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand/10 text-brand border border-brand/20">
               {assignedProvider && <ProviderIcon slug={assignedProvider} size={14} />}
@@ -419,47 +451,59 @@ function RepositoryCard({
             <ClipboardIcon ref={reviewsRef} size={14} isAnimated={false} />
             {repo.total_reviews} reviews
           </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            disabled={configuringRepoId === repo.id || syncingRepoId === repo.id || isReviewActive}
-            onClick={() => onConfigure(repo)}
-            className={`p-1.5 rounded-lg transition-colors ${isReviewActive ? 'opacity-40 cursor-not-allowed text-muted-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04] cursor-pointer disabled:opacity-50'}`}
-            title={isReviewActive ? `Model configuration is locked while a review is ${repo.active_review_status} on this repository.` : "Configure model"}
-          >
-            {configuringRepoId === repo.id ? (
-              <LoaderIcon size={14} className="text-muted-foreground" animate />
-            ) : (
-              <SettingsIcon ref={settingsRef} size={14} isAnimated={false} />
-            )}
-          </button>
-
-          <button
-            disabled={syncingRepoId !== null}
-            onClick={() => handleSync(repo.id)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground rounded-lg text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-50"
-          >
-            {syncingRepoId === repo.id ? (
-              <>
-                <LoaderIcon size={12} className="text-muted-foreground" animate />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <LoaderIcon size={12} className="text-muted-foreground" />
-                Sync
-              </>
-            )}
-          </button>
-
-          <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${repo.reviews_enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
-            <span className="text-xs text-muted-foreground">
-              {repo.reviews_enabled ? 'Active' : 'Off'}
+          {!removed && lastSyncText && (
+            <span className="hidden sm:flex items-center gap-1.5" title="Last time this repository was synchronized with GitHub">
+              <RefreshCw className="w-3 h-3" />
+              Synced {lastSyncText}
             </span>
-          </div>
+          )}
         </div>
+
+        {removed ? (
+          <span className="text-xs font-medium text-muted-foreground">
+            Not receiving reviews
+          </span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={configuringRepoId === repo.id || syncingRepoId === repo.id || isReviewActive}
+              onClick={() => onConfigure(repo)}
+              className={`p-1.5 rounded-lg transition-colors ${isReviewActive ? 'opacity-40 cursor-not-allowed text-muted-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04] cursor-pointer disabled:opacity-50'}`}
+              title={isReviewActive ? `Model configuration is locked while a review is ${repo.active_review_status} on this repository.` : "Configure model"}
+            >
+              {configuringRepoId === repo.id ? (
+                <LoaderIcon size={14} className="text-muted-foreground" animate />
+              ) : (
+                <SettingsIcon ref={settingsRef} size={14} isAnimated={false} />
+              )}
+            </button>
+
+            <button
+              disabled={syncingRepoId !== null}
+              onClick={() => handleSync(repo.id)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground rounded-lg text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-50"
+            >
+              {syncingRepoId === repo.id ? (
+                <>
+                  <LoaderIcon size={12} className="text-muted-foreground" animate />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={12} className="text-muted-foreground" />
+                  Sync
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${repo.reviews_enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground">
+                {repo.reviews_enabled ? 'Active' : 'Off'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -469,6 +513,7 @@ export default function RepositoriesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
+  const [view, setView] = useState<'active' | 'removed'>('active');
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   const [configuringRepoId, setConfiguringRepoId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -476,11 +521,21 @@ export default function RepositoriesPage() {
   const [configRepo, setConfigRepo] = useState<Repository | null>(null);
   const [availableModels, setAvailableModels] = useState<Record<string, ModelMetadata[]>>({});
   
-  const { data: repos = [], isLoading: reposLoading, error: reposError } = useQuery({
-    queryKey: ['repositories'],
-    queryFn: api.getRepositories,
+  const activeQuery = useQuery({
+    queryKey: ['repositories', 'active'],
+    queryFn: () => api.getRepositories(false),
     refetchInterval: 5000,
   });
+
+  const removedQuery = useQuery({
+    queryKey: ['repositories', 'removed'],
+    queryFn: () => api.getRepositories(true),
+    refetchInterval: 5000,
+  });
+
+  const repos = view === 'removed' ? (removedQuery.data ?? []) : (activeQuery.data ?? []);
+  const reposLoading = view === 'removed' ? removedQuery.isLoading : activeQuery.isLoading;
+  const reposError = view === 'removed' ? removedQuery.error : activeQuery.error;
 
   const { data: apiKeys = [] } = useQuery({
     queryKey: ['api-keys'],
@@ -584,6 +639,22 @@ export default function RepositoriesPage() {
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="mb-6 flex items-center gap-2">
+        <button
+          onClick={() => setView('active')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${view === 'active' ? 'bg-brand/10 text-brand border border-brand/20' : 'bg-surface-1 border border-border text-muted-foreground hover:text-foreground'}`}
+        >
+          Active ({activeQuery.data?.length ?? 0})
+        </button>
+        <button
+          onClick={() => setView('removed')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${view === 'removed' ? 'bg-brand/10 text-brand border border-brand/20' : 'bg-surface-1 border border-border text-muted-foreground hover:text-foreground'}`}
+        >
+          Removed ({removedQuery.data?.length ?? 0})
+        </button>
+      </div>
+
       {/* Search Bar */}
       {repos.length > 0 && (
         <div className="mb-6 max-w-md">
@@ -602,21 +673,29 @@ export default function RepositoriesPage() {
       {reposLoading ? (
         <SkeletonList count={2} height="h-28" />
       ) : repos.length === 0 ? (
-        <EmptyState
-          icon={<FolderIcon size={32} />}
-          title="No repositories connected"
-          description="Install the Revora GitHub App and select repositories to start getting AI code reviews."
-          action={
-            <a
-              href="https://github.com/apps"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-hover text-brand-foreground rounded-lg text-sm font-medium transition-colors"
-            >
-              Install GitHub App
-            </a>
-          }
-        />
+        view === 'removed' ? (
+          <EmptyState
+            icon={<FolderIcon size={32} />}
+            title="No removed repositories"
+            description="Repositories removed from Revora appear here with their full review history preserved."
+          />
+        ) : (
+          <EmptyState
+            icon={<FolderIcon size={32} />}
+            title="No repositories connected"
+            description="Install the Revora GitHub App and select repositories to start getting AI code reviews."
+            action={
+              <a
+                href="https://github.com/apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-hover text-brand-foreground rounded-lg text-sm font-medium transition-colors"
+              >
+                Install GitHub App
+              </a>
+            }
+          />
+        )
       ) : (
         (() => {
           const filteredRepos = repos.filter((repo) => {

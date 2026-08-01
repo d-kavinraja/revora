@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
@@ -12,6 +13,7 @@ from app.models.user import User
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
 from app.queue.models import JobStatus
+from app.services.github_service import github_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,6 @@ def _fmt_dt(dt: Optional[datetime]) -> Optional[str]:
     if not dt:
         return None
     s = dt.isoformat()
-    # If the datetime is naive, assume UTC and append Z
     if dt.tzinfo is None and not s.endswith("Z") and "+" not in s:
         s += "Z"
     return s
@@ -35,7 +36,6 @@ async def list_reviews(
     current_user: User = Depends(get_current_user),
 ):
     """Return all reviews across all repos linked to the current user."""
-    # Get all installations for this user
     installations_result = await db.execute(
         select(Installation).where(Installation.user_id == current_user.id)
     )
@@ -45,20 +45,18 @@ async def list_reviews(
     if not installation_ids:
         return []
 
-    # Get repo ids
     repos_result = await db.execute(
-        select(Repository.id, Repository.full_name, Repository.name).where(
-            Repository.installation_id.in_(installation_ids)
+        select(Repository).where(
+            Repository.installation_id.in_(installation_ids),
+            Repository.removed_at.is_(None),
         )
     )
-    repo_rows = repos_result.all()
-    repo_id_map = {r[0]: {"full_name": r[1], "name": r[2]} for r in repo_rows}
-    repo_ids = list(repo_id_map.keys())
+    repos = repos_result.scalars().all()
+    repo_ids = [r.id for r in repos]
 
     if not repo_ids:
         return []
 
-    # Get pull requests for those repos
     prs_result = await db.execute(
         select(PullRequest).where(PullRequest.repo_id.in_(repo_ids))
     )
@@ -68,7 +66,6 @@ async def list_reviews(
     if not pr_id_map:
         return []
 
-    # Get reviews for those PRs, ordered by newest
     reviews_result = await db.execute(
         select(Review)
         .where(Review.pr_id.in_(list(pr_id_map.keys())))
@@ -77,41 +74,99 @@ async def list_reviews(
     )
     reviews = reviews_result.scalars().all()
 
+    # Build a map of (repo.full_name, pr.pr_number, installation_id) for GitHub batch lookup
+    pr_github_lookup: Dict[str, Dict[str, Any]] = {}
+    repo_map = {r.id: r for r in repos}
+    install_map = {inst.id: inst for inst in installations}
+
+    for review in reviews:
+        pr = pr_id_map.get(review.pr_id)
+        if not pr:
+            continue
+        repo = repo_map.get(pr.repo_id)
+        if not repo:
+            continue
+        install = install_map.get(repo.installation_id)
+        if not install:
+            continue
+        key = f"{repo.full_name}#{pr.pr_number}"
+        if key not in pr_github_lookup:
+            pr_github_lookup[key] = {
+                "repo_full_name": repo.full_name,
+                "pr_number": pr.pr_number,
+                "installation_id": install.installation_id,
+            }
+
+    # Batch fetch PR states from GitHub (with 60s cache)
+    pr_github_results: Dict[str, Dict[str, Any]] = {}
+    if pr_github_lookup:
+        tasks = {
+            key: github_service.get_pull_request(
+                info["repo_full_name"], info["pr_number"], info["installation_id"]
+            )
+            for key, info in pr_github_lookup.items()
+        }
+        for key, coro in tasks.items():
+            try:
+                pr_github_results[key] = await coro
+            except Exception:
+                pr_github_results[key] = {"state": "unknown"}
+
+    # Check which PRs have active reviews (queued/running).
+    # Only the NEWEST non-terminal review per PR counts — superseded or
+    # orphaned reviews never hold the active-review lock.
+    active_pr_ids: set[uuid.UUID] = set()
+    active_result = await db.execute(
+        select(Review)
+        .where(
+            Review.pr_id.in_(list(pr_id_map.keys())),
+            Review.status.in_(["queued", "pending", "running"]),
+        )
+        .order_by(Review.created_at.desc())
+    )
+    for rv in active_result.scalars().all():
+        if rv.pr_id not in active_pr_ids:
+            active_pr_ids.add(rv.pr_id)
+
     result = []
     for review in reviews:
         pr = pr_id_map.get(review.pr_id)
         if not pr:
             continue
-        repo_info = repo_id_map.get(pr.repo_id, {})
-        result.append(
-            {
-                "id": str(review.id),
-                "status": review.status,
-                "summary": review.summary,
-                "stats": review.stats or {},
-                "started_at": _fmt_dt(review.started_at),
-                "completed_at": _fmt_dt(review.completed_at),
-                "error_message": review.error_message,
-                "created_at": _fmt_dt(review.created_at),
-                "pull_request": {
-                    "id": str(pr.id),
-                    "pr_number": pr.pr_number,
-                    "title": pr.title,
-                    "author": pr.author,
-                    "status": pr.status,
-                    "head_branch": pr.head_branch,
-                    "base_branch": pr.base_branch,
-                    "additions": pr.additions,
-                    "deletions": pr.deletions,
-                    "changed_files": pr.changed_files,
-                },
-                "repository": {
-                    "id": str(pr.repo_id),
-                    "name": repo_info.get("name", ""),
-                    "full_name": repo_info.get("full_name", ""),
-                },
-            }
-        )
+        repo = repo_map.get(pr.repo_id, {})
+        install = install_map.get(repo.installation_id) if hasattr(repo, 'installation_id') else None
+        gh_key = f"{getattr(repo, 'full_name', '')}#{pr.pr_number}" if repo else ""
+        gh_state = pr_github_results.get(gh_key, {}).get("state", "unknown") if gh_key else "unknown"
+
+        result.append({
+            "id": str(review.id),
+            "status": review.status,
+            "summary": review.summary,
+            "stats": review.stats or {},
+            "started_at": _fmt_dt(review.started_at),
+            "completed_at": _fmt_dt(review.completed_at),
+            "error_message": review.error_message,
+            "created_at": _fmt_dt(review.created_at),
+            "github_pr_state": gh_state,
+            "pr_has_active_review": review.pr_id in active_pr_ids,
+            "pull_request": {
+                "id": str(pr.id),
+                "pr_number": pr.pr_number,
+                "title": pr.title,
+                "author": pr.author,
+                "status": pr.status,
+                "head_branch": pr.head_branch,
+                "base_branch": pr.base_branch,
+                "additions": pr.additions,
+                "deletions": pr.deletions,
+                "changed_files": pr.changed_files,
+            },
+            "repository": {
+                "id": str(pr.repo_id),
+                "name": getattr(repo, "name", "") if hasattr(repo, 'name') else "",
+                "full_name": getattr(repo, "full_name", "") if hasattr(repo, 'full_name') else "",
+            },
+        })
 
     return result
 
@@ -134,14 +189,13 @@ async def get_review(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # Get PR
     pr_result = await db.execute(
         select(PullRequest).where(PullRequest.id == review.pr_id)
     )
     pr = pr_result.scalars().first()
 
-    # Get repo info
     repo_info = {}
+    installation_id = None
     if pr:
         repo_result = await db.execute(
             select(Repository).where(Repository.id == pr.repo_id)
@@ -149,6 +203,49 @@ async def get_review(
         repo = repo_result.scalars().first()
         if repo:
             repo_info = {"name": repo.name, "full_name": repo.full_name}
+            installation_id = repo.installation_id
+
+    # Check if another review for this PR is already active.
+    # Only the NEWEST non-terminal review per PR holds the lock — superseded
+    # or orphaned reviews never block (Issue 5: lock exists only while active).
+    pr_has_active = False
+    if pr:
+        other_active = await db.execute(
+            select(Review)
+            .where(
+                Review.pr_id == pr.id,
+                Review.status.in_(["queued", "pending", "running"]),
+            )
+            .order_by(Review.created_at.desc())
+            .limit(1)
+        )
+        latest_active = other_active.scalars().first()
+        if latest_active and latest_active.id != rid:
+            pr_has_active = True
+
+    # Latest execution for this PR (the most recent review, regardless of status)
+    latest_review_id = None
+    if pr:
+        latest_res = await db.execute(
+            select(Review.id)
+            .where(Review.pr_id == pr.id)
+            .order_by(Review.created_at.desc())
+            .limit(1)
+        )
+        latest_review_id = latest_res.scalars().first()
+        latest_review_id = str(latest_review_id) if latest_review_id else None
+
+    # Real-time GitHub PR state
+    gh_state = "unknown"
+    if pr and repo_info.get("full_name") and installation_id:
+        try:
+            from app.services.github_service import github_service
+            gh_result = await github_service.get_pull_request(
+                repo_info["full_name"], pr.pr_number, installation_id
+            )
+            gh_state = gh_result.get("state", "unknown")
+        except Exception:
+            gh_state = "unknown"
 
     return {
         "id": str(review.id),
@@ -159,6 +256,9 @@ async def get_review(
         "completed_at": _fmt_dt(review.completed_at),
         "error_message": review.error_message,
         "created_at": _fmt_dt(review.created_at),
+        "github_pr_state": gh_state,
+        "pr_has_active_review": pr_has_active,
+        "latest_review_id": latest_review_id,
         "pull_request": (
             {
                 "id": str(pr.id) if pr else None,
@@ -204,8 +304,10 @@ async def cancel_review(
     await db.execute(
         update(Review)
         .where(Review.id == rid)
-        .values(status="failed", error_message="Cancelled by user")
+        .values(status="cancelled", error_message="Cancelled by user")
     )
+    from app.services.review_execution_service import mark_execution_final
+    await mark_execution_final(db, rid, "cancelled")
 
     # 2. Get PR → repo → installation to be able to call GitHub API
     pr_result = await db.execute(
@@ -214,17 +316,30 @@ async def cancel_review(
     pr = pr_result.scalars().first()
 
     if pr:
-        # 2a. Cancel the background job in the queue
+        # 2a. Cancel the background job for THIS review.
+        # Lifecycle jobs embed the review ID in delivery_id ("{action}-{review_id}").
+        # Fall back to repo+PR match for webhook jobs (delivery GUID has no review link).
         from app.queue.models import ReviewJob
-        await db.execute(
+        job_cancel = await db.execute(
             update(ReviewJob)
             .where(
                 ReviewJob.repo_id == pr.repo_id,
                 ReviewJob.pr_number == pr.pr_number,
-                ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
+                ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+                ReviewJob.delivery_id.like(f"%-{rid}"),
             )
             .values(status=JobStatus.CANCELLED)
         )
+        if job_cancel.rowcount == 0:
+            await db.execute(
+                update(ReviewJob)
+                .where(
+                    ReviewJob.repo_id == pr.repo_id,
+                    ReviewJob.pr_number == pr.pr_number,
+                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
+                )
+                .values(status=JobStatus.CANCELLED)
+            )
 
         # 2b. Tell GitHub to close the check run as "cancelled"
         check_run_id = review.github_check_run_id

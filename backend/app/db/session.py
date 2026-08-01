@@ -82,7 +82,7 @@ async def get_engine_and_sessionmaker():
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.close()
-                dbapi_connection.create_function("now", 0, lambda: datetime.datetime.utcnow().isoformat())
+                dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
             
             # Automatically perform Base.metadata.create_all for SQLite fallback
             async with engine.begin() as conn:

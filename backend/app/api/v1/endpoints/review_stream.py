@@ -1,29 +1,46 @@
-import json
+"""SSE endpoints for real-time review and PR state updates.
+
+The list stream (GET /reviews/stream) emits review + PR state changes for
+every review the connected user can see; the detail stream
+(GET /reviews/{review_id}/stream) is scoped to one review and its PR.
+Both are backed by database polling (see app.services.event_bus) so they
+work across the API/worker processes without Redis.
+"""
+
 import logging
-from typing import Dict
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.review import Review
+from app.services.event_bus import event_generator
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# In-memory store for active review events (production would use Redis pub/sub)
-_review_events: Dict[str, list] = {}
+_STREAM_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
-def store_events(review_id: str, events: list):
-    _review_events[review_id] = events
+@router.get("/stream")
+async def stream_all_review_events(
+    current_user: User = Depends(get_current_user),
+):
+    """SSE stream of review and PR state updates for the reviews list."""
 
-
-def get_stored_events(review_id: str) -> list:
-    return _review_events.get(review_id, [])
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_STREAM_HEADERS,
+    )
 
 
 @router.get("/{review_id}/stream")
@@ -31,44 +48,28 @@ async def stream_review_events(
     review_id: str,
     current_user: User = Depends(get_current_user),
 ):
-    """SSE endpoint that streams real-time pipeline events for a review."""
+    """SSE stream scoped to a single review and its pull request."""
 
-    import uuid
     try:
         rid = uuid.UUID(review_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid review ID")
 
-    events = get_stored_events(review_id)
-
-    async def event_generator():
-        # Send historical events first
-        for event in events:
-            yield f"data: {json.dumps(event)}\n\n"
-
-        # Then keep connection open for new events
-        import asyncio
-        sent_count = len(events)
-        while True:
-            await asyncio.sleep(1)
-            current_events = get_stored_events(review_id)
-            while sent_count < len(current_events):
-                yield f"data: {json.dumps(current_events[sent_count])}\n\n"
-                sent_count += 1
-
-            # Check if review is complete
-            if current_events and current_events[-1].get("stage") == "completed":
-                break
-
-            # Send heartbeat
-            yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+    pr_id = None
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Review.pr_id).where(Review.id == rid)
+            )
+            pr_id = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"Failed to resolve PR for review {review_id}: {e}", exc_info=True)
 
     return StreamingResponse(
-        event_generator(),
+        event_generator(
+            review_id=str(rid),
+            pr_id=str(pr_id) if pr_id else None,
+        ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_STREAM_HEADERS,
     )

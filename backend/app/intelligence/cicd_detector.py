@@ -6,6 +6,7 @@ Uses the shared RepoWalker for efficient filesystem access.
 
 from typing import List, Optional
 
+from app.intelligence._async_util import run_async
 from app.intelligence.models import CIInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 
@@ -109,7 +110,6 @@ class CICDDetector(BaseDetector):
 # Legacy function interface for backward compatibility
 def detect_ci(repo_path: str) -> Optional[CIInfo]:
     """Detect CI/CD in a repository (legacy interface)."""
-    import asyncio
     from app.intelligence.repo_walker import RepoWalker
 
     async def _detect():
@@ -125,13 +125,4 @@ def detect_ci(repo_path: str) -> Optional[CIInfo]:
             config_file=data["config_files"][0] if data.get("config_files") else "",
         )
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _detect()).result()
-        else:
-            return loop.run_until_complete(_detect())
-    except RuntimeError:
-        return asyncio.run(_detect())
+    return run_async(_detect())

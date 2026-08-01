@@ -99,6 +99,16 @@ class ReviewPipeline:
         repo_path = None
         check_run_id = None
 
+        # Helper to record timeline events
+        async def _record_timeline(stage, status, message="", duration_ms=None):
+            try:
+                from app.services.timeline_recorder import record_stage
+                async with AsyncSessionLocal() as tl_db:
+                    await record_stage(tl_db, review_id, stage, status, message=message, duration_ms=duration_ms)
+                    await tl_db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to record timeline for {stage}: {e}")
+
         try:
             # Stage 0: Validate AI Configuration
             # This runs BEFORE any expensive operations (clone, indexing, etc.)
@@ -120,6 +130,7 @@ class ReviewPipeline:
                                    "source": config_source,
                                    "source_label": validation_source,
                                })
+            await _record_timeline("validating_ai_configuration", "completed", message=f"Provider: {provider}, Model: {model}")
 
             await emitter.emit("execution_context_ready", "completed",
                                metrics={
@@ -205,11 +216,13 @@ class ReviewPipeline:
                 emitter, llm_response.content, repo_path or ".", diff_content, str(review_id)
             )
 
-            # Stage 10: Generate and publish review
+            # Stage 10: Generate and publish review.
+            # The publish stage records its own timeline entry (completed or
+            # failed) based on the actual GitHub publish result.
             review_summary_body = await self._stage_publish(
                 emitter, verified, pr_title, installation_id,
                 owner, repo_name, pr_number, intelligence_data,
-                llm_response, start
+                llm_response, start, review_id=review_id
             )
 
             # Save to DB
@@ -223,6 +236,7 @@ class ReviewPipeline:
                 "duration_ms": duration_ms,
                 **metrics,
             })
+            await _record_timeline("pipeline_complete", "completed", message=f"Total duration: {duration_ms:.0f}ms", duration_ms=duration_ms)
 
             if check_run_id:
                 try:
@@ -495,12 +509,74 @@ class ReviewPipeline:
             from app.verification.models import VerificationResult
             return VerificationResult(findings=[], verified_count=0, rejected_count=0)
 
+    async def _publish_or_update_pr_review(
+        self, installation_id, owner, repo, pr_number, body, event, comments=None
+    ):
+        """PATCH the previous Revora PR review if present, otherwise create one.
+
+        GitHub should only ever contain the newest Revora review: reruns edit
+        the previous review object in place instead of stacking new ones.
+        """
+        previous_review_id = None
+        try:
+            existing = await github_client.list_pr_reviews(
+                installation_id=installation_id,
+                owner=owner,
+                repo=repo,
+                pull_number=pr_number,
+            )
+            for rv in sorted(
+                existing, key=lambda r: r.get("submitted_at") or "", reverse=True
+            ):
+                if (rv.get("body") or "").startswith("Revora AI Review"):
+                    previous_review_id = rv.get("id")
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to list previous PR reviews: {e}")
+
+        if previous_review_id:
+            try:
+                await github_client.update_pr_review(
+                    installation_id=installation_id,
+                    owner=owner,
+                    repo=repo,
+                    pull_number=pr_number,
+                    review_id=previous_review_id,
+                    body=body,
+                )
+                logger.info(f"Updated existing PR review {previous_review_id} on PR #{pr_number}")
+                return previous_review_id
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update PR review {previous_review_id}, creating new: {e}"
+                )
+
+        created = await github_client.create_pr_review(
+            installation_id=installation_id,
+            owner=owner,
+            repo=repo,
+            pull_number=pr_number,
+            body=body,
+            event=event,
+            comments=comments,
+        )
+        return created.get("id")
+
     async def _stage_publish(self, emitter, verified, pr_title, installation_id,
                             owner, repo_name, pr_number, intelligence_data,
-                            llm_response, start):
-        """Stage: Generate and publish review."""
+                            llm_response, start, review_id=None):
+        """Stage: Generate and publish review.
+
+        Publishes a SINGLE top-level Revora summary comment per pull request.
+        On the first run the comment is created; on reruns it is EDITED
+        (PATCH) so the PR never accumulates duplicate top-level comments.
+        Inline comments are posted as PR review comments (positional).
+        Returns the review summary body unconditionally once generated —
+        publish errors degrade gracefully and never swallow the body.
+        """
         await emitter.emit("generating_review_summary", "running", EventType.STAGE_START)
 
+        review_summary = None
         try:
             usage_stats = llm_orchestrator.get_total_usage()
             review_summary = await github_review_generator.generate(
@@ -512,55 +588,195 @@ class ReviewPipeline:
             )
             await emitter.emit("generating_review_summary", "completed")
             await emitter.emit("formatting_github_review", "completed")
-
-            # Publish to GitHub
-            await emitter.emit("publishing_review", "running", EventType.STAGE_START)
-            try:
-                github_comments = [
-                    {"path": c.path, "body": c.body, "line": c.line}
-                    for c in review_summary.comments if c.line
-                ]
-                await github_client.create_pr_review(
-                    installation_id=installation_id,
-                    owner=owner,
-                    repo=repo_name,
-                    pull_number=pr_number,
-                    body=review_summary.body,
-                    event=review_summary.event,
-                    comments=github_comments if github_comments else None,
-                )
-                await emitter.emit("publishing_review", "completed")
-            except Exception as e:
-                logger.error(f"Failed to publish review to GitHub: {e}")
-                if github_comments:
-                    logger.info("Attempting to publish review without inline comments as fallback")
-                    try:
-                        fallback_body = review_summary.body + "\n\n> Note: Some inline comments were omitted because they referenced unmodified lines."
-                        await github_client.create_pr_review(
-                            installation_id=installation_id,
-                            owner=owner,
-                            repo=repo_name,
-                            pull_number=pr_number,
-                            body=fallback_body,
-                            event=review_summary.event,
-                            comments=None,
-                        )
-                        await emitter.emit("publishing_review", "completed")
-                    except Exception as fallback_e:
-                        logger.error(f"Fallback publish also failed: {fallback_e}")
-                        await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(fallback_e))
-                        raise fallback_e
-                else:
-                    await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(e))
-                    raise e
-
         except Exception as e:
             logger.warning(f"Review generation failed: {e}")
             await emitter.emit("generating_review_summary", "failed",
                              EventType.STAGE_FAILED, message=str(e))
             return None
-            
-        return review_summary.body
+
+        body = review_summary.body
+
+        github_comments = [
+            {"path": c.path, "body": c.body, "line": c.line}
+            for c in review_summary.comments if c.line
+        ]
+
+        # Publish to GitHub
+        await emitter.emit("publishing_review", "running", EventType.STAGE_START)
+        try:
+            # 1. Upsert the single top-level summary comment (create-or-update).
+            #    Editing a stored comment ID prevents duplicate Revora comments.
+            await self._upsert_summary_comment(
+                installation_id=installation_id,
+                owner=owner,
+                repo=repo_name,
+                pr_number=pr_number,
+                body=body,
+                review_id=review_id,
+            )
+
+            # 2. Post the PR review (event: APPROVE/REQUEST_CHANGES/COMMENT) with
+            #    any inline comments. The summary lives in the top-level comment,
+            #    so the review body stays minimal to avoid duplicating it in the
+            #    conversation. A review is always posted so the event signal is
+            #    preserved even when a PR has no inline comments. Previous
+            #    Revora PR reviews are EDITED (PATCH) so GitHub never accumulates
+            #    duplicate review objects.
+            review_body = "Revora AI Review — full summary in the comment above."
+            publish_ok = True
+            publish_error = ""
+            try:
+                await self._publish_or_update_pr_review(
+                    installation_id=installation_id,
+                    owner=owner,
+                    repo=repo_name,
+                    pr_number=pr_number,
+                    body=review_body,
+                    event=review_summary.event,
+                    comments=github_comments or None,
+                )
+            except Exception as e:
+                logger.error(f"Failed to publish inline comments to GitHub: {e}")
+                publish_error = str(e)
+                # The fallback only helps when dropping the inline comments is
+                # what unblocks publishing — skip it when there were none.
+                if github_comments:
+                    logger.info("Attempting to publish review without inline comments as fallback")
+                    try:
+                        await self._publish_or_update_pr_review(
+                            installation_id=installation_id,
+                            owner=owner,
+                            repo=repo_name,
+                            pr_number=pr_number,
+                            body=review_body,
+                            event=review_summary.event,
+                            comments=None,
+                        )
+                        publish_ok = True
+                        publish_error = ""
+                    except Exception as fallback_e:
+                        logger.error(f"Fallback publish also failed: {fallback_e}")
+                        publish_ok = False
+                        publish_error = str(fallback_e)
+                else:
+                    publish_ok = False
+
+            await emitter.emit(
+                "publishing_review",
+                "completed" if publish_ok else "failed",
+                EventType.STAGE_COMPLETE if publish_ok else EventType.STAGE_FAILED,
+                message=publish_error or None,
+            )
+            await self._record_publish_timeline(
+                review_id, "completed" if publish_ok else "failed",
+                message=publish_error or None,
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish review to GitHub: {e}")
+            await emitter.emit("publishing_review", "failed", EventType.STAGE_FAILED, message=str(e))
+            await self._record_publish_timeline(review_id, "failed", message=str(e))
+
+        return body
+
+    async def _record_publish_timeline(self, review_id, status, message=None):
+        """Record the publishing_review stage in the review timeline.
+
+        Mirrors the behavior of execute()'s _record_timeline helper, but is a
+        class method so it is callable from _stage_publish where the actual
+        publish result (success/failure) is known.
+        """
+        try:
+            from app.services.timeline_recorder import record_stage
+            async with AsyncSessionLocal() as tl_db:
+                await record_stage(
+                    tl_db, review_id, "publishing_review", status, message=message or ""
+                )
+                await tl_db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record timeline for publishing_review: {e}")
+
+    async def _upsert_summary_comment(
+        self, installation_id: int, owner: str, repo: str, pr_number: int,
+        body: str, review_id=None,
+    ):
+        """Create or update the single top-level Revora summary comment for a PR.
+
+        Finds the most recent prior review for the same pull request that
+        already stored a ``github_comment_id`` and EDITS that comment; otherwise
+        creates a new one. Returns the GitHub comment id (or None on failure).
+        """
+        prev_comment_id = None
+        try:
+            if review_id:
+                async with AsyncSessionLocal() as db:
+                    cur_res = await db.execute(select(Review).where(Review.id == review_id))
+                    cur_review = cur_res.scalars().first()
+                    if cur_review and cur_review.github_comment_id:
+                        # Single review row per PR lifecycle: the row itself
+                        # persists the comment id across reruns.
+                        prev_comment_id = cur_review.github_comment_id
+                    if not prev_comment_id and cur_review:
+                        # Legacy fallback: a comment id stored on an older row.
+                        prev_res = await db.execute(
+                            select(Review)
+                            .where(
+                                Review.pr_id == cur_review.pr_id,
+                                Review.github_comment_id.isnot(None),
+                            )
+                            .order_by(Review.created_at.desc())
+                            .limit(1)
+                        )
+                        prev = prev_res.scalars().first()
+                        if prev:
+                            prev_comment_id = prev.github_comment_id
+        except Exception as e:
+            logger.warning(f"Failed to look up previous Revora comment: {e}")
+
+        comment_id = None
+        try:
+            if prev_comment_id:
+                try:
+                    await github_client.update_issue_comment(
+                        installation_id=installation_id,
+                        owner=owner,
+                        repo=repo,
+                        comment_id=prev_comment_id,
+                        body=body,
+                    )
+                    comment_id = prev_comment_id
+                    logger.info(f"Updated existing Revora comment {prev_comment_id} on PR #{pr_number}")
+                except Exception as e:
+                    # The previous comment may have been deleted on GitHub —
+                    # fall through and create a fresh comment so the PR always
+                    # has exactly one current Revora summary comment.
+                    logger.warning(
+                        f"Failed to update existing Revora comment {prev_comment_id}, creating new: {e}"
+                    )
+
+            if not comment_id:
+                created = await github_client.create_issue_comment(
+                    installation_id=installation_id,
+                    owner=owner,
+                    repo=repo,
+                    issue_number=pr_number,
+                    body=body,
+                )
+                comment_id = created.get("id")
+                logger.info(f"Created Revora comment {comment_id} on PR #{pr_number}")
+
+            if review_id and comment_id:
+                async with AsyncSessionLocal() as db:
+                    from sqlalchemy import update as sa_update
+                    await db.execute(
+                        sa_update(Review)
+                        .where(Review.id == review_id)
+                        .values(github_comment_id=comment_id)
+                    )
+                    await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to upsert Revora summary comment on PR #{pr_number}: {e}")
+
+        return comment_id
 
     async def _save_completed(self, review_id, verified, llm_response, metrics, start, user_id=None, review_summary_body=None, api_key_id=None):
         """Save completed review to database and record usage stats."""
@@ -572,8 +788,9 @@ class ReviewPipeline:
                 if db_review:
                     db_review.status = "completed"
                     db_review.completed_at = datetime.now(timezone.utc)
-                    if review_summary_body:
-                        db_review.summary = review_summary_body
+                    db_review.summary = review_summary_body
+                    if not review_summary_body:
+                        logger.warning(f"Review {review_id} completed without a summary body")
                     db_review.stats = {
                         "provider": llm_response.provider,
                         "model": llm_response.model,
@@ -582,6 +799,60 @@ class ReviewPipeline:
                         **metrics,
                     }
                     await db.commit()
+
+                    # Mark this run's execution as completed
+                    try:
+                        from app.services.review_execution_service import mark_execution_final
+                        duration_ms = None
+                        if db_review.started_at and db_review.completed_at:
+                            duration_ms = int(
+                                (db_review.completed_at - db_review.started_at).total_seconds() * 1000
+                            )
+                        input_tok = llm_response.input_tokens or 0
+                        output_tok = llm_response.output_tokens or 0
+                        await mark_execution_final(
+                            db, review_id, "completed",
+                            duration_ms=duration_ms,
+                            model=llm_response.model,
+                            provider=llm_response.provider,
+                            tokens={"input": input_tok, "output": output_tok, "total": input_tok + output_tok},
+                        )
+                        await db.commit()
+                    except Exception as e:
+                        logger.warning(f"Failed to mark execution completed for review {review_id}: {e}")
+
+                    # Ensure execution context exists (for reviews created outside webhook flow)
+                    try:
+                        from app.models.exec_context import ReviewExecutionContext
+                        ctx_res = await db.execute(
+                            select(ReviewExecutionContext).where(ReviewExecutionContext.review_id == review_id)
+                        )
+                        if not ctx_res.scalars().first():
+                            pr_res = await db.execute(select(PullRequest).where(PullRequest.id == db_review.pr_id))
+                            pr = pr_res.scalars().first()
+                            if pr is None:
+                                logger.warning(f"PullRequest not found for review {review_id} — skipping execution context")
+                            else:
+                                repo_res = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+                                repo = repo_res.scalars().first()
+                                repo_settings = repo.settings or {} if repo else {}
+                                exec_ctx = ReviewExecutionContext(
+                                    review_id=review_id,
+                                    repository_full_name=repo.full_name if repo else "unknown",
+                                    provider=llm_response.provider,
+                                    api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
+                                    model=llm_response.model,
+                                    commit_sha=pr.head_sha if pr else "",
+                                    base_branch=pr.base_branch if pr else "",
+                                    head_branch=pr.head_branch if pr else "",
+                                    pr_number=pr.pr_number if pr else 0,
+                                    configuration_snapshot=repo_settings,
+                                )
+                                db.add(exec_ctx)
+                                await db.commit()
+                                logger.info(f"Created execution context for completed review {review_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to create execution context on completion: {e}")
         except Exception as e:
             logger.error(f"Failed to save review status: {e}")
 
@@ -667,6 +938,12 @@ class ReviewPipeline:
                     db_review.error_message = error_message
                     db_review.completed_at = datetime.now(timezone.utc)
                     await db.commit()
+                    try:
+                        from app.services.review_execution_service import mark_execution_final
+                        await mark_execution_final(db, review_id, "failed")
+                        await db.commit()
+                    except Exception as e:
+                        logger.warning(f"Failed to mark execution failed for review {review_id}: {e}")
         except Exception as e:
             logger.error(f"Failed to save failed review: {e}")
 

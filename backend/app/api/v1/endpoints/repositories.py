@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Any, Dict, Optional
@@ -12,8 +13,13 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.github import Installation, Repository, PullRequest
 from app.models.review import Review
+from app.models.audit import AuditLog
+from app.models.sync_run import SyncRun
 from app.github.auth import github_app_auth
 from app.services.api_key_service import api_key_service
+from app.services.repository_service import repository_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -22,8 +28,15 @@ router = APIRouter()
 async def list_repositories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    include_removed: bool = False,
 ):
-    """Return all repositories linked to the current user's installations."""
+    """Return the current user's repositories.
+
+    Active repositories by default. Pass include_removed=true to include
+    removed (uninstalled) repositories — they keep their full review history
+    and are reported with a "removed" status, removed_at and last-reviewed
+    metadata so traceability is preserved while active lists stay clean.
+    """
     # Get all installations for this user
     installations_result = await db.execute(
         select(Installation).where(Installation.user_id == current_user.id)
@@ -34,11 +47,15 @@ async def list_repositories(
     if not installation_ids:
         return []
 
-    # Get repositories linked to those installations
-    repos_result = await db.execute(
-        select(Repository).where(Repository.installation_id.in_(installation_ids))
-    )
+    q = select(Repository).where(Repository.installation_id.in_(installation_ids))
+    if include_removed:
+        q = q.where(Repository.removed_at.isnot(None)).order_by(Repository.removed_at.desc())
+    else:
+        q = q.where(Repository.removed_at.is_(None)).order_by(Repository.full_name.asc())
+    repos_result = await db.execute(q)
     repos = repos_result.scalars().all()
+
+    inst_by_id = {i.id: i for i in installations}
 
     result = []
     for repo in repos:
@@ -50,6 +67,7 @@ async def list_repositories(
 
         total_reviews = 0
         active_review_status = None
+        last_reviewed_at = None
         if pr_ids:
             count_result = await db.execute(
                 select(func.count(Review.id)).where(Review.pr_id.in_(pr_ids))
@@ -60,11 +78,30 @@ async def list_repositories(
                 select(Review.status)
                 .where(
                     Review.pr_id.in_(pr_ids),
-                    Review.status.in_(["pending", "running"])
+                    Review.status.in_(["queued", "pending", "running"])
                 )
                 .order_by(Review.created_at.desc())
             )
             active_review_status = active_rev_result.scalars().first()
+
+            last_review_result = await db.execute(
+                select(func.max(Review.completed_at)).where(
+                    Review.pr_id.in_(pr_ids),
+                    Review.status == "completed",
+                )
+            )
+            last_reviewed_at = last_review_result.scalar()
+
+        inst = inst_by_id.get(repo.installation_id)
+
+        # Status: removed | permission_required | disabled | active
+        status = "active"
+        if repo.removed_at is not None:
+            status = "removed"
+        elif inst is not None and not inst.permissions_ok:
+            status = "permission_required"
+        elif not repo.reviews_enabled:
+            status = "disabled"
 
         result.append({
             "id": str(repo.id),
@@ -73,11 +110,23 @@ async def list_repositories(
             "description": repo.description,
             "language": repo.language,
             "is_private": repo.is_private,
+            "is_archived": repo.is_archived,
             "reviews_enabled": repo.reviews_enabled,
+            "status": status,
+            "removed_at": repo.removed_at.isoformat() if repo.removed_at else None,
             "total_reviews": total_reviews,
             "active_review_status": active_review_status,
+            "last_reviewed_at": last_reviewed_at.isoformat() if last_reviewed_at else None,
             "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
             "settings": repo.settings or {},
+            "permissions_ok": bool(inst.permissions_ok) if inst else True,
+            "last_sync": {
+                "completed_at": inst.last_sync_completed_at.isoformat()
+                if inst and inst.last_sync_completed_at else None,
+                "status": inst.last_sync_status if inst else None,
+                "error": inst.last_sync_error if inst else None,
+                "reason": inst.last_sync_reason if inst else None,
+            } if inst else None,
         })
 
     return result
@@ -88,85 +137,17 @@ async def sync_all_repositories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Fetch and sync connected repositories directly from GitHub API for all installations of this user."""
-    # Get all installations for this user
-    installations_result = await db.execute(
-        select(Installation).where(Installation.user_id == current_user.id)
-    )
-    installations = installations_result.scalars().all()
-    
-    if not installations:
-        return {
-            "status": "success",
-            "message": "No installations found for this user. Please install the GitHub App first.",
-            "synced": []
-        }
+    """Fetch and sync connected repositories directly from GitHub API for all installations of this user.
 
-    synced_repos = []
-    async with httpx.AsyncClient() as client:
-        for inst in installations:
-            try:
-                # Retrieve Installation Access Token
-                token = await github_app_auth.get_installation_token(inst.installation_id)
-                
-                # Fetch repositories for this installation from GitHub
-                repos_res = await client.get(
-                    "https://api.github.com/installation/repositories",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    }
-                )
-                
-                if not repos_res.is_success:
-                    print(f"Failed to fetch repositories for installation {inst.installation_id}: {repos_res.text}")
-                    continue
-                
-                repos_data = repos_res.json().get("repositories", [])
-                for r in repos_data:
-                    repo_gid = r.get("id")
-                    res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
-                    db_repo = res.scalars().first()
-                    
-                    if not db_repo:
-                        db_repo = Repository(
-                            github_id=repo_gid,
-                            name=r.get("name"),
-                            full_name=r.get("full_name"),
-                            description=r.get("description"),
-                            language=r.get("language"),
-                            is_private=r.get("private", False),
-                            installation_id=inst.id,
-                            reviews_enabled=True,
-                            last_synced_at=datetime.now(timezone.utc)
-                        )
-                        db.add(db_repo)
-                        print(f"Synced new repository {r.get('full_name')} from API.")
-                    else:
-                        db_repo.installation_id = inst.id
-                        db_repo.name = r.get("name")
-                        db_repo.full_name = r.get("full_name")
-                        db_repo.description = r.get("description")
-                        db_repo.language = r.get("language")
-                        db_repo.is_private = r.get("private", False)
-                        db_repo.reviews_enabled = True
-                        db_repo.last_synced_at = datetime.now(timezone.utc)
-                        db.add(db_repo)
-                        print(f"Updated repository {r.get('full_name')} from API.")
-                    
-                    synced_repos.append(r.get("full_name"))
-                    
-            except Exception as e:
-                print(f"Error syncing repositories for installation {inst.installation_id}: {e}")
-
-        await db.commit()
-
-    return {
-        "status": "success",
-        "message": f"Successfully synced {len(synced_repos)} repositories from GitHub.",
-        "synced": synced_repos
-    }
+    Delegates to the sync engine (manual reason): repositories added/updated/
+    removed, PRs reconciled, missed reviews enqueued — with the same
+    history-preserving semantics as the automatic recovery passes.
+    """
+    try:
+        result = await repository_service.refresh_installation(db, current_user.id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync repositories: {e}")
 
 
 @router.post("/{repo_id}/sync", response_model=dict)
@@ -187,6 +168,11 @@ async def sync_repository(
         repo = repo_result.scalars().first()
         if not repo:
             raise HTTPException(status_code=404, detail="Repository not found")
+        if repo.removed_at is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Repository was removed from Revora. Re-add it by installing the GitHub App before syncing.",
+            )
 
         # Get installation
         inst_result = await db.execute(select(Installation).where(Installation.id == repo.installation_id))
@@ -334,32 +320,45 @@ async def sync_repository(
                 local_review = local_rev_check.scalars().first()
 
                 if not has_bot_review and not local_review:
-                    # Trigger Revora review pipeline via Postgres queue
-                    from app.queue.dispatcher import enqueue_review_job
-                    
-                    payload = {
-                        "installation": {"id": installation.installation_id},
-                        "repository": {
-                            "owner": {"login": owner},
-                            "name": repo_name,
-                            "full_name": repo.full_name,
-                            "private": repo.is_private,
-                            "id": repo.github_id,
-                        },
-                        "pull_request": {
-                            "number": pr_number,
-                            "title": title,
-                            "body": gh_pr.get("body", "") or "",
-                            "head": {"sha": head_sha, "ref": head_branch},
-                            "base": {"ref": base_branch},
-                            "user": {"login": author},
-                            "additions": additions,
-                            "deletions": deletions,
-                            "changed_files": changed_files,
+                    # Trigger Revora review pipeline via Postgres queue.
+                    # Guard: if this exact commit was already reviewed (by a
+                    # webhook or a previous sync), skip — no duplicate reviews.
+                    from app.services.sync_engine import _execution_exists_for_sha
+
+                    if await _execution_exists_for_sha(db, db_pr.id, head_sha):
+                        logger.info(f"PR #{pr_number} already reviewed at {head_sha[:12]} — sync skipped trigger")
+                    else:
+                        from app.queue.dispatcher import enqueue_review_job
+                        from app.services.sync_engine import sync_delivery_id
+
+                        payload = {
+                            "installation": {"id": installation.installation_id},
+                            "repository": {
+                                "owner": {"login": owner},
+                                "name": repo_name,
+                                "full_name": repo.full_name,
+                                "private": repo.is_private,
+                                "id": repo.github_id,
+                            },
+                            "pull_request": {
+                                "number": pr_number,
+                                "title": title,
+                                "body": gh_pr.get("body", "") or "",
+                                "head": {"sha": head_sha, "ref": head_branch},
+                                "base": {"ref": base_branch},
+                                "user": {"login": author},
+                                "additions": additions,
+                                "deletions": deletions,
+                                "changed_files": changed_files,
+                            }
                         }
-                    }
-                    await enqueue_review_job(db, payload, f"sync-{pr_number}")
-                    triggered_reviews += 1
+                        job = await enqueue_review_job(
+                            db,
+                            payload,
+                            sync_delivery_id(repo.github_id, pr_number, head_sha),
+                        )
+                        if job:
+                            triggered_reviews += 1
 
             # Update last synced time
             repo.last_synced_at = datetime.now(timezone.utc)
@@ -371,6 +370,8 @@ async def sync_repository(
                 "message": f"Successfully synced repository. Synced {imported_prs} PRs, imported {imported_reviews} bot reviews, and triggered {triggered_reviews} new reviews in the background."
             }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error syncing repository: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to sync repository: {e}")
@@ -464,7 +465,7 @@ async def update_repository_config(
             select(Review.status)
             .where(
                 Review.pr_id.in_(existing_pr_ids),
-                Review.status.in_(["pending", "running"])
+                Review.status.in_(["queued", "pending", "running"])
             )
         )
         active_status = active_rev_check.scalars().first()
@@ -539,3 +540,89 @@ async def update_repository_config(
         "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
         "settings": repo.settings or {},
     }
+
+
+# --- Repository Lifecycle Endpoints ---
+
+
+@router.post("/refresh-installation", response_model=dict)
+async def refresh_installation(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Refresh all repositories from GitHub App installation.
+
+    Compares local database against GitHub and marks new/removed/updated repos.
+    Preserves review history and audit logs.
+    """
+    try:
+        result = await repository_service.refresh_installation(db, current_user.id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to refresh installation: {e}")
+
+
+@router.get("/sync-runs", response_model=List[Dict[str, Any]])
+async def list_sync_runs(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recent synchronization passes affecting this user (audit trail).
+
+    Includes manual syncs triggered by the user plus the most recent
+    system-wide passes (startup / background / recovery), each with its
+    reason, status, and counts.
+    """
+    runs_result = await db.execute(
+        select(SyncRun)
+        .where(
+            (SyncRun.triggered_by == current_user.id)
+            | (SyncRun.triggered_by.is_(None))
+        )
+        .order_by(SyncRun.started_at.desc())
+        .limit(limit)
+    )
+    runs = runs_result.scalars().all()
+
+    return [
+        {
+            "id": str(run.id),
+            "reason": run.reason,
+            "status": run.status,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "error": run.error,
+            "repo_count": run.repo_count,
+            "repos_added": run.repos_added,
+            "repos_updated": run.repos_updated,
+            "repos_removed": run.repos_removed,
+            "repos_failed": run.repos_failed,
+            "prs_found": run.prs_found,
+            "prs_updated": run.prs_updated,
+            "jobs_enqueued": run.jobs_enqueued,
+            "details": run.details,
+        }
+        for run in runs
+    ]
+
+
+@router.get("/{repo_id}/status", response_model=dict)
+async def get_repository_status(
+    repo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get detailed status for a repository including GitHub state."""
+    try:
+        rid = uuid.UUID(repo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid repository ID")
+
+    try:
+        result = await repository_service.get_repository_status(db, rid, current_user.id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get repository status: {e}")

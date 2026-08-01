@@ -22,6 +22,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+_TERMINAL_REVIEW_STATUSES = {"completed", "failed", "cancelled", "stopped", "timed_out"}
+
 
 async def resolve_provider_config(
     db_session,
@@ -142,8 +144,13 @@ async def get_or_create_review_records(
     delivery_id: str,
     status: str = "running",
     find_existing_pending: bool = True,
+    existing_review_id: Optional[str] = None,
 ) -> tuple[Review, Repository, PullRequest, str]:
     """Get or create Installation, Repository, PullRequest, and Review records.
+
+    Args:
+        existing_review_id: If provided (lifecycle jobs), use this exact review
+            record instead of searching for a pending one or creating a new one.
 
     Returns:
         Tuple of (db_review, db_repo, db_pr, user_id)
@@ -216,7 +223,30 @@ async def get_or_create_review_records(
                 await db.commit()
 
         db_review = None
-        if find_existing_pending:
+        review_transitioned = False
+        if existing_review_id:
+            # Lifecycle job: use the exact review created by the lifecycle action
+            try:
+                rid = uuid.UUID(existing_review_id)
+            except ValueError:
+                rid = None
+            if rid:
+                res = await db.execute(select(Review).where(Review.id == rid))
+                db_review = res.scalars().first()
+                if db_review and db_review.status != status and db_review.status not in _TERMINAL_REVIEW_STATUSES:
+                    db_review.status = status
+                    if status == "running":
+                        db_review.started_at = datetime.now(timezone.utc)
+                    review_transitioned = True
+                    await db.commit()
+                    await db.refresh(db_review)
+                    logger.info(f"Updated lifecycle Review {db_review.id} to {status} for PR #{pr_number}")
+                elif db_review and db_review.status in _TERMINAL_REVIEW_STATUSES:
+                    logger.warning(
+                        f"Lifecycle Review {db_review.id} is already {db_review.status} "
+                        f"— not resurrecting to {status} for PR #{pr_number}"
+                    )
+        if not db_review and find_existing_pending:
             res = await db.execute(
                 select(Review).where(
                     Review.pr_id == db_pr.id,
@@ -229,21 +259,88 @@ async def get_or_create_review_records(
                     db_review.status = status
                     if status == "running":
                         db_review.started_at = datetime.now(timezone.utc)
+                    review_transitioned = True
                     await db.commit()
                     await db.refresh(db_review)
                     logger.info(f"Updated pending Review {db_review.id} to {status} for PR #{pr_number}")
 
+        if not db_review and find_existing_pending:
+            # No pending review for this PR. The dispatcher always pre-creates
+            # the Review row at enqueue time, so "no pending row" at execution
+            # time means the job's lifecycle review was cancelled/failed/etc.
+            # while the job waited — NEVER resurrect it with a new row. Return
+            # the latest review so callers can detect the terminal state.
+            latest = await db.execute(
+                select(Review)
+                .where(Review.pr_id == db_pr.id)
+                .order_by(Review.created_at.desc())
+                .limit(1)
+            )
+            db_review = latest.scalars().first()
+            if db_review:
+                logger.warning(
+                    f"Existing Review {db_review.id} ({db_review.status}) found for PR #{pr_number} "
+                    f"— not creating a new row for stale job {delivery_id[:12]}"
+                )
+
         if not db_review:
-            # Create Review record
+            # Create Review record (brand-new PR lifecycle only)
             db_review = Review(
                 pr_id=db_pr.id,
                 status=status,
                 started_at=datetime.now(timezone.utc) if status == "running" else None,
             )
             db.add(db_review)
+            review_transitioned = True
             await db.commit()
             await db.refresh(db_review)
             logger.info(f"Created Review record {db_review.id} for PR #{pr_number} with status {status}")
+
+        # Track this run as a ReviewExecution (queued → running).
+        try:
+            from app.services.review_execution_service import mark_execution_running, create_execution
+            from app.models.execution import ReviewExecution as ExecModel
+            existing_exec_id = await db.scalar(
+                select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
+            )
+            if not existing_exec_id:
+                await create_execution(db, db_review.id, trigger="webhook", commit_sha=head_sha)
+            if status == "running" and review_transitioned:
+                await mark_execution_running(db, db_review.id)
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to sync review execution for {db_review.id}: {e}")
+
+        # Resolve provider config and create immutable execution context (skip if already exists)
+        try:
+            from app.models.exec_context import ReviewExecutionContext
+            existing_ctx = await db.execute(
+                select(ReviewExecutionContext).where(ReviewExecutionContext.review_id == db_review.id)
+            )
+            if existing_ctx.scalars().first():
+                logger.info(f"Execution context already exists for review {db_review.id} — skipping creation")
+            else:
+                provider, model, api_key_id, _source = await resolve_provider_config(
+                    db, user_id=str(db_inst.user_id), db_repo=db_repo
+                )
+                if provider and model:
+                    exec_ctx = ReviewExecutionContext(
+                        review_id=db_review.id,
+                        repository_full_name=db_repo.full_name,
+                        provider=provider,
+                        api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
+                        model=model,
+                        commit_sha=head_sha,
+                        base_branch=pull_request["base"]["ref"],
+                        head_branch=pull_request["head"]["ref"],
+                        pr_number=pr_number,
+                        configuration_snapshot=db_repo.settings or {},
+                    )
+                    db.add(exec_ctx)
+                    await db.commit()
+                    logger.info(f"Created execution context for review {db_review.id}: {provider}/{model}")
+        except Exception as e:
+            logger.warning(f"Failed to create execution context for review {db_review.id}: {e}")
 
         return db_review, db_repo, db_pr, user_id
 

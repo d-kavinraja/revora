@@ -34,7 +34,7 @@ async def test_engine():
     import datetime
     @event.listens_for(engine.sync_engine, "connect")
     def configure_sqlite_connection(dbapi_connection, connection_record):
-        dbapi_connection.create_function("now", 0, lambda: datetime.datetime.utcnow().isoformat())
+        dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

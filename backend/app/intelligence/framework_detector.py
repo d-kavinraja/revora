@@ -7,6 +7,7 @@ Uses the shared RepoWalker for efficient filesystem access.
 import os
 from typing import List, Optional, Tuple
 
+from app.intelligence._async_util import run_async
 from app.intelligence.models import FrameworkInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 
@@ -138,7 +139,6 @@ def detect_frameworks(repo_path: str) -> List[FrameworkInfo]:
     Returns:
         List of FrameworkInfo objects.
     """
-    import asyncio
     from app.intelligence.repo_walker import RepoWalker
 
     async def _detect():
@@ -148,13 +148,4 @@ def detect_frameworks(repo_path: str) -> List[FrameworkInfo]:
         result = await detector.detect(walker)
         return result.data.get("frameworks", [])
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _detect()).result()
-        else:
-            return loop.run_until_complete(_detect())
-    except RuntimeError:
-        return asyncio.run(_detect())
+    return run_async(_detect())

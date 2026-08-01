@@ -72,6 +72,28 @@ class RedisCache(BaseCache):
         except Exception as e:
             logger.debug(f"Redis delete failed: {e}")
 
+    async def delete_pattern(self, pattern: str) -> None:
+        """Delete all keys matching a glob pattern.
+
+        Uses SCAN to find matching keys, then DEL to remove them.
+        Falls back to memory_cache pattern deletion.
+        """
+        await memory_cache.delete_pattern(pattern) if hasattr(memory_cache, 'delete_pattern') else None
+        if not await self._ensure_client():
+            return
+        try:
+            cursor = 0
+            while True:
+                cursor, keys = await self._client.scan(
+                    cursor=cursor, match=pattern, count=100
+                )
+                if keys:
+                    await self._client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.debug(f"Redis delete_pattern failed: {e}")
+
     async def exists(self, key: str) -> bool:
         return await self.get(key) is not None
 

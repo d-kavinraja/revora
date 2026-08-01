@@ -36,7 +36,7 @@ class RetrievalCache:
     async def invalidate(self, repo_id: str) -> None:
         pattern = f"cache:retrieval:{repo_id}:*"
         try:
-            await redis_cache.delete(pattern)
+            await redis_cache.delete_pattern(pattern)
         except Exception:
             pass
 

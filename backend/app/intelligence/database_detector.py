@@ -6,6 +6,7 @@ Uses the shared RepoWalker for efficient filesystem access.
 
 from typing import List, Optional, Set
 
+from app.intelligence._async_util import run_async
 from app.intelligence.models import DatabaseInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR, MAX_FILE_READ_CHARS
@@ -139,7 +140,6 @@ class DatabaseDetector(BaseDetector):
 # Legacy function interface for backward compatibility
 def detect_database(repo_path: str) -> Optional[DatabaseInfo]:
     """Detect databases in a repository (legacy interface)."""
-    import asyncio
     from app.intelligence.repo_walker import RepoWalker
 
     async def _detect():
@@ -156,13 +156,4 @@ def detect_database(repo_path: str) -> Optional[DatabaseInfo]:
             indicators=data.get("indicators", []),
         )
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _detect()).result()
-        else:
-            return loop.run_until_complete(_detect())
-    except RuntimeError:
-        return asyncio.run(_detect())
+    return run_async(_detect())

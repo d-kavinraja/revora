@@ -16,6 +16,9 @@ class Review(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     github_check_run_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # The single top-level GitHub comment holding this review's summary.
+    # Reused (edited) on reruns so the PR never accumulates duplicate Revora comments.
+    github_comment_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     # Relationships
     pull_request: Mapped["PullRequest"] = relationship("PullRequest")
