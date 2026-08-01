@@ -10,9 +10,9 @@ from app.ai.model_registry import canonical_registry
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.queue.worker import run_worker
 from app.services.recovery import recover_stale_reviews_on_startup
 from app.services.sync_engine import SYNC_REASON_STARTUP, run_sync_pass, sync_loop
-from app.queue.worker import run_worker
 
 logger = logging.getLogger(__name__)
 

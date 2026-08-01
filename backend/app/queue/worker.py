@@ -4,14 +4,12 @@ import asyncio
 import logging
 import signal
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update, and_
-from sqlalchemy import text
+from sqlalchemy import and_, select, text, update
 
 from app.db.session import AsyncSessionLocal
-from app.queue.models import ReviewJob, JobStatus
+from app.queue.models import JobStatus, ReviewJob
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ def _handle_shutdown(signum, frame):
     _shutdown = True
 
 
-def _extract_review_id(job) -> Optional[str]:
+def _extract_review_id(job) -> str | None:
     """Extract the review id from a job (ORM object or row tuple).
 
     Lifecycle jobs embed it in payload._lifecycle.new_review_id and in the
@@ -44,7 +42,7 @@ def _extract_review_id(job) -> Optional[str]:
             if review_id:
                 uuid.UUID(review_id)
                 return review_id
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     delivery_id = getattr(job, "delivery_id", None)
@@ -55,7 +53,7 @@ def _extract_review_id(job) -> Optional[str]:
             candidate = str(delivery_id).rsplit("-", 1)[1]
             uuid.UUID(candidate)
             return candidate
-        except Exception:
+        except Exception:  # noqa: BLE001
             return None
     return None
 
@@ -73,7 +71,7 @@ async def _mark_review_failed(job, error_str: str):
                     .values(
                         status="failed",
                         error_message=error_str,
-                        completed_at=datetime.now(timezone.utc),
+                        completed_at=datetime.now(UTC),
                     )
                 )
                 await db.commit()
@@ -94,7 +92,7 @@ async def _mark_review_failed(job, error_str: str):
                         .values(
                             status="failed",
                             error_message=error_str,
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                         )
                     )
                     await db.commit()
@@ -102,7 +100,7 @@ async def _mark_review_failed(job, error_str: str):
                 from app.services.review_execution_service import mark_execution_final
                 await mark_execution_final(db, uuid.UUID(review_id), "failed")
                 await db.commit()
-    except Exception as inner_e:
+    except Exception as inner_e:  # noqa: BLE001
         logger.error(f"Failed to update Review status to failed: {inner_e}")
 
 
@@ -122,11 +120,14 @@ async def process_job(job_row) -> bool:
 
     try:
         # Import the pipeline
-        from app.pipeline.orchestrator import review_pipeline
-        from app.github.auth import github_app_auth
-        from app.github.webhooks import get_pr_diff
-        from app.github.shared import resolve_provider_config, get_or_create_review_records
         from app.db.session import AsyncSessionLocal
+        from app.github.auth import github_app_auth
+        from app.github.shared import (
+            get_or_create_review_records,
+            resolve_provider_config,
+        )
+        from app.github.webhooks import get_pr_diff
+        from app.pipeline.orchestrator import review_pipeline
 
         installation = payload.get("installation", {}) or {}
         installation_id = installation.get("id")
@@ -162,7 +163,7 @@ async def process_job(job_row) -> bool:
 
         # Create review records (lifecycle jobs use their pre-created review)
         lifecycle = payload.get("_lifecycle", {}) or {}
-        db_review, db_repo, db_pr, user_id = await get_or_create_review_records(
+        db_review, db_repo, _db_pr, user_id = await get_or_create_review_records(
             installation_id, repository, pull_request, job_row[4], status="running",
             existing_review_id=lifecycle.get("new_review_id"),
         )
@@ -208,12 +209,13 @@ async def process_job(job_row) -> bool:
                     },
                 )
                 logger.info(f"Created failure check run for MODE 3: {check_run.get('id')}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Failed to create MODE 3 check run: {e}")
             # Mark review as failed in DB
             try:
                 async with AsyncSessionLocal() as db:
                     from sqlalchemy import update as sa_update
+
                     from app.models.review import Review
                     await db.execute(
                         sa_update(Review)
@@ -221,13 +223,15 @@ async def process_job(job_row) -> bool:
                         .values(
                             status="failed",
                             error_message=error_msg,
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                         )
                     )
-                    from app.services.review_execution_service import mark_execution_final
+                    from app.services.review_execution_service import (
+                        mark_execution_final,
+                    )
                     await mark_execution_final(db, db_review.id, "failed")
                     await db.commit()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Failed to mark review as failed for MODE 3: {e}")
             return False
 
@@ -264,7 +268,7 @@ async def process_job(job_row) -> bool:
         return result.get("status") == "success"
 
     except Exception as e:
-        logger.error(f"Worker {_worker_id} job {job_id} failed: {e}", exc_info=True)
+        logger.exception(f"Worker {_worker_id} job {job_id} failed")
         error_str = str(e) or f"Execution failed ({type(e).__name__})"
         await _mark_review_failed(job_row, error_str)
         return False
@@ -274,7 +278,7 @@ async def _fail_job_and_review(session, job, error_message: str):
     """Mark a job as failed and its associated review as failed."""
     from app.models.review import Review
     job.status = JobStatus.FAILED
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     job.error_text = error_message
     session.add(job)
 
@@ -286,7 +290,7 @@ async def _fail_job_and_review(session, job, error_message: str):
             .values(
                 status="failed",
                 error_message=error_message,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
         )
         from app.services.review_execution_service import mark_execution_final
@@ -307,7 +311,7 @@ async def _fail_job_and_review(session, job, error_message: str):
                 .values(
                     status="failed",
                     error_message=error_message,
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(UTC),
                 )
             )
 
@@ -343,12 +347,14 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
                             .values(status="cancelled", error_message=error_message)
                             .returning(Review.id)
                         )
-                        from app.services.review_execution_service import mark_execution_final
+                        from app.services.review_execution_service import (
+                            mark_execution_final,
+                        )
                         for rid in cancelled_result.scalars().all():
                             await mark_execution_final(session, rid, "cancelled")
                         await session.commit()
                         logger.info(f"Marked PR #{pr_number} active review(s) as cancelled (job was cancelled)")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Failed to cancel PR-scoped review for cancelled job: {e}")
         return
     try:
@@ -362,7 +368,7 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
             await mark_execution_final(session, uuid.UUID(review_id), "cancelled")
             await session.commit()
             logger.info(f"Marked review {review_id} as cancelled (job was cancelled)")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"Failed to mark review {review_id} as cancelled: {e}")
 
 
@@ -374,7 +380,7 @@ async def recover_orphaned_jobs(max_retries: int = 3, queue_timeout_minutes: int
       - Jobs stuck in QUEUED beyond queue_timeout_minutes (worker never picked them up).
       - Jobs in RUNNING with stale heartbeat (watcher crashed but worker didn't).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         async with AsyncSessionLocal() as session:
             # --- Recover stale RUNNING jobs (original logic + heartbeat check) ---
@@ -443,8 +449,9 @@ async def recover_orphaned_jobs(max_retries: int = 3, queue_timeout_minutes: int
                         )
                     review_id = _extract_review_id(job)
                     if review_id:
-                        from app.services.review_execution_service import get_latest_execution
-                        from app.models.execution import ReviewExecution
+                        from app.services.review_execution_service import (
+                            get_latest_execution,
+                        )
                         execution = await get_latest_execution(session, uuid.UUID(review_id))
                         if execution and execution.status == "running":
                             execution.status = "queued"
@@ -464,8 +471,8 @@ async def recover_orphaned_jobs(max_retries: int = 3, queue_timeout_minutes: int
                     )
 
             await session.commit()
-    except Exception as e:
-        logger.error(f"Error during orphaned job recovery: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Error during orphaned job recovery")
 
 
 async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
@@ -482,14 +489,14 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
     # Recover any jobs left in 'running' status from a previous server crash
     await recover_orphaned_jobs()
 
-    last_recovery_check = datetime.now(timezone.utc)
+    last_recovery_check = datetime.now(UTC)
 
     while not _shutdown:
         try:
             # Periodically check for stale/orphaned jobs every 60s
-            if (datetime.now(timezone.utc) - last_recovery_check).total_seconds() > 60:
+            if (datetime.now(UTC) - last_recovery_check).total_seconds() > 60:
                 await recover_orphaned_jobs()
-                last_recovery_check = datetime.now(timezone.utc)
+                last_recovery_check = datetime.now(UTC)
 
             async with AsyncSessionLocal() as session:
                 # Fetch one queued job with row-level locking
@@ -517,7 +524,7 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                     .where(ReviewJob.id == job_id)
                     .values(
                         status=JobStatus.RUNNING,
-                        started_at=datetime.now(timezone.utc),
+                        started_at=datetime.now(UTC),
                         worker_id=_worker_id,
                     )
                 )
@@ -551,10 +558,10 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                                 task.cancel()
                                 break
                             elif job_status:
-                                job_status.updated_at = datetime.now(timezone.utc)
+                                job_status.updated_at = datetime.now(UTC)
                                 s.add(job_status)
                                 await s.commit()
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S110
                         pass # Ignore temporary DB errors in watcher
                         
             watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))
@@ -590,7 +597,7 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                         .where(ReviewJob.id == job_id)
                         .values(
                             status=new_status,
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                             attempt_count=job_row[6] + 1,
                         )
                     )
@@ -599,7 +606,7 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                         update(ReviewJob)
                         .where(ReviewJob.id == job_id)
                         .values(
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                             attempt_count=job_row[6] + 1,
                         )
                     )
@@ -610,8 +617,8 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
 
             logger.info(f"Worker {_worker_id} job {job_id} -> {new_status.value}")
 
-        except Exception as e:
-            logger.error(f"Worker {_worker_id} loop error: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Worker {_worker_id} loop error")
             await asyncio.sleep(poll_interval)
 
     logger.info(f"Worker {_worker_id} shut down gracefully")
