@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     # per-PR active-review lock is always released after a restart.
     try:
         await recover_stale_reviews_on_startup()
-    except Exception as e:
+    except Exception:
         logger.exception("Startup recovery failed")
 
     # Automatic recovery after downtime: one full sync pass — discovers new /
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         try:
             result = await run_sync_pass(SYNC_REASON_STARTUP)
             logger.info(f"Startup sync pass complete: {result.get('status')}")
-        except Exception as e:
+        except Exception:
             logger.exception("Startup sync pass failed")
             
     startup_sync_task = asyncio.create_task(startup_sync())
