@@ -126,7 +126,9 @@ class Settings(BaseSettings):
         # Ensure a real webhook secret is set in production
         if self.APP_ENV not in ("development", "testing"):
             if self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret":
-                raise ValueError("GITHUB_WEBHOOK_SECRET must be set in non-development environments.")
+                raise ValueError(
+                    "GITHUB_WEBHOOK_SECRET must be set in non-development environments."
+                )
         return self
 
 
