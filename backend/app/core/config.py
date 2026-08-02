@@ -123,13 +123,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_secrets(self) -> "Settings":
-        if (
-            self.APP_ENV != "development"
-            and self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret"
-        ):
-            raise ValueError(
-                "GITHUB_WEBHOOK_SECRET must be set in non-development environments."
-            )
+        # Ensure a real webhook secret is set in production
+        if self.APP_ENV not in ("development", "testing"):
+            if self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret":
+                raise ValueError("GITHUB_WEBHOOK_SECRET must be set in non-development environments.")
         return self
 
 
