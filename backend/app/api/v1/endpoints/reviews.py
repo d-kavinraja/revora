@@ -1,17 +1,17 @@
-import asyncio
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
-from typing import List, Any, Dict, Optional
-import uuid
 import logging
+import uuid
 from datetime import datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.models.user import User
-from app.models.github import Installation, Repository, PullRequest
+from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
+from app.models.user import User
 from app.queue.models import JobStatus
 from app.services.github_service import github_service
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _fmt_dt(dt: Optional[datetime]) -> Optional[str]:
+def _fmt_dt(dt: datetime | None) -> str | None:
     if not dt:
         return None
     s = dt.isoformat()
@@ -46,7 +46,7 @@ async def _ensure_review_ownership(db: AsyncSession, review: Review, user_id: uu
     return pr
 
 
-@router.get("", response_model=List[Dict[str, Any]])
+@router.get("", response_model=list[dict[str, Any]])
 async def list_reviews(
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
@@ -92,7 +92,7 @@ async def list_reviews(
     reviews = reviews_result.scalars().all()
 
     # Build a map of (repo.full_name, pr.pr_number, installation_id) for GitHub batch lookup
-    pr_github_lookup: Dict[str, Dict[str, Any]] = {}
+    pr_github_lookup: dict[str, dict[str, Any]] = {}
     repo_map = {r.id: r for r in repos}
     install_map = {inst.id: inst for inst in installations}
 
@@ -115,7 +115,7 @@ async def list_reviews(
             }
 
     # Batch fetch PR states from GitHub (with 60s cache)
-    pr_github_results: Dict[str, Dict[str, Any]] = {}
+    pr_github_results: dict[str, dict[str, Any]] = {}
     if pr_github_lookup:
         tasks = {
             key: github_service.get_pull_request(
@@ -188,7 +188,7 @@ async def list_reviews(
     return result
 
 
-@router.get("/{review_id}", response_model=Dict[str, Any])
+@router.get("/{review_id}", response_model=dict[str, Any])
 async def get_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
@@ -293,7 +293,7 @@ async def get_review(
     }
 
 
-@router.post("/{review_id}/cancel", response_model=Dict[str, Any])
+@router.post("/{review_id}/cancel", response_model=dict[str, Any])
 async def cancel_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),

@@ -1,9 +1,7 @@
-import os
-from app.utils.security import safe_join
 import logging
-from typing import List, Set
 
 from app.retrieval.models import RetrievedContext
+from app.utils.security import safe_join
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +25,13 @@ def read_file_content(repo_path: str, file_path: str, max_lines: int = MAX_FILE_
 
 
 def get_related_files_from_imports(
-    changed_files: List[str],
+    changed_files: list[str],
     import_graph_nodes: list,
     import_graph_edges: list,
     repo_path: str,
-) -> List[RetrievedContext]:
-    related: List[RetrievedContext] = []
-    visited: Set[str] = set()
+) -> list[RetrievedContext]:
+    related: list[RetrievedContext] = []
+    visited: set[str] = set()
 
     for changed_file in changed_files:
         file_id = f"file:{changed_file}"
@@ -75,13 +73,13 @@ def get_related_files_from_imports(
 
 
 def get_related_files_from_calls(
-    changed_files: List[str],
+    changed_files: list[str],
     call_graph_nodes: list,
     call_graph_edges: list,
     repo_path: str,
-) -> List[RetrievedContext]:
-    related: List[RetrievedContext] = []
-    visited: Set[str] = set()
+) -> list[RetrievedContext]:
+    related: list[RetrievedContext] = []
+    visited: set[str] = set()
 
     for changed_file in changed_files:
         file_id = f"file:{changed_file}"
@@ -105,12 +103,12 @@ def get_related_files_from_calls(
 
 
 def get_test_files(
-    changed_files: List[str],
+    changed_files: list[str],
     test_graph_nodes: list,
     test_graph_edges: list,
     repo_path: str,
-) -> List[RetrievedContext]:
-    tests: List[RetrievedContext] = []
+) -> list[RetrievedContext]:
+    tests: list[RetrievedContext] = []
 
     for edge in test_graph_edges:
         if edge.type == "tests":

@@ -1,25 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Dict, Any, List, Optional
-import uuid
 import os
-import shutil
+import uuid
+from typing import Any
 
-from app.schemas.verification import VerificationRequest, VerificationFindingSchema, VerificationMetricsSchema
-from app.verification.engine import verification_engine
-from app.verification.cache import verification_cache
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+
 from app.ai.git_utils import GitService
-from app.core.deps import get_current_user
-from app.models.user import User
-
-from app.db.session import AsyncSessionLocal
-from app.models.verification import VerificationMetricModel, HallucinationReportModel
-from app.models.review import Review
-from sqlalchemy import select, func
 from app.api.v1.endpoints.reviews import _ensure_review_ownership
+from app.core.deps import get_current_user
+from app.db.session import AsyncSessionLocal
+from app.models.review import Review
+from app.models.user import User
+from app.models.verification import HallucinationReportModel, VerificationMetricModel
+from app.schemas.verification import VerificationRequest
+from app.verification.cache import verification_cache
+from app.verification.engine import verification_engine
 
 router = APIRouter()
 
-@router.post("/review", response_model=Dict[str, Any])
+@router.post("/review", response_model=dict[str, Any])
 async def verify_review(
     request: VerificationRequest,
     current_user: User = Depends(get_current_user)
@@ -39,7 +38,7 @@ async def verify_review(
 
         try:
             repo_path = await GitService.clone_repository(request.repository_url, getattr(request, 'token', ''))
-        except Exception as e:
+        except Exception:
             # Do not reflect exception details which could expose internal network probing info
             raise HTTPException(status_code=400, detail="Failed to clone repository. Please check the URL and your access token.")
         
@@ -54,7 +53,7 @@ async def verify_review(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Verification failed: {e!s}")
     finally:
         if repo_path and os.path.exists(repo_path):
             try:
@@ -62,7 +61,7 @@ async def verify_review(
             except Exception:
                 pass
 
-@router.get("/metrics", response_model=Dict[str, Any])
+@router.get("/metrics", response_model=dict[str, Any])
 async def get_global_metrics(
     current_user: User = Depends(get_current_user)
 ):
@@ -87,9 +86,9 @@ async def get_global_metrics(
                 "avg_confidence": float(row.avg_confidence) if row and row.avg_confidence else 0.0
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch global metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch global metrics: {e!s}")
 
-@router.get("/hallucinations", response_model=List[Dict[str, Any]])
+@router.get("/hallucinations", response_model=list[dict[str, Any]])
 async def get_global_hallucinations(
     limit: int = 50,
     current_user: User = Depends(get_current_user)
@@ -113,10 +112,10 @@ async def get_global_hallucinations(
                 for r in reports
             ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch global hallucinations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch global hallucinations: {e!s}")
 
 
-@router.get("/{id}", response_model=Dict[str, Any])
+@router.get("/{id}", response_model=dict[str, Any])
 async def get_verification_result(
     id: uuid.UUID,
     current_user: User = Depends(get_current_user)
@@ -137,7 +136,7 @@ async def get_verification_result(
         raise HTTPException(status_code=404, detail="Verification result not found")
     return result
 
-@router.get("/{id}/metrics", response_model=Dict[str, Any])
+@router.get("/{id}/metrics", response_model=dict[str, Any])
 async def get_verification_metrics(
     id: uuid.UUID,
     current_user: User = Depends(get_current_user)
@@ -163,7 +162,7 @@ async def get_verification_metrics(
         "avg_confidence": result.get("avg_confidence", 0.0)
     }
 
-@router.get("/{id}/confidence", response_model=Dict[str, Any])
+@router.get("/{id}/confidence", response_model=dict[str, Any])
 async def get_verification_confidence(
     id: uuid.UUID,
     current_user: User = Depends(get_current_user)
@@ -183,7 +182,7 @@ async def get_verification_confidence(
         raise HTTPException(status_code=404, detail="Confidence data not found")
     return {"avg_confidence": result.get("avg_confidence", 0.0)}
 
-@router.get("/{id}/hallucinations", response_model=List[Dict[str, Any]])
+@router.get("/{id}/hallucinations", response_model=list[dict[str, Any]])
 async def get_verification_hallucinations(
     id: uuid.UUID,
     current_user: User = Depends(get_current_user)

@@ -1,25 +1,25 @@
+from datetime import timedelta
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from datetime import timedelta
 from pydantic import BaseModel
-import httpx
-from typing import Optional
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import create_access_token, verify_password
 from app.core.config import settings
-from app.core.auth import verify_password, create_access_token
 from app.db.session import get_db
-from app.services.user_service import user_service
-from app.schemas.user import UserCreate, User
 from app.models.user import User as UserModel
+from app.schemas.user import User, UserCreate
+from app.services.user_service import user_service
 
 router = APIRouter()
 
 
 class GitHubLoginRequest(BaseModel):
     code: str
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
 @router.post("/login", response_model=dict)

@@ -4,9 +4,9 @@ All secrets are required via environment variables.
 No hardcoded defaults for security-sensitive values.
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pydantic import Field, model_validator
-from typing import Optional, List
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3002", "http://127.0.0.1:3002"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3002", "http://127.0.0.1:3002"]
 
     # Security - REQUIRED, no defaults for secrets
     SECRET_KEY: str = Field(
@@ -46,27 +46,27 @@ class Settings(BaseSettings):
     )
 
     # Redis (optional)
-    REDIS_URL: Optional[str] = Field(
+    REDIS_URL: str | None = Field(
         default=None,
         description="Redis connection string for caching and queues"
     )
 
     # GitHub OAuth - REQUIRED for login
-    GITHUB_CLIENT_ID: Optional[str] = Field(
+    GITHUB_CLIENT_ID: str | None = Field(
         default=None,
         description="GitHub OAuth App Client ID"
     )
-    GITHUB_CLIENT_SECRET: Optional[str] = Field(
+    GITHUB_CLIENT_SECRET: str | None = Field(
         default=None,
         description="GitHub OAuth App Client Secret"
     )
 
     # GitHub App - REQUIRED for repository access
-    GITHUB_APP_ID: Optional[str] = Field(
+    GITHUB_APP_ID: str | None = Field(
         default=None,
         description="GitHub App ID"
     )
-    GITHUB_APP_PRIVATE_KEY: Optional[str] = Field(
+    GITHUB_APP_PRIVATE_KEY: str | None = Field(
         default=None,
         description="GitHub App private key (PEM format)"
     )

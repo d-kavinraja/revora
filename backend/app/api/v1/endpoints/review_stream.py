@@ -16,8 +16,8 @@ from sqlalchemy import select
 
 from app.core.deps import get_current_user
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
 from app.models.review import Review
+from app.models.user import User
 from app.services.event_bus import event_generator
 
 router = APIRouter()

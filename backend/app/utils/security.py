@@ -1,5 +1,6 @@
 import os
 
+
 def safe_join(base_dir: str, user_path: str) -> str:
     """Safely joins a base directory with a user-provided path.
     

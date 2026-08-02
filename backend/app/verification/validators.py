@@ -1,8 +1,10 @@
 import os
-from app.utils.security import safe_join
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
+
 import aiofiles
+
+from app.utils.security import safe_join
 
 MAX_FILE_READ_BYTES = 1024 * 1024  # 1MB limit
 
@@ -13,7 +15,7 @@ class ValidationResult:
     score_modifier: float = 0.0
 
 class BaseValidator:
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         raise NotImplementedError
 
 class RepositoryValidator(BaseValidator):
@@ -31,7 +33,7 @@ class RepositoryValidator(BaseValidator):
                 return os.path.relpath(os.path.join(root, basename), repo_path)
         return file_path
 
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         file_path = finding.get("file_path", "")
         line_number = finding.get("line_number")
         
@@ -59,13 +61,13 @@ class RepositoryValidator(BaseValidator):
                 else:
                     return ValidationResult(is_valid=False, evidence=f"Line {line_number} is out of bounds for {file_path}", score_modifier=-0.3)
             except Exception as e:
-                return ValidationResult(is_valid=False, evidence=f"Could not read file {file_path}: {str(e)}", score_modifier=-0.2)
+                return ValidationResult(is_valid=False, evidence=f"Could not read file {file_path}: {e!s}", score_modifier=-0.2)
                 
         return ValidationResult(is_valid=True, evidence=f"Verified file {file_path} exists", score_modifier=0.0)
 
 class SecurityValidator(BaseValidator):
     """Runs lightweight security checks or delegates to external tools (Semgrep/Bandit)."""
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         if finding.get("category") != "SECURITY":
             return ValidationResult(is_valid=True, evidence="Not a security finding", score_modifier=0.0)
             
@@ -81,7 +83,7 @@ class SecurityValidator(BaseValidator):
         import json
         req_exists = await asyncio.to_thread(os.path.exists, full_path)
         if not req_exists:
-            return ValidationResult(is_valid=False, evidence=f"Target file missing for security scan", score_modifier=-0.5)
+            return ValidationResult(is_valid=False, evidence="Target file missing for security scan", score_modifier=-0.5)
 
         try:
             # We run semgrep using the auto-provided security ruleset
@@ -94,7 +96,7 @@ class SecurityValidator(BaseValidator):
             
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 return ValidationResult(is_valid=True, evidence="Semgrep scan timed out (assuming safe or unverifiable)", score_modifier=0.0)
                 
@@ -125,11 +127,11 @@ class SecurityValidator(BaseValidator):
                 return ValidationResult(is_valid=True, evidence="Security context verified (Mock fallback - Semgrep missing)", score_modifier=0.1)
             return ValidationResult(is_valid=True, evidence="Semgrep unavailable, skipping deep scan", score_modifier=0.0)
         except Exception as e:
-            return ValidationResult(is_valid=True, evidence=f"Security scan failed: {str(e)}", score_modifier=0.0)
+            return ValidationResult(is_valid=True, evidence=f"Security scan failed: {e!s}", score_modifier=0.0)
 
 class PerformanceValidator(BaseValidator):
     """Validates performance-related findings like N+1 queries or O(n^2) loops."""
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         if finding.get("category") != "PERFORMANCE":
             return ValidationResult(is_valid=True, evidence="Not a performance finding", score_modifier=0.0)
             
@@ -137,7 +139,7 @@ class PerformanceValidator(BaseValidator):
 
 class ArchitectureValidator(BaseValidator):
     """Validates architecture findings."""
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         if finding.get("category") != "ARCHITECTURE":
             return ValidationResult(is_valid=True, evidence="Not an architecture finding", score_modifier=0.0)
             
@@ -145,5 +147,5 @@ class ArchitectureValidator(BaseValidator):
 
 class RuleValidator(BaseValidator):
     """Validates against organizational rules and coding standards."""
-    async def validate(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> ValidationResult:
+    async def validate(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> ValidationResult:
         return ValidationResult(is_valid=True, evidence="Adheres to org rules", score_modifier=0.05)

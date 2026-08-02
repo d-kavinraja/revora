@@ -12,14 +12,15 @@ single-instance free tiers (e.g. Render Free) without extra services.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
+from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
-from app.models.github import PullRequest, Repository, Installation
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +29,11 @@ HEARTBEAT_INTERVAL_SECONDS = 30.0
 BATCH_LIMIT = 500
 
 
-def _iso(dt: Optional[datetime]) -> Optional[str]:
+def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-async def _poll_review_updates(cursor: datetime, user_id: Optional[str] = None) -> list[Dict[str, Any]]:
+async def _poll_review_updates(cursor: datetime, user_id: str | None = None) -> list[dict[str, Any]]:
     """Return review rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
@@ -61,7 +62,7 @@ async def _poll_review_updates(cursor: datetime, user_id: Optional[str] = None) 
         return []
 
 
-async def _poll_pr_state_updates(cursor: datetime, user_id: Optional[str] = None) -> list[Dict[str, Any]]:
+async def _poll_pr_state_updates(cursor: datetime, user_id: str | None = None) -> list[dict[str, Any]]:
     """Return pull request rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
@@ -91,8 +92,8 @@ async def _poll_pr_state_updates(cursor: datetime, user_id: Optional[str] = None
 
 async def event_generator(
     user_id: str,
-    review_id: Optional[str] = None,
-    pr_id: Optional[str] = None,
+    review_id: str | None = None,
+    pr_id: str | None = None,
 ) -> AsyncIterator[str]:
     """SSE generator over DB-polled events.
 
@@ -100,26 +101,24 @@ async def event_generator(
         review_id: When set, only events for this review are emitted.
         pr_id: When set, only PR-state events for this PR are emitted.
     """
-    cursor = datetime.now(timezone.utc)
+    cursor = datetime.now(UTC)
     last_heartbeat = asyncio.get_event_loop().time()
 
     while True:
-        events: list[Dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
 
         for ev in await _poll_review_updates(cursor, user_id=user_id):
             if review_id is None or ev["review_id"] == review_id:
                 events.append(ev)
 
         for ev in await _poll_pr_state_updates(cursor, user_id=user_id):
-            if review_id is None:
-                events.append(ev)
-            elif pr_id is not None and ev["pr_id"] == pr_id:
+            if review_id is None or pr_id is not None and ev["pr_id"] == pr_id:
                 events.append(ev)
 
         for ev in events:
             yield f"data: {json.dumps(ev)}\n\n"
 
-        cursor = datetime.now(timezone.utc)
+        cursor = datetime.now(UTC)
 
         if asyncio.get_event_loop().time() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
             yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"

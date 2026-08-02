@@ -5,27 +5,28 @@ Every action creates a NEW review record with a NEW execution context.
 Existing reviews remain immutable.
 """
 
+import uuid
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError
-from typing import Dict, Any, Optional
-import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints.reviews import _ensure_review_ownership
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.models.user import User
 from app.models.review import Review
+from app.models.user import User
 from app.services.review_lifecycle import (
-    review_lifecycle_service,
     ReviewLifecycleConflict,
+    review_lifecycle_service,
 )
-from app.api.v1.endpoints.reviews import _ensure_review_ownership
 
 router = APIRouter()
 
 
-def _get_client_info(request: Optional[Request]) -> tuple:
+def _get_client_info(request: Request | None) -> tuple:
     if not request:
         return None, None
     return (
@@ -49,7 +50,7 @@ def _handle_error(e: Exception, action: str):
     raise HTTPException(status_code=500, detail=f"Failed to {action} review: {e}")
 
 
-@router.post("/{review_id}/rerun", response_model=Dict[str, Any])
+@router.post("/{review_id}/rerun", response_model=dict[str, Any])
 async def rerun_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
@@ -78,7 +79,7 @@ async def rerun_review(
         _handle_error(e, "rerun")
 
 
-@router.post("/{review_id}/retry", response_model=Dict[str, Any])
+@router.post("/{review_id}/retry", response_model=dict[str, Any])
 async def retry_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
@@ -107,7 +108,7 @@ async def retry_review(
         _handle_error(e, "retry")
 
 
-@router.post("/{review_id}/restart", response_model=Dict[str, Any])
+@router.post("/{review_id}/restart", response_model=dict[str, Any])
 async def restart_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
@@ -136,7 +137,7 @@ async def restart_review(
         _handle_error(e, "restart")
 
 
-@router.get("/{review_id}/history", response_model=Dict[str, Any])
+@router.get("/{review_id}/history", response_model=dict[str, Any])
 async def get_review_history(
     review_id: str,
     db: AsyncSession = Depends(get_db),
@@ -163,7 +164,7 @@ async def get_review_history(
     }
 
 
-@router.get("/{review_id}/timeline", response_model=Dict[str, Any])
+@router.get("/{review_id}/timeline", response_model=dict[str, Any])
 async def get_review_timeline(
     review_id: str,
     db: AsyncSession = Depends(get_db),
