@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { api, Review } from '@/lib/api';
 import { GitBranchIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
-import { CalendarIcon, FolderGit2, GitPullRequest, RotateCcw, LockIcon } from 'lucide-react';
+import { CalendarIcon, ChevronDown, FolderGit2, GitPullRequest, RotateCcw, LockIcon } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -260,8 +260,8 @@ export default function ReviewsPage() {
     if (state === 'unknown') return null;
     const label = state === 'closed' ? 'Closed' : state === 'merged' ? 'Merged' : state;
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-error/10 text-error border border-error/20 ml-auto shrink-0" title={`PR is ${label}`}>
-        <LockIcon size={8} />
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-muted text-muted-foreground border border-border ml-auto shrink-0" title={`PR is ${label}`}>
+        <LockIcon size={10} />
         {label}
       </span>
     );
@@ -328,7 +328,7 @@ export default function ReviewsPage() {
               placeholder="Search by title, repo, author..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 px-3.5 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+              className="w-full h-10 px-3.5 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors"
             />
           </div>
 
@@ -343,7 +343,7 @@ export default function ReviewsPage() {
                 setSelectedRepo(e.target.value);
                 setSelectedPR('all');
               }}
-              className={`w-full h-10 pl-9 pr-8 bg-surface-1 border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors appearance-none cursor-pointer ${
+              className={`w-full h-10 pl-9 pr-8 bg-surface-1 border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors appearance-none cursor-pointer ${
                 selectedRepo !== 'all' ? 'border-brand/50 text-brand bg-brand/5 font-medium' : 'border-border'
               }`}
             >
@@ -354,8 +354,8 @@ export default function ReviewsPage() {
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted-foreground text-xs">
-              ▼
+            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted-foreground">
+              <ChevronDown size={14} />
             </div>
           </div>
 
@@ -367,7 +367,7 @@ export default function ReviewsPage() {
             <select
               value={selectedPR}
               onChange={(e) => setSelectedPR(e.target.value)}
-              className={`w-full h-10 pl-9 pr-8 bg-surface-1 border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors appearance-none cursor-pointer ${
+              className={`w-full h-10 pl-9 pr-8 bg-surface-1 border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors appearance-none cursor-pointer ${
                 selectedPR !== 'all' ? 'border-brand/50 text-brand bg-brand/5 font-medium' : 'border-border'
               }`}
             >
@@ -380,8 +380,8 @@ export default function ReviewsPage() {
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted-foreground text-xs">
-              ▼
+            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted-foreground">
+              <ChevronDown size={14} />
             </div>
           </div>
 
@@ -390,7 +390,7 @@ export default function ReviewsPage() {
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className={`w-full h-10 px-3.5 bg-surface-1 border rounded-lg text-sm focus:outline-none focus:border-brand/50 transition-colors cursor-pointer appearance-none ${
+              className={`w-full h-10 px-3.5 bg-surface-1 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors cursor-pointer appearance-none ${
                 filter !== 'all' ? 'border-brand/50 text-brand bg-brand/5 font-medium' : 'border-border text-foreground'
               }`}
             >
@@ -412,7 +412,7 @@ export default function ReviewsPage() {
               onClick={() => setFilter(opt.value)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                 filter === opt.value
-                  ? 'bg-foreground text-background shadow-sm font-semibold'
+                  ? 'bg-foreground text-background font-semibold'
                   : 'bg-surface-1 border border-border text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
               }`}
             >

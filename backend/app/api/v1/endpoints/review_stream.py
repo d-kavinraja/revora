@@ -37,7 +37,7 @@ async def stream_all_review_events(
     """SSE stream of review and PR state updates for the reviews list."""
 
     return StreamingResponse(
-        event_generator(),
+        event_generator(user_id=str(current_user.id)),
         media_type="text/event-stream",
         headers=_STREAM_HEADERS,
     )
@@ -67,6 +67,7 @@ async def stream_review_events(
 
     return StreamingResponse(
         event_generator(
+            user_id=str(current_user.id),
             review_id=str(rid),
             pr_id=str(pr_id) if pr_id else None,
         ),

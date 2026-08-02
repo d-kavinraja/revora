@@ -20,6 +20,7 @@ from app.services.review_lifecycle import (
     review_lifecycle_service,
     ReviewLifecycleConflict,
 )
+from app.api.v1.endpoints.reviews import _ensure_review_ownership
 
 router = APIRouter()
 
@@ -60,6 +61,12 @@ async def rerun_review(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid review ID")
 
+    review_result = await db.execute(select(Review).where(Review.id == rid))
+    review = review_result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_ownership(db, review, current_user.id)
+
     ip, ua = _get_client_info(request)
 
     try:
@@ -83,6 +90,12 @@ async def retry_review(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid review ID")
 
+    review_result = await db.execute(select(Review).where(Review.id == rid))
+    review = review_result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_ownership(db, review, current_user.id)
+
     ip, ua = _get_client_info(request)
 
     try:
@@ -105,6 +118,12 @@ async def restart_review(
         rid = uuid.UUID(review_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid review ID")
+
+    review_result = await db.execute(select(Review).where(Review.id == rid))
+    review = review_result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_ownership(db, review, current_user.id)
 
     ip, ua = _get_client_info(request)
 
@@ -132,6 +151,7 @@ async def get_review_history(
     review = review_result.scalars().first()
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_ownership(db, review, current_user.id)
 
     history = await review_lifecycle_service.get_review_history(db, review.pr_id, review.id)
 
@@ -153,6 +173,12 @@ async def get_review_timeline(
         rid = uuid.UUID(review_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid review ID")
+
+    review_result = await db.execute(select(Review).where(Review.id == rid))
+    review = review_result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_ownership(db, review, current_user.id)
 
     timeline = await review_lifecycle_service.get_review_timeline(db, rid)
 

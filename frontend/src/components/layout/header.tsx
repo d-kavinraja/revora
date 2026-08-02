@@ -18,7 +18,7 @@ export function Header({ className, hideThemeToggle = false }: HeaderProps) {
           alt="Revora Logo"
           width={32}
           height={32}
-          className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+          className="rounded-lg object-contain shrink-0"
         />
         <Link href="/" className="font-bold text-xl tracking-tight" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
           Revora

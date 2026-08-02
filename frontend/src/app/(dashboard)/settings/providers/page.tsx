@@ -87,9 +87,9 @@ export default function ProvidersPage() {
           return (
             <div
               key={provider.slug}
-              className={`cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md relative overflow-hidden transition-all hover:border-white/[0.08] ${isTesting ? 'opacity-60' : ''}`}
+              className="cursor-target rounded-xl border border-border bg-surface-1 p-5 relative overflow-hidden transition-all hover:border-brand/30"
             >
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-purple-500 opacity-50" />
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-brand-hover opacity-50" />
 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -102,16 +102,16 @@ export default function ProvidersPage() {
                       {provider.litellm_provider}
                     </span>
                     {isTesting ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 uppercase tracking-wide">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 uppercase tracking-wide">
                         Under Testing
                       </span>
                     ) : provider.is_enabled ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-success/5 border-success/20 text-success">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-success/10 border-success/30 text-success">
                         <CircleCheckIcon size={12} />
                         Enabled
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-error/5 border-error/20 text-error">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-error/10 border-error/30 text-error">
                         <TriangleAlertIcon size={12} />
                         Disabled
                       </span>
@@ -130,7 +130,7 @@ export default function ProvidersPage() {
                     {caps.map((cap) => (
                       <span
                         key={cap}
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20"
+                        className="text-xs font-medium px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/30"
                       >
                         {getCapabilityLabel(cap)}
                       </span>

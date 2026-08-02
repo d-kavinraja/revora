@@ -1,4 +1,5 @@
 import os
+from app.utils.security import safe_join
 import logging
 from typing import List, Set
 
@@ -11,7 +12,10 @@ MAX_RELATED_FILES = 10
 
 
 def read_file_content(repo_path: str, file_path: str, max_lines: int = MAX_FILE_LINES) -> str:
-    full_path = os.path.join(repo_path, file_path)
+    try:
+        full_path = safe_join(repo_path, file_path)
+    except ValueError:
+        return ""
     try:
         with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()

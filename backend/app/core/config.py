@@ -1,11 +1,11 @@
-﻿"""Application configuration.
+"""Application configuration.
 
 All secrets are required via environment variables.
 No hardcoded defaults for security-sensitive values.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, model_validator
 from typing import Optional, List
 
 
@@ -123,6 +123,12 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> "Settings":
+        if self.APP_ENV != "development" and self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret":
+            raise ValueError("GITHUB_WEBHOOK_SECRET must be set in non-development environments.")
+        return self
 
 
 settings = Settings()

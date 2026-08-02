@@ -54,7 +54,7 @@ export default function LoginPage() {
           scale={1.5}
           brightness={isLight ? 0.7 : 1.0}
           color1={isLight ? "#2563eb" : "#f7f7f7"}
-          color2={isLight ? "#7c3aed" : "#e100ff"}
+          color2={isLight ? "#6366f1" : "#818cf8"}
           noiseFrequency={2.5}
           noiseAmplitude={1.0}
           bandHeight={0.5}
@@ -67,7 +67,7 @@ export default function LoginPage() {
         />
       </div>
       <div className="absolute top-[15%] left-[25%] w-[35%] h-[35%] bg-brand/15 blur-[120px] rounded-full pointer-events-none z-0" />
-      <div className="absolute bottom-[15%] right-[25%] w-[30%] h-[30%] bg-purple-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
+      <div className="absolute bottom-[15%] right-[25%] w-[30%] h-[30%] bg-info/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -81,17 +81,19 @@ export default function LoginPage() {
             alt="Revora Logo"
             width={48}
             height={48}
-            className="mx-auto rounded-xl object-contain mb-4 shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+            className="mx-auto rounded-xl object-contain mb-4"
           />
-          <h2 className="text-2xl font-bold text-foreground drop-shadow-md">Welcome back</h2>
-          <p className="text-foreground/80 mt-2 font-medium drop-shadow-sm">Sign in to your Revora account</p>
+          <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
+          <p className="mt-2 text-base font-medium text-foreground/80">
+            Sign in to your <span className="text-brand font-semibold">Revora</span> account
+          </p>
         </div>
 
         <button
           type="button"
           onClick={handleGitHubLogin}
           disabled={loadingConfig}
-          className="w-full h-12 bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10 rounded-lg flex items-center justify-center gap-2.5 font-semibold text-sm cursor-pointer shadow-lg transition-all duration-150 disabled:opacity-50"
+          className="w-full h-12 bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10 rounded-lg flex items-center justify-center gap-2.5 font-semibold text-sm cursor-pointer transition-all duration-150 disabled:opacity-50"
         >
           {loadingConfig ? (
             <LoaderIcon size={18} animate />
@@ -112,7 +114,7 @@ export default function LoginPage() {
               ease: 'linear',
               duration: 8,
             }}
-            className="absolute whitespace-nowrap text-xs text-foreground/70 font-medium flex items-center gap-1.5 drop-shadow-sm"
+            className="absolute whitespace-nowrap text-xs text-foreground/70 font-medium flex items-center gap-1.5"
           >
             <InfoIcon size={14} className="text-info" />
             Notice: Username and password login coming soon.

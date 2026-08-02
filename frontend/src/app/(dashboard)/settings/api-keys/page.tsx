@@ -236,7 +236,7 @@ export default function ApiKeysSettingsPage() {
           <button
             onClick={handleValidateAll}
             disabled={validatingAll}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-2 text-muted-foreground hover:text-foreground border border-border rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-surface-2 border border-border rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
             {validatingAll ? 'Validating...' : 'Validate All'}
@@ -245,7 +245,7 @@ export default function ApiKeysSettingsPage() {
             onClick={() => setShowAddForm(!showAddForm)}
             onMouseEnter={() => plusIconRef.current?.startAnimation()}
             onMouseLeave={() => plusIconRef.current?.stopAnimation()}
-            className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-xl text-sm font-medium transition-colors shadow-lg shadow-brand/10 shrink-0"
+            className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-lg text-sm font-medium transition-colors shrink-0"
           >
             <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
             Add Key
@@ -255,8 +255,8 @@ export default function ApiKeysSettingsPage() {
 
       {/* Add Key Form */}
       {showAddForm && (
-        <div className="mb-8 p-6 rounded-xl border border-border bg-surface-1 backdrop-blur-md shadow-2xl relative overflow-hidden transition-all duration-300">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-purple-500" />
+        <div className="mb-8 p-6 rounded-xl border border-border bg-surface-1 shadow-sm shadow-black/5 relative overflow-hidden transition-all duration-300">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-brand-hover" />
           <h2 className="text-lg font-bold text-foreground mb-4">Add Encrypted API Key</h2>
 
           <form onSubmit={handleValidateAndSubmit} className="space-y-4">
@@ -270,7 +270,7 @@ export default function ApiKeysSettingsPage() {
                   <select
                     value={provider}
                     onChange={(e) => setProvider(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors cursor-pointer"
+                    className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors cursor-pointer"
                   >
                     <option value="gemini">Gemini</option>
                     <option value="openai" disabled>OpenAI (Under Testing)</option>
@@ -294,7 +294,7 @@ export default function ApiKeysSettingsPage() {
                   placeholder="Key Label"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
-                  className={`w-full px-3 py-2 bg-surface-2 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors ${
+                  className={`w-full px-3 py-2 bg-surface-2 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors ${
                     formErrors.label ? 'border-error/50' : 'border-border'
                   }`}
                 />
@@ -311,7 +311,7 @@ export default function ApiKeysSettingsPage() {
                 placeholder="sk-proj-..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className={`w-full px-3 py-2 bg-surface-2 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors ${
+                className={`w-full px-3 py-2 bg-surface-2 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors ${
                   formErrors.api_key ? 'border-error/50' : 'border-border'
                 }`}
               />
@@ -346,7 +346,7 @@ export default function ApiKeysSettingsPage() {
         <h2 className="text-lg font-bold text-foreground">Registered API Credentials</h2>
 
         {keys.length === 0 ? (
-          <div className="rounded-xl border border-border bg-surface-1 p-8 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-border bg-surface-1 p-8 text-center">
             <KeyIcon size={32} className="text-muted-foreground/40 mx-auto mb-3" />
             <h3 className="font-bold text-foreground">No API keys registered</h3>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -361,7 +361,7 @@ export default function ApiKeysSettingsPage() {
               return (
                 <div
                   key={key.id}
-                  className="cursor-target rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-white/[0.08] backdrop-blur-md relative"
+                  className="cursor-target rounded-xl border border-border bg-surface-1 p-5 transition-colors hover:border-brand/30 relative"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
@@ -375,8 +375,8 @@ export default function ApiKeysSettingsPage() {
                         {key.is_valid !== null && (
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
                             key.is_valid
-                              ? 'bg-success/5 border-success/20 text-success'
-                              : 'bg-error/5 border-error/20 text-error'
+                              ? 'bg-success/10 border-success/30 text-success'
+                              : 'bg-error/10 border-error/30 text-error'
                           }`}>
                             {key.is_valid ? (
                               <CircleCheckIcon size={12} />
@@ -441,8 +441,8 @@ export default function ApiKeysSettingsPage() {
                       {deleteConfirmId === key.id && (
                         <div className="flex items-center gap-2 mt-2 animate-fade-in bg-error/10 border border-error/20 p-2 rounded-lg">
                           <span className="text-xs text-error font-medium">Delete key?</span>
-                          <button onClick={() => handleDelete(key.id)} className="text-[10px] bg-error text-white px-2 py-1 rounded">Yes</button>
-                          <button onClick={() => setDeleteConfirmId(null)} className="text-[10px] bg-surface-2 text-foreground px-2 py-1 rounded">No</button>
+                          <button onClick={() => handleDelete(key.id)} className="text-xs bg-error text-white px-3 py-1.5 rounded-md">Yes</button>
+                          <button onClick={() => setDeleteConfirmId(null)} className="text-xs bg-surface-2 text-foreground px-3 py-1.5 rounded-md">No</button>
                         </div>
                       )}
                     </div>
@@ -452,8 +452,8 @@ export default function ApiKeysSettingsPage() {
                   {testResult && (
                     <div className={`mt-3 p-3 border rounded-lg text-xs flex items-start gap-2 ${
                       testResult.status === 'success'
-                        ? 'bg-success/5 border-success/20 text-success'
-                        : 'bg-error/5 border-error/20 text-error'
+                        ? 'bg-success/10 border-success/30 text-success'
+                        : 'bg-error/10 border-error/30 text-error'
                     }`}>
                       {testResult.status === 'success' ? (
                         <CircleCheckIcon size={14} className="shrink-0 mt-0.5" />
@@ -478,7 +478,7 @@ export default function ApiKeysSettingsPage() {
                       ) : (
                         <div className="space-y-1">
                           {keyHealth.slice(0, 5).map((h) => (
-                            <div key={h.id} className="flex items-center justify-between text-[10px]">
+                            <div key={h.id} className="flex items-center justify-between text-xs">
                               <span className={`font-medium ${h.status === 'healthy' ? 'text-success' : 'text-error'}`}>{h.status}</span>
                               <span className="text-muted-foreground">{h.latency_ms ? `${h.latency_ms.toFixed(0)}ms` : '-'}</span>
                               <span className="text-muted-foreground">{new Date(h.checked_at).toLocaleString()}</span>

@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
 from app.models.review import Review
-from app.models.github import PullRequest
+from app.models.github import PullRequest, Repository, Installation
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +32,19 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
 
 
-async def _poll_review_updates(cursor: datetime) -> list[Dict[str, Any]]:
-    """Return review rows updated after `cursor`, oldest first."""
+async def _poll_review_updates(cursor: datetime, user_id: Optional[str] = None) -> list[Dict[str, Any]]:
+    """Return review rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Review)
-                .where(Review.updated_at > cursor)
-                .order_by(Review.updated_at.asc())
-                .limit(BATCH_LIMIT)
-            )
+            stmt = select(Review).where(Review.updated_at > cursor)
+            if user_id:
+                stmt = stmt.join(PullRequest, PullRequest.id == Review.pr_id)\
+                           .join(Repository, Repository.id == PullRequest.repo_id)\
+                           .join(Installation, Installation.id == Repository.installation_id)\
+                           .where(Installation.user_id == user_id)
+            
+            stmt = stmt.order_by(Review.updated_at.asc()).limit(BATCH_LIMIT)
+            result = await db.execute(stmt)
             return [
                 {
                     "type": "review.updated",
@@ -58,16 +61,18 @@ async def _poll_review_updates(cursor: datetime) -> list[Dict[str, Any]]:
         return []
 
 
-async def _poll_pr_state_updates(cursor: datetime) -> list[Dict[str, Any]]:
-    """Return pull request rows updated after `cursor`, oldest first."""
+async def _poll_pr_state_updates(cursor: datetime, user_id: Optional[str] = None) -> list[Dict[str, Any]]:
+    """Return pull request rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PullRequest)
-                .where(PullRequest.updated_at > cursor)
-                .order_by(PullRequest.updated_at.asc())
-                .limit(BATCH_LIMIT)
-            )
+            stmt = select(PullRequest).where(PullRequest.updated_at > cursor)
+            if user_id:
+                stmt = stmt.join(Repository, Repository.id == PullRequest.repo_id)\
+                           .join(Installation, Installation.id == Repository.installation_id)\
+                           .where(Installation.user_id == user_id)
+                           
+            stmt = stmt.order_by(PullRequest.updated_at.asc()).limit(BATCH_LIMIT)
+            result = await db.execute(stmt)
             return [
                 {
                     "type": "pr.state",
@@ -85,6 +90,7 @@ async def _poll_pr_state_updates(cursor: datetime) -> list[Dict[str, Any]]:
 
 
 async def event_generator(
+    user_id: str,
     review_id: Optional[str] = None,
     pr_id: Optional[str] = None,
 ) -> AsyncIterator[str]:
@@ -100,11 +106,11 @@ async def event_generator(
     while True:
         events: list[Dict[str, Any]] = []
 
-        for ev in await _poll_review_updates(cursor):
+        for ev in await _poll_review_updates(cursor, user_id=user_id):
             if review_id is None or ev["review_id"] == review_id:
                 events.append(ev)
 
-        for ev in await _poll_pr_state_updates(cursor):
+        for ev in await _poll_pr_state_updates(cursor, user_id=user_id):
             if review_id is None:
                 events.append(ev)
             elif pr_id is not None and ev["pr_id"] == pr_id:

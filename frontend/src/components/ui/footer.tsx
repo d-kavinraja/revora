@@ -94,7 +94,7 @@ export const Footer: FC<FooterProps> = ({
         <div className="flex flex-col items-start gap-4">
           <div className="flex items-center gap-3">
             <img src={logoSrc} alt={`${companyName} Logo`} className="h-10 w-10 rounded-xl object-cover bg-background" />
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-500">{companyName}</span>
+            <span className="text-xl font-bold text-foreground">{companyName}</span>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
         </div>
@@ -139,7 +139,7 @@ export const Footer: FC<FooterProps> = ({
         <div>
           <h3 className="mb-4 text-base font-semibold">{newsletterTitle}</h3>
           <form onSubmit={handleSubscribe} className="relative w-full max-w-sm">
-            <div className="relative flex shadow-sm rounded-md">
+            <div className="relative flex rounded-md">
               <Input
                 type="email"
                 placeholder="Your email address"

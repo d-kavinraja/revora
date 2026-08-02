@@ -17,6 +17,7 @@ type ActionDef = {
   icon: React.ReactNode;
   action: string;
   color: string;
+  fullClass: string;
   desc: string;
 };
 
@@ -37,17 +38,17 @@ function getApplicableActions(status: ReviewStatus): ActionDef[] {
     case 'pending':
     case 'running':
       return [
-        { label: 'Cancel', icon: <Ban size={12} />, action: 'cancel', color: 'text-error hover:bg-error/10', desc: 'Stop this review immediately' },
+        { label: 'Cancel', icon: <Ban size={12} />, action: 'cancel', color: 'text-error hover:bg-error/10', fullClass: 'bg-error/10 hover:bg-error/20 text-error border-error/20', desc: 'Stop this review immediately' },
       ];
     case 'completed':
-      return [{ label: 'Rerun', icon: <Repeat size={12} />, action: 'rerun', color: 'text-brand hover:bg-brand/10', desc: 'Run a new review of this PR (same row is reused)' }];
+      return [{ label: 'Rerun', icon: <Repeat size={12} />, action: 'rerun', color: 'text-brand hover:bg-brand/10', fullClass: 'bg-brand/10 hover:bg-brand/20 text-brand border-brand/20', desc: 'Run a new review of this PR (same row is reused)' }];
     case 'failed':
-      return [{ label: 'Retry', icon: <ArrowUpDown size={12} />, action: 'retry', color: 'text-warning hover:bg-warning/10', desc: 'Retry the review with current repository config' }];
+      return [{ label: 'Retry', icon: <ArrowUpDown size={12} />, action: 'retry', color: 'text-warning hover:bg-warning/10', fullClass: 'bg-warning/10 hover:bg-warning/20 text-warning border-warning/20', desc: 'Retry the review with current repository config' }];
     case 'timed_out':
-      return [{ label: 'Retry', icon: <ArrowUpDown size={12} />, action: 'retry', color: 'text-warning hover:bg-warning/10', desc: 'Retry the review after timeout' }];
+      return [{ label: 'Retry', icon: <ArrowUpDown size={12} />, action: 'retry', color: 'text-warning hover:bg-warning/10', fullClass: 'bg-warning/10 hover:bg-warning/20 text-warning border-warning/20', desc: 'Retry the review after timeout' }];
     case 'stopped':
     case 'cancelled':
-      return [{ label: 'Restart', icon: <Play size={12} />, action: 'restart', color: 'text-info hover:bg-info/10', desc: 'Restart the review from the beginning' }];
+      return [{ label: 'Restart', icon: <Play size={12} />, action: 'restart', color: 'text-info hover:bg-info/10', fullClass: 'bg-info/10 hover:bg-info/20 text-info border-info/20', desc: 'Restart the review from the beginning' }];
     default:
       return [];
   }
@@ -70,7 +71,7 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
 
   if (actions.length === 0) return null;
 
-  const renderButton = (label: string, icon: React.ReactNode, action: string, color: string, desc: string, compact: boolean) => {
+  const renderButton = (label: string, icon: React.ReactNode, action: string, color: string, fullClass: string, desc: string, compact: boolean) => {
     const isCancel = action === 'cancel';
     const isInFlight = isActioning && actioningAction === action;
     const disabled = (!isCancel && (prBlocked || prBlockedByActive)) || isActioning;
@@ -86,7 +87,7 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
         className={
           compact
             ? `flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${color} disabled:opacity-50 disabled:cursor-not-allowed`
-            : `flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-${color.replace('text-', '').split(' ')[0]}/10 hover:bg-${color.replace('text-', '').split(' ')[0]}/20 text-${color.replace('text-', '').split(' ')[0]} border-${color.replace('text-', '').split(' ')[0]}/20`
+            : `flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${fullClass}`
         }
       >
         {isInFlight ? <LoaderIcon size={size} animate /> : icon}
@@ -98,8 +99,8 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
   if (variant === 'compact') {
     return (
       <div className="flex items-center gap-1 ml-auto">
-        {actions.map(({ label, icon, action, color }) =>
-          renderButton(label, icon, action, color, action === 'cancel' ? 'Stop this review immediately' : '', true)
+        {actions.map(({ label, icon, action, color, fullClass }) =>
+          renderButton(label, icon, action, color, fullClass, action === 'cancel' ? 'Stop this review immediately' : '', true)
         )}
       </div>
     );
@@ -114,8 +115,8 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        {actions.map(({ label, icon, action, color, desc }) =>
-          renderButton(label, icon, action, color, desc, false)
+        {actions.map(({ label, icon, action, color, fullClass, desc }) =>
+          renderButton(label, icon, action, color, fullClass, desc, false)
         )}
       </div>
     </div>

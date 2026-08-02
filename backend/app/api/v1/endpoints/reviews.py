@@ -28,6 +28,23 @@ def _fmt_dt(dt: Optional[datetime]) -> Optional[str]:
         s += "Z"
     return s
 
+async def _ensure_review_ownership(db: AsyncSession, review: Review, user_id: uuid.UUID) -> PullRequest:
+    pr_result = await db.execute(select(PullRequest).where(PullRequest.id == review.pr_id))
+    pr = pr_result.scalars().first()
+    if not pr:
+        raise HTTPException(status_code=404, detail="Review not found")
+        
+    repo_result = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+    repo_obj = repo_result.scalars().first()
+    if not repo_obj:
+        raise HTTPException(status_code=404, detail="Review not found")
+        
+    install_result = await db.execute(select(Installation).where(Installation.id == repo_obj.installation_id))
+    install_obj = install_result.scalars().first()
+    if not install_obj or install_obj.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return pr
+
 
 @router.get("", response_model=List[Dict[str, Any]])
 async def list_reviews(
@@ -189,10 +206,7 @@ async def get_review(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    pr_result = await db.execute(
-        select(PullRequest).where(PullRequest.id == review.pr_id)
-    )
-    pr = pr_result.scalars().first()
+    pr = await _ensure_review_ownership(db, review, current_user.id)
 
     repo_info = {}
     installation_id = None
@@ -297,6 +311,8 @@ async def cancel_review(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
+    pr = await _ensure_review_ownership(db, review, current_user.id)
+
     if review.status not in ["pending", "running", "queued"]:
         return {"status": "success", "message": "Review already in terminal state"}
 
@@ -308,12 +324,6 @@ async def cancel_review(
     )
     from app.services.review_execution_service import mark_execution_final
     await mark_execution_final(db, rid, "cancelled")
-
-    # 2. Get PR → repo → installation to be able to call GitHub API
-    pr_result = await db.execute(
-        select(PullRequest).where(PullRequest.id == review.pr_id)
-    )
-    pr = pr_result.scalars().first()
 
     if pr:
         # 2a. Cancel the background job for THIS review.
