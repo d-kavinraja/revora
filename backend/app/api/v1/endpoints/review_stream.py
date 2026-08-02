@@ -58,9 +58,7 @@ async def stream_review_events(
     pr_id = None
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Review.pr_id).where(Review.id == rid)
-            )
+            result = await db.execute(select(Review.pr_id).where(Review.id == rid))
             pr_id = result.scalar_one_or_none()
     except Exception as e:
         logger.error(f"Failed to resolve PR for review {review_id}: {e}", exc_info=True)

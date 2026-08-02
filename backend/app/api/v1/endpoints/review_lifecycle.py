@@ -154,7 +154,9 @@ async def get_review_history(
         raise HTTPException(status_code=404, detail="Review not found")
     await _ensure_review_ownership(db, review, current_user.id)
 
-    history = await review_lifecycle_service.get_review_history(db, review.pr_id, review.id)
+    history = await review_lifecycle_service.get_review_history(
+        db, review.pr_id, review.id
+    )
 
     return {
         "current_review_id": str(review.id),

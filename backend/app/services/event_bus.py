@@ -33,17 +33,21 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-async def _poll_review_updates(cursor: datetime, user_id: str | None = None) -> list[dict[str, Any]]:
+async def _poll_review_updates(
+    cursor: datetime, user_id: str | None = None
+) -> list[dict[str, Any]]:
     """Return review rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
             stmt = select(Review).where(Review.updated_at > cursor)
             if user_id:
-                stmt = stmt.join(PullRequest, PullRequest.id == Review.pr_id)\
-                           .join(Repository, Repository.id == PullRequest.repo_id)\
-                           .join(Installation, Installation.id == Repository.installation_id)\
-                           .where(Installation.user_id == user_id)
-            
+                stmt = (
+                    stmt.join(PullRequest, PullRequest.id == Review.pr_id)
+                    .join(Repository, Repository.id == PullRequest.repo_id)
+                    .join(Installation, Installation.id == Repository.installation_id)
+                    .where(Installation.user_id == user_id)
+                )
+
             stmt = stmt.order_by(Review.updated_at.asc()).limit(BATCH_LIMIT)
             result = await db.execute(stmt)
             return [
@@ -62,16 +66,20 @@ async def _poll_review_updates(cursor: datetime, user_id: str | None = None) -> 
         return []
 
 
-async def _poll_pr_state_updates(cursor: datetime, user_id: str | None = None) -> list[dict[str, Any]]:
+async def _poll_pr_state_updates(
+    cursor: datetime, user_id: str | None = None
+) -> list[dict[str, Any]]:
     """Return pull request rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
             stmt = select(PullRequest).where(PullRequest.updated_at > cursor)
             if user_id:
-                stmt = stmt.join(Repository, Repository.id == PullRequest.repo_id)\
-                           .join(Installation, Installation.id == Repository.installation_id)\
-                           .where(Installation.user_id == user_id)
-                           
+                stmt = (
+                    stmt.join(Repository, Repository.id == PullRequest.repo_id)
+                    .join(Installation, Installation.id == Repository.installation_id)
+                    .where(Installation.user_id == user_id)
+                )
+
             stmt = stmt.order_by(PullRequest.updated_at.asc()).limit(BATCH_LIMIT)
             result = await db.execute(stmt)
             return [
@@ -120,7 +128,10 @@ async def event_generator(
 
         cursor = datetime.now(UTC)
 
-        if asyncio.get_event_loop().time() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
+        if (
+            asyncio.get_event_loop().time() - last_heartbeat
+            >= HEARTBEAT_INTERVAL_SECONDS
+        ):
             yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
             last_heartbeat = asyncio.get_event_loop().time()
 

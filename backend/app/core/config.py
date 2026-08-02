@@ -4,7 +4,6 @@ All secrets are required via environment variables.
 No hardcoded defaults for security-sensitive values.
 """
 
-
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,62 +16,59 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3002", "http://127.0.0.1:3002"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+    ]
 
     # Security - REQUIRED, no defaults for secrets
     SECRET_KEY: str = Field(
         ...,
-        description="Application secret key. Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        description='Application secret key. Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"',
     )
     JWT_SECRET_KEY: str = Field(
         ...,
-        description="JWT signing key. Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        description='JWT signing key. Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"',
     )
     ENCRYPTION_KEY: str = Field(
         ...,
-        description="Fernet encryption key. Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        description='Fernet encryption key. Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"',
     )
 
     # Database - REQUIRED
-    DATABASE_URL: str = Field(
-        ...,
-        description="PostgreSQL async connection string"
-    )
+    DATABASE_URL: str = Field(..., description="PostgreSQL async connection string")
 
     # Security
     ALLOW_HTTP_SELF_HOSTED: bool = Field(
         default=False,
-        description="Allow HTTP for self-hosted providers like Ollama. Set to true only for local development."
+        description="Allow HTTP for self-hosted providers like Ollama. Set to true only for local development.",
     )
 
     # Redis (optional)
     REDIS_URL: str | None = Field(
-        default=None,
-        description="Redis connection string for caching and queues"
+        default=None, description="Redis connection string for caching and queues"
     )
 
     # GitHub OAuth - REQUIRED for login
     GITHUB_CLIENT_ID: str | None = Field(
-        default=None,
-        description="GitHub OAuth App Client ID"
+        default=None, description="GitHub OAuth App Client ID"
     )
     GITHUB_CLIENT_SECRET: str | None = Field(
-        default=None,
-        description="GitHub OAuth App Client Secret"
+        default=None, description="GitHub OAuth App Client Secret"
     )
 
     # GitHub App - REQUIRED for repository access
-    GITHUB_APP_ID: str | None = Field(
-        default=None,
-        description="GitHub App ID"
-    )
+    GITHUB_APP_ID: str | None = Field(default=None, description="GitHub App ID")
     GITHUB_APP_PRIVATE_KEY: str | None = Field(
-        default=None,
-        description="GitHub App private key (PEM format)"
+        default=None, description="GitHub App private key (PEM format)"
     )
     GITHUB_WEBHOOK_SECRET: str = Field(
         default="dev_webhook_secret",
-        description="GitHub webhook signature verification secret"
+        description="GitHub webhook signature verification secret",
     )
 
     # Usage & Analytics
@@ -80,17 +76,18 @@ class Settings(BaseSettings):
     # When False: recording is skipped, API returns disabled response.
     USAGE_ANALYTICS_ENABLED: bool = Field(
         default=False,
-        description="Master flag for usage tracking and analytics subsystem"
+        description="Master flag for usage tracking and analytics subsystem",
     )
 
     # Rate Limiting
     RATE_LIMIT_LOGIN: int = Field(default=5, description="Login attempts per minute")
-    RATE_LIMIT_REGISTER: int = Field(default=3, description="Registration attempts per minute")
+    RATE_LIMIT_REGISTER: int = Field(
+        default=3, description="Registration attempts per minute"
+    )
 
     # JWT
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=1440,  # 1 day
-        description="JWT token expiry in minutes"
+        default=1440, description="JWT token expiry in minutes"  # 1 day
     )
 
     # Real-time / background sync
@@ -126,11 +123,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_secrets(self) -> "Settings":
-        if self.APP_ENV != "development" and self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret":
-            raise ValueError("GITHUB_WEBHOOK_SECRET must be set in non-development environments.")
+        if (
+            self.APP_ENV != "development"
+            and self.GITHUB_WEBHOOK_SECRET == "dev_webhook_secret"
+        ):
+            raise ValueError(
+                "GITHUB_WEBHOOK_SECRET must be set in non-development environments."
+            )
         return self
 
 
 settings = Settings()
-
-

@@ -24,8 +24,7 @@ class GitHubLoginRequest(BaseModel):
 
 @router.post("/login", response_model=dict)
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
 ):
     user = await user_service.get_by_email(db, form_data.username)
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -34,12 +33,12 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token_expires = timedelta(minutes=60 * 24)
     access_token = create_access_token(
         subject=user.id, expires_delta=access_token_expires
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -48,16 +47,13 @@ async def login(
             "email": user.email,
             "name": user.name,
             "role": user.role,
-            "image": user.avatar_url
-        }
+            "image": user.avatar_url,
+        },
     }
 
 
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
-async def register(
-    user_in: UserCreate,
-    db: AsyncSession = Depends(get_db)
-):
+async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await user_service.get_by_email(db, email=user_in.email)
     if user:
         raise HTTPException(
@@ -69,15 +65,11 @@ async def register(
 
 
 @router.post("/github", response_model=dict)
-async def github_login(
-    payload: GitHubLoginRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def github_login(payload: GitHubLoginRequest, db: AsyncSession = Depends(get_db)):
     """Exchanges a GitHub OAuth code for a JWT, linking or registering the user."""
     if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
         raise HTTPException(
-            status_code=500,
-            detail="GitHub OAuth is not configured on the server."
+            status_code=500, detail="GitHub OAuth is not configured on the server."
         )
 
     # 1. Exchange code for access token
@@ -85,7 +77,7 @@ async def github_login(
         exchange_data = {
             "client_id": settings.GITHUB_CLIENT_ID,
             "client_secret": settings.GITHUB_CLIENT_SECRET,
-            "code": payload.code
+            "code": payload.code,
         }
         if payload.redirect_uri:
             exchange_data["redirect_uri"] = payload.redirect_uri
@@ -93,37 +85,47 @@ async def github_login(
         token_res = await client.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
-            data=exchange_data
+            data=exchange_data,
         )
         if not token_res.is_success:
             raise HTTPException(
                 status_code=400,
-                detail="Failed to exchange GitHub authorization code. Please verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in backend/.env match your GitHub App."
+                detail="Failed to exchange GitHub authorization code. Please verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in backend/.env match your GitHub App.",
             )
-        
+
         token_data = token_res.json()
         access_token = token_data.get("access_token")
         if not access_token:
             err_desc = token_data.get("error_description") or ""
             err_code = token_data.get("error") or ""
-            if "incorrect or expired" in err_desc.lower() or "bad_verification_code" in err_code.lower():
+            if (
+                "incorrect or expired" in err_desc.lower()
+                or "bad_verification_code" in err_code.lower()
+            ):
                 raise HTTPException(
                     status_code=400,
-                    detail="GitHub returned: Invalid or expired code. This usually happens because GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET in your backend/.env does not match the GitHub App you are authorizing with, or because you need to restart uvicorn after modifying the .env file."
+                    detail="GitHub returned: Invalid or expired code. This usually happens because GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET in your backend/.env does not match the GitHub App you are authorizing with, or because you need to restart uvicorn after modifying the .env file.",
                 )
-            raise HTTPException(status_code=400, detail=token_data.get("error_description", "Invalid GitHub authorization code."))
+            raise HTTPException(
+                status_code=400,
+                detail=token_data.get(
+                    "error_description", "Invalid GitHub authorization code."
+                ),
+            )
 
         # 2. Fetch GitHub user profile
         user_res = await client.get(
             "https://api.github.com/user",
             headers={
                 "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json"
-            }
+                "Accept": "application/json",
+            },
         )
         if not user_res.is_success:
-            raise HTTPException(status_code=400, detail="Failed to retrieve user profile from GitHub.")
-        
+            raise HTTPException(
+                status_code=400, detail="Failed to retrieve user profile from GitHub."
+            )
+
         gh_user = user_res.json()
         github_id = gh_user.get("id")
         github_username = gh_user.get("login")
@@ -138,13 +140,15 @@ async def github_login(
                     "https://api.github.com/user/emails",
                     headers={
                         "Authorization": f"Bearer {access_token}",
-                        "Accept": "application/json"
-                    }
+                        "Accept": "application/json",
+                    },
                 )
                 if emails_res.is_success:
                     emails_list = emails_res.json()
                     # Find primary email
-                    primary_email = next((e["email"] for e in emails_list if e.get("primary")), None)
+                    primary_email = next(
+                        (e["email"] for e in emails_list if e.get("primary")), None
+                    )
                     if not primary_email and emails_list:
                         primary_email = emails_list[0]["email"]
                     email = primary_email
@@ -166,7 +170,7 @@ async def github_login(
         if user:
             raise HTTPException(
                 status_code=400,
-                detail="An account with this email already exists. Please log in with your password to link your GitHub account."
+                detail="An account with this email already exists. Please log in with your password to link your GitHub account.",
             )
         else:
             # Register new user
@@ -176,7 +180,7 @@ async def github_login(
                 github_id=github_id,
                 github_username=github_username,
                 avatar_url=avatar_url,
-                is_verified=True
+                is_verified=True,
             )
             db.add(user)
             await db.commit()
@@ -184,9 +188,7 @@ async def github_login(
 
     # 5. Generate JWT token
     access_token_expires = timedelta(minutes=60 * 24)
-    jwt_token = create_access_token(
-        subject=user.id, expires_delta=access_token_expires
-    )
+    jwt_token = create_access_token(subject=user.id, expires_delta=access_token_expires)
 
     return {
         "access_token": jwt_token,
@@ -196,8 +198,8 @@ async def github_login(
             "email": user.email,
             "name": user.name,
             "role": user.role,
-            "image": user.avatar_url
-        }
+            "image": user.avatar_url,
+        },
     }
 
 

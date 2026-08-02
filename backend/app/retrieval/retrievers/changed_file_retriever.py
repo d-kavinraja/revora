@@ -24,13 +24,15 @@ class ChangedFileRetriever(BaseRetriever):
             content = self._read_file(getattr(result, "_repo_path", "."), file_path)
             if content:
                 tokens = len(content) // 4
-                contexts.append(RetrievedContext(
-                    file_path=file_path,
-                    content=content,
-                    relevance_score=1.0,
-                    source="changed_file",
-                    metadata={"tokens": tokens},
-                ))
+                contexts.append(
+                    RetrievedContext(
+                        file_path=file_path,
+                        content=content,
+                        relevance_score=1.0,
+                        source="changed_file",
+                        metadata={"tokens": tokens},
+                    )
+                )
 
         return contexts
 
@@ -45,7 +47,10 @@ class ChangedFileRetriever(BaseRetriever):
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines truncated]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines truncated]"
+                )
             return "".join(lines)
         except OSError:
             return None

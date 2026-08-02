@@ -28,18 +28,27 @@ def _fmt_dt(dt: datetime | None) -> str | None:
         s += "Z"
     return s
 
-async def _ensure_review_ownership(db: AsyncSession, review: Review, user_id: uuid.UUID) -> PullRequest:
-    pr_result = await db.execute(select(PullRequest).where(PullRequest.id == review.pr_id))
+
+async def _ensure_review_ownership(
+    db: AsyncSession, review: Review, user_id: uuid.UUID
+) -> PullRequest:
+    pr_result = await db.execute(
+        select(PullRequest).where(PullRequest.id == review.pr_id)
+    )
     pr = pr_result.scalars().first()
     if not pr:
         raise HTTPException(status_code=404, detail="Review not found")
-        
-    repo_result = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+
+    repo_result = await db.execute(
+        select(Repository).where(Repository.id == pr.repo_id)
+    )
     repo_obj = repo_result.scalars().first()
     if not repo_obj:
         raise HTTPException(status_code=404, detail="Review not found")
-        
-    install_result = await db.execute(select(Installation).where(Installation.id == repo_obj.installation_id))
+
+    install_result = await db.execute(
+        select(Installation).where(Installation.id == repo_obj.installation_id)
+    )
     install_obj = install_result.scalars().first()
     if not install_obj or install_obj.user_id != user_id:
         raise HTTPException(status_code=404, detail="Review not found")
@@ -151,39 +160,53 @@ async def list_reviews(
         if not pr:
             continue
         repo = repo_map.get(pr.repo_id, {})
-        install = install_map.get(repo.installation_id) if hasattr(repo, 'installation_id') else None
+        install = (
+            install_map.get(repo.installation_id)
+            if hasattr(repo, "installation_id")
+            else None
+        )
         gh_key = f"{getattr(repo, 'full_name', '')}#{pr.pr_number}" if repo else ""
-        gh_state = pr_github_results.get(gh_key, {}).get("state", "unknown") if gh_key else "unknown"
+        gh_state = (
+            pr_github_results.get(gh_key, {}).get("state", "unknown")
+            if gh_key
+            else "unknown"
+        )
 
-        result.append({
-            "id": str(review.id),
-            "status": review.status,
-            "summary": review.summary,
-            "stats": review.stats or {},
-            "started_at": _fmt_dt(review.started_at),
-            "completed_at": _fmt_dt(review.completed_at),
-            "error_message": review.error_message,
-            "created_at": _fmt_dt(review.created_at),
-            "github_pr_state": gh_state,
-            "pr_has_active_review": review.pr_id in active_pr_ids,
-            "pull_request": {
-                "id": str(pr.id),
-                "pr_number": pr.pr_number,
-                "title": pr.title,
-                "author": pr.author,
-                "status": pr.status,
-                "head_branch": pr.head_branch,
-                "base_branch": pr.base_branch,
-                "additions": pr.additions,
-                "deletions": pr.deletions,
-                "changed_files": pr.changed_files,
-            },
-            "repository": {
-                "id": str(pr.repo_id),
-                "name": getattr(repo, "name", "") if hasattr(repo, 'name') else "",
-                "full_name": getattr(repo, "full_name", "") if hasattr(repo, 'full_name') else "",
-            },
-        })
+        result.append(
+            {
+                "id": str(review.id),
+                "status": review.status,
+                "summary": review.summary,
+                "stats": review.stats or {},
+                "started_at": _fmt_dt(review.started_at),
+                "completed_at": _fmt_dt(review.completed_at),
+                "error_message": review.error_message,
+                "created_at": _fmt_dt(review.created_at),
+                "github_pr_state": gh_state,
+                "pr_has_active_review": review.pr_id in active_pr_ids,
+                "pull_request": {
+                    "id": str(pr.id),
+                    "pr_number": pr.pr_number,
+                    "title": pr.title,
+                    "author": pr.author,
+                    "status": pr.status,
+                    "head_branch": pr.head_branch,
+                    "base_branch": pr.base_branch,
+                    "additions": pr.additions,
+                    "deletions": pr.deletions,
+                    "changed_files": pr.changed_files,
+                },
+                "repository": {
+                    "id": str(pr.repo_id),
+                    "name": getattr(repo, "name", "") if hasattr(repo, "name") else "",
+                    "full_name": (
+                        getattr(repo, "full_name", "")
+                        if hasattr(repo, "full_name")
+                        else ""
+                    ),
+                },
+            }
+        )
 
     return result
 
@@ -254,6 +277,7 @@ async def get_review(
     if pr and repo_info.get("full_name") and installation_id:
         try:
             from app.services.github_service import github_service
+
             gh_result = await github_service.get_pull_request(
                 repo_info["full_name"], pr.pr_number, installation_id
             )
@@ -323,6 +347,7 @@ async def cancel_review(
         .values(status="cancelled", error_message="Cancelled by user")
     )
     from app.services.review_execution_service import mark_execution_final
+
     await mark_execution_final(db, rid, "cancelled")
 
     if pr:
@@ -330,6 +355,7 @@ async def cancel_review(
         # Lifecycle jobs embed the review ID in delivery_id ("{action}-{review_id}").
         # Fall back to repo+PR match for webhook jobs (delivery GUID has no review link).
         from app.queue.models import ReviewJob
+
         job_cancel = await db.execute(
             update(ReviewJob)
             .where(
@@ -346,7 +372,7 @@ async def cancel_review(
                 .where(
                     ReviewJob.repo_id == pr.repo_id,
                     ReviewJob.pr_number == pr.pr_number,
-                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING])
+                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
                 )
                 .values(status=JobStatus.CANCELLED)
             )
@@ -362,12 +388,15 @@ async def cancel_review(
 
                 if repo:
                     install_result = await db.execute(
-                        select(Installation).where(Installation.id == repo.installation_id)
+                        select(Installation).where(
+                            Installation.id == repo.installation_id
+                        )
                     )
                     installation = install_result.scalars().first()
 
                     if installation:
                         from app.github.client import GitHubClient
+
                         owner, repo_name = repo.full_name.split("/", 1)
                         try:
                             await GitHubClient().update_check_run(
@@ -379,14 +408,16 @@ async def cancel_review(
                                 output={
                                     "title": "Revora Review Cancelled",
                                     "summary": "The review was cancelled by the user.",
-                                    "conclusion": "cancelled"
-                                }
+                                    "conclusion": "cancelled",
+                                },
                             )
                             logger.info(
                                 f"Closed GitHub check run {check_run_id} as cancelled for review {review_id}"
                             )
                         except Exception as e:
-                            logger.warning(f"Failed to close GitHub check run on cancel: {e}")
+                            logger.warning(
+                                f"Failed to close GitHub check run on cancel: {e}"
+                            )
             except Exception as e:
                 logger.error(f"Unexpected error in cancel_review DB lookup: {e}")
 
