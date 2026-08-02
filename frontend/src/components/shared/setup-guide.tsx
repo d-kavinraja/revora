@@ -47,7 +47,7 @@ export function SetupGuide() {
           onMouseLeave={() => githubIconRef.current?.stopAnimation()}
           className={cn(
             buttonVariants({ size: 'sm' }),
-            'mt-3 w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-md border-0 text-xs font-medium transition-all hover:scale-[1.02]'
+            'mt-3 w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-brand hover:from-blue-500 hover:to-brand-hover text-white border-0 text-xs font-medium transition-all hover:scale-[1.02]'
           )}
         >
           <GithubIcon ref={githubIconRef} size={15} isAnimated={false} />

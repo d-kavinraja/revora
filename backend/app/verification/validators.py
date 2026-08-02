@@ -1,4 +1,5 @@
 import os
+from app.utils.security import safe_join
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import aiofiles
@@ -17,7 +18,10 @@ class BaseValidator:
 
 class RepositoryValidator(BaseValidator):
     def _find_actual_file(self, repo_path: str, file_path: str) -> str:
-        full_path = os.path.join(repo_path, file_path)
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return file_path
         if os.path.exists(full_path):
             return file_path
         
@@ -32,7 +36,10 @@ class RepositoryValidator(BaseValidator):
         line_number = finding.get("line_number")
         
         file_path = self._find_actual_file(repo_path, file_path)
-        full_path = os.path.join(repo_path, file_path)
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return ValidationResult(is_valid=False, evidence="Path traversal attempt detected", score_modifier=-0.5)
         
         if not os.path.exists(full_path):
             return ValidationResult(is_valid=False, evidence=f"File {file_path} does not exist in repository.", score_modifier=-0.5)
@@ -65,7 +72,10 @@ class SecurityValidator(BaseValidator):
         file_path = finding.get("file_path", "")
         line_number = finding.get("line_number")
         
-        full_path = os.path.join(repo_path, file_path)
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return ValidationResult(is_valid=False, evidence="Path traversal attempt detected", score_modifier=-0.5)
         
         import asyncio
         import json

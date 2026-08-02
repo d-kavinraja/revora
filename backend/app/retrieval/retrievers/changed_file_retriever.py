@@ -1,4 +1,5 @@
 import os
+from app.utils.security import safe_join
 import logging
 from typing import Optional
 
@@ -38,7 +39,10 @@ class ChangedFileRetriever(BaseRetriever):
     def _read_file(
         self, repo_path: str, file_path: str, max_lines: int = 300
     ) -> Optional[str]:
-        full_path = os.path.join(repo_path, file_path)
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return None
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()

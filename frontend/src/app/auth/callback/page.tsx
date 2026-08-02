@@ -65,16 +65,16 @@ function CallbackHandler() {
       <img
         src="/revora-logo.png"
         alt="Revora Logo"
-        className="w-14 h-14 rounded-2xl object-contain mx-auto shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+        className="w-14 h-14 rounded-2xl object-contain mx-auto"
       />
 
       {error ? (
         <div className="space-y-4">
-          <div className="text-error font-semibold text-lg drop-shadow-sm">Authentication Failed</div>
-          <p className="text-foreground/80 font-medium text-sm drop-shadow-sm">{error}</p>
+          <div className="text-error font-semibold text-lg">Authentication Failed</div>
+          <p className="text-foreground/80 font-medium text-sm">{error}</p>
           <button
             onClick={() => router.push('/login')}
-            className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-sm transition-colors border border-border cursor-pointer shadow-sm"
+            className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-sm transition-colors border border-border cursor-pointer"
           >
             Back to Login
           </button>
@@ -83,9 +83,9 @@ function CallbackHandler() {
         <div className="space-y-4">
           <div className="flex items-center justify-center gap-2">
             <LoaderIcon size={20} className="text-brand" animate />
-            <span className="font-semibold text-lg text-foreground drop-shadow-sm">Authenticating with GitHub...</span>
+            <span className="font-semibold text-lg text-foreground">Authenticating with GitHub...</span>
           </div>
-          <p className="text-foreground/80 font-medium text-sm drop-shadow-sm">Setting up your secure session.</p>
+          <p className="text-foreground/80 font-medium text-sm">Setting up your secure session.</p>
         </div>
       )}
     </motion.div>
@@ -105,7 +105,7 @@ export default function AuthCallbackPage() {
           scale={1.5}
           brightness={isLight ? 0.7 : 1.0}
           color1={isLight ? "#2563eb" : "#f7f7f7"}
-          color2={isLight ? "#7c3aed" : "#e100ff"}
+          color2={isLight ? "#6366f1" : "#818cf8"}
           noiseFrequency={2.5}
           noiseAmplitude={1.0}
           bandHeight={0.5}
@@ -118,7 +118,7 @@ export default function AuthCallbackPage() {
         />
       </div>
       <div className="absolute top-[15%] left-[25%] w-[35%] h-[35%] bg-brand/15 blur-[120px] rounded-full pointer-events-none z-0" />
-      <div className="absolute bottom-[15%] right-[25%] w-[30%] h-[30%] bg-purple-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
+      <div className="absolute bottom-[15%] right-[25%] w-[30%] h-[30%] bg-info/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
       <Suspense fallback={
         <motion.div
@@ -130,12 +130,12 @@ export default function AuthCallbackPage() {
           <img
             src="/revora-logo.png"
             alt="Revora Logo"
-            className="w-14 h-14 rounded-2xl object-contain mx-auto shadow-[0_0_20px_rgba(99,102,241,0.35)]"
+            className="w-14 h-14 rounded-2xl object-contain mx-auto"
           />
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
               <LoaderIcon size={20} className="text-brand" animate />
-              <span className="font-semibold text-lg text-foreground drop-shadow-sm">Loading secure session...</span>
+              <span className="font-semibold text-lg text-foreground">Loading secure session...</span>
             </div>
           </div>
         </motion.div>

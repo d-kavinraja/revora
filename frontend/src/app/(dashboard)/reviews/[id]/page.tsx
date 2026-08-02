@@ -154,7 +154,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     
     return (
       <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 text-center">
-        <div className="p-4 bg-error/10 border border-error/20 rounded-xl max-w-md mx-auto">
+        <div className="p-4 bg-error/10 border border-error/30 rounded-xl max-w-md mx-auto">
           <TriangleAlertIcon size={32} className="text-error mx-auto mb-3" />
           <h2 className="text-lg font-bold text-foreground">Failed to load review</h2>
           <p className="text-muted-foreground text-sm mt-1 mb-4">{(error as any).message || 'An unexpected error occurred.'}</p>
@@ -189,7 +189,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   /* ─── PR State indicator ─── */
   const prState = review.github_pr_state;
   const prStateIndicator = prState && prState !== 'open' && prState !== 'unknown' ? (
-    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-error/10 text-error border border-error/20">
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
       <LockIcon size={10} />
       PR {prState === 'closed' ? 'Closed' : prState === 'merged' ? 'Merged' : prState}
     </span>
@@ -250,7 +250,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           {duration !== null && (
             <div>
               <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Review Time</div>
-              <div className="text-sm font-semibold text-foreground">{duration}s</div>
+              <div className="text-sm font-mono font-semibold text-foreground">{duration}s</div>
             </div>
           )}
           {(review.stats as Record<string, any>)?.verified_findings !== undefined && (
@@ -259,7 +259,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 <TriangleAlertIcon size={10} className="text-brand" /> Machine Verified
               </div>
               <div className="text-sm font-semibold">
-                <span className="text-success">{(review.stats as Record<string, any>).verified_findings} verified</span>
+                <span className="text-success font-mono">{(review.stats as Record<string, any>).verified_findings} verified</span>
                 {' '}
                 <span className="text-muted-foreground text-xs">/ {((review.stats as Record<string, any>).verified_findings || 0) + ((review.stats as Record<string, any>).rejected_findings || 0)} total</span>
               </div>
@@ -276,7 +276,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <button 
             onClick={() => cancelMutation.mutate()} 
             disabled={cancelMutation.isPending}
-            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
           >
             {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
           </button>
@@ -303,7 +303,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <button 
             onClick={() => cancelMutation.mutate()} 
             disabled={cancelMutation.isPending}
-            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
           >
             {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
           </button>
@@ -348,7 +348,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-surface-2/50 border border-border rounded-lg p-3 text-xs">
                   {Object.entries(review.stats).map(([key, val]) => (
                     <div key={key} className="flex flex-col">
-                      <span className="text-muted-foreground uppercase text-[10px] tracking-wide">{key.replace(/_/g, ' ')}</span>
+                      <span className="text-muted-foreground uppercase text-[11px] tracking-wide">{key.replace(/_/g, ' ')}</span>
                       <span className="font-semibold text-foreground mt-0.5">{String(val)}</span>
                     </div>
                   ))}
@@ -463,7 +463,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                     <div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
                       <span className="text-[11px] font-mono text-muted-foreground w-24 shrink-0">#{e.execution_number}</span>
                       <span className="text-xs text-muted-foreground w-24 shrink-0">{e.trigger}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                         e.status === 'completed' ? 'bg-success/10 text-success' :
                         e.status === 'failed' ? 'bg-error/10 text-error' :
                         e.status === 'cancelled' ? 'bg-muted/10 text-muted-foreground' :
@@ -512,7 +512,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                     'bg-muted-foreground/50'
                   }`} />
                   <span className="text-foreground font-medium w-48 truncate">{entry.stage}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                     entry.status === 'completed' ? 'bg-success/10 text-success' :
                     entry.status === 'failed' ? 'bg-error/10 text-error' :
                     entry.status === 'running' ? 'bg-info/10 text-info' :

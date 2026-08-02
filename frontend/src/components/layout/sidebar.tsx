@@ -114,7 +114,7 @@ export function Sidebar() {
     <>
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface-1/80 backdrop-blur-md border-b border-border z-40 flex items-center px-4 justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} className="rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.3)]" />
+          <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
         </div>
         <button
@@ -146,11 +146,11 @@ export function Sidebar() {
                 alt="Revora Logo"
                 width={32}
                 height={32}
-                className="rounded-lg object-contain shrink-0 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+                className="rounded-lg object-contain shrink-0"
               />
               <div className="min-w-0">
                 <span className="font-bold text-lg tracking-tight text-foreground block leading-tight font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
-                <div className="text-[10px] text-brand font-medium flex items-center gap-1 leading-tight">
+                <div className="text-[11px] text-brand font-mono font-medium flex items-center gap-1 leading-tight">
                   <LoaderIcon size={8} className="text-brand" />
                   AI Code Review
                 </div>
@@ -178,7 +178,7 @@ export function Sidebar() {
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {!collapsed && (
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
               Navigation
             </div>
           )}
@@ -194,7 +194,7 @@ export function Sidebar() {
           ))}
 
           {!collapsed && (
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mt-5 mb-2">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mt-5 mb-2">
               Settings
             </div>
           )}
@@ -220,7 +220,7 @@ export function Sidebar() {
                 className="w-8 h-8 rounded-full object-cover shrink-0"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-purple-600 flex items-center justify-center uppercase font-bold text-xs text-white shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-hover flex items-center justify-center uppercase font-bold text-xs text-white shrink-0">
                 {user?.name?.charAt(0) ?? '?'}
               </div>
             )}

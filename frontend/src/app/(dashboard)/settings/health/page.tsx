@@ -54,9 +54,9 @@ export default function HealthPage() {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'healthy') return 'bg-success/5 border-success/20 text-success';
-    if (status === 'degraded') return 'bg-warning/5 border-warning/20 text-warning';
-    return 'bg-error/5 border-error/20 text-error';
+    if (status === 'healthy') return 'bg-success/10 border-success/30 text-success';
+    if (status === 'degraded') return 'bg-warning/10 border-warning/30 text-warning';
+    return 'bg-error/10 border-error/30 text-error';
   };
 
   const getCircuitColor = (state: string) => {
@@ -100,7 +100,7 @@ export default function HealthPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {healthData.map((h) => (
-            <div key={h.provider} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
+            <div key={h.provider} className="cursor-target rounded-xl border border-border bg-surface-1 p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-surface-2 border border-border">
@@ -114,7 +114,7 @@ export default function HealthPage() {
                 </div>
                 <button
                   onClick={() => handleCheckHealth(h.provider)}
-                  className="text-xs font-semibold px-2 py-1 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground border border-border transition-colors"
+                  className="text-xs font-semibold px-2 py-1 rounded-lg bg-background text-foreground hover:bg-surface-2 border border-border transition-colors"
                 >
                   Check
                 </button>
@@ -138,7 +138,7 @@ export default function HealthPage() {
                 </div>
               </div>
               {h.last_error && (
-                <div className="mt-3 p-2 rounded-lg bg-error/5 border border-error/20 text-xs text-error">
+                <div className="mt-3 p-2 rounded-lg bg-error/10 border border-error/30 text-xs text-error">
                   {h.last_error}
                 </div>
               )}

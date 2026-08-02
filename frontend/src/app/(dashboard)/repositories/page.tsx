@@ -168,7 +168,7 @@ function ConfigModal({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             {selectedProvider && (
-              <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center shrink-0 shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center shrink-0">
                 <ProviderIcon slug={selectedProvider} size={20} />
               </div>
             )}
@@ -249,13 +249,13 @@ function ConfigModal({
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
                 <div className="flex gap-2">
-                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
                     <input type="checkbox" checked={showPreview} disabled={isReviewActive} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
                   </label>
-                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
                     <input type="checkbox" checked={showDeprecated} disabled={isReviewActive} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
                   </label>
-                  <label className="flex items-center gap-1 cursor-pointer text-[10px] text-muted-foreground">
+                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
                     <input type="checkbox" checked={showUnavailable} disabled={isReviewActive} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
                   </label>
                 </div>
@@ -337,7 +337,12 @@ function ConfigModal({
               disabled={saving || !selectedModel || isReviewActive}
               className="w-full py-2.5 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
-              {isReviewActive ? '🔒 Configuration Locked (Review Active)' : saving ? 'Saving...' : 'Save Configuration'}
+              {isReviewActive ? (
+                <span className="inline-flex items-center gap-2">
+                  <Lock size={14} />
+                  Configuration Locked (Review Active)
+                </span>
+              ) : saving ? 'Saving...' : 'Save Configuration'}
             </button>
           </div>
         )}
@@ -633,7 +638,7 @@ export default function RepositoriesPage() {
       </div>
 
       {reposError && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg flex items-center gap-3">
+        <div className="mb-6 p-4 bg-error/10 border border-error/30 rounded-lg flex items-center gap-3">
           <TriangleAlertIcon size={20} className="text-error" />
           <p className="text-sm text-error">Failed to load repositories.</p>
         </div>
@@ -665,7 +670,7 @@ export default function RepositoriesPage() {
             placeholder="Search repositories by name, description, or language..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-10 px-4 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand/50 transition-colors"
+            className="w-full h-10 px-4 py-2 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors"
           />
         </div>
       )}

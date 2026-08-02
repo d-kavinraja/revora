@@ -101,6 +101,8 @@ celerybeat-schedule
 
 # MiMoCode
 .mimocode/
+.claude/
+.github
 
 # Local databases and agents
 *.db
@@ -114,3 +116,6 @@ TEST_INFRA.md
 scratch*.py
 backend/scratch*.py
 backend/test.py
+PRODUCT.md
+.impeccable/
+DESIGN.md

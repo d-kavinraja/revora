@@ -29,7 +29,7 @@ export default function SetupGuidePage() {
               href="https://github.com/apps/revora-pr" 
               target="_blank" 
               rel="noopener noreferrer"
-              className={cn(buttonVariants({ variant: "default" }), "bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10 shadow-lg")}
+              className={cn(buttonVariants({ variant: "default" }), "bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10")}
             >
               Install Revora-PR on GitHub ↗
             </a>
@@ -92,7 +92,7 @@ export default function SetupGuidePage() {
       content: (
         <div className="space-y-4 text-muted-foreground leading-relaxed">
           <p>
-            You are completely set up! 🎉
+            You are completely set up!
           </p>
           <p>
             To test Revora in action, go to your repository on GitHub and open a new Pull Request. Within seconds, Revora will automatically analyze your code, catch potential bugs, and provide actionable feedback directly as comments on your PR.
@@ -105,7 +105,7 @@ export default function SetupGuidePage() {
   return (
     <div className="p-8 max-w-4xl mx-auto w-full min-h-screen">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-foreground tracking-tight drop-shadow-sm mb-3">How to Use Revora</h1>
+        <h1 className="text-3xl font-bold text-foreground tracking-tight mb-3">How to Use Revora</h1>
         <p className="text-muted-foreground text-lg max-w-2xl">
           Welcome! Follow this quick step-by-step guide to connect your GitHub account, configure your AI models, and start getting automated code reviews.
         </p>
@@ -122,15 +122,15 @@ export default function SetupGuidePage() {
           return (
             <ScrollStackItem 
               key={index}
-              itemClassName="w-full p-8 rounded-[2rem] bg-background border border-border shadow-lg"
+              itemClassName="w-full p-8 rounded-2xl bg-background border border-border shadow-lg"
             >
               <div className="flex flex-col md:flex-row md:items-start gap-6">
-                <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-brand/10 text-brand shrink-0 shadow-sm border border-brand/20">
+                <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-brand/10 text-brand shrink-0 border border-brand/20">
                   <Icon size={32} isAnimated={true} />
                 </div>
                 <div className="space-y-4 flex-1">
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand text-primary-foreground text-sm font-bold shadow-sm">
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand text-primary-foreground text-sm font-bold">
                       {index + 1}
                     </span>
                     <h3 className="font-bold text-2xl text-foreground tracking-tight">{step.title}</h3>

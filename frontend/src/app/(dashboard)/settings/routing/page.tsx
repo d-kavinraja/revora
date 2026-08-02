@@ -144,7 +144,7 @@ export default function RoutingPage() {
         <button
           onClick={handleSavePreferences}
           disabled={saving}
-          className="px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-brand/10"
+          className="px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
         >
           {saving ? 'Saving...' : 'Save Preferences'}
         </button>
@@ -156,7 +156,7 @@ export default function RoutingPage() {
           const modelsForProvider = selectedProvider ? (modelsPerProvider[selectedProvider] || []) : [];
 
           return (
-            <div key={feature} className="cursor-target rounded-xl border border-border bg-surface-1 p-5 backdrop-blur-md">
+            <div key={feature} className="cursor-target rounded-xl border border-border bg-surface-1 p-5">
               <h2 className="flex items-center gap-2 font-bold text-foreground mb-3">
                 {selectedProvider && <ProviderIcon slug={selectedProvider} size={18} />}
                 {getFeatureLabel(feature)}
@@ -172,7 +172,7 @@ export default function RoutingPage() {
                         [feature]: { provider: e.target.value, model: '' },
                       }))
                     }
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors"
                   >
                     <option value="">Default (auto-select)</option>
                     {availableProviders.map((p) => (
@@ -191,7 +191,7 @@ export default function RoutingPage() {
                       }))
                     }
                     disabled={!selectedProvider}
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">{selectedProvider ? 'Default model' : 'Select provider first'}</option>
                     {modelsForProvider.map((m) => (
@@ -203,12 +203,12 @@ export default function RoutingPage() {
               {selectedProvider && modelsForProvider.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {modelsForProvider.slice(0, 8).map((m) => (
-                    <span key={m.model} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-surface-3 text-muted-foreground border border-border">
+                    <span key={m.model} className="text-xs font-medium px-2 py-0.5 rounded-full bg-surface-3 text-muted-foreground border border-border">
                       {m.model}
                     </span>
                   ))}
                   {modelsForProvider.length > 8 && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
                       +{modelsForProvider.length - 8} more
                     </span>
                   )}

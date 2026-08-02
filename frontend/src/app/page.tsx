@@ -42,8 +42,8 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden">
       {/* Top Banner */}
-      <StickyBanner className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-medium text-xs md:text-sm shadow-md">
-        <p className="mx-0 max-w-[90%] drop-shadow-sm flex items-center justify-center gap-2 flex-wrap text-center py-1">
+      <StickyBanner className="bg-gradient-to-r from-blue-600 via-indigo-600 to-brand text-white font-medium text-xs md:text-sm">
+        <p className="mx-0 max-w-[90%] flex items-center justify-center gap-2 flex-wrap text-center py-1">
           <span>🚀 <strong>Connect Revora in seconds:</strong> Sign in with GitHub, install <code className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-xs">Revora-PR</code> app & select repositories!</span>
           <a
             href="https://github.com/apps/revora-pr"
@@ -86,10 +86,10 @@ export default function LandingPage() {
             transition={{ duration: 0.7, ease: 'easeOut' }}
             className="max-w-4xl space-y-6"
           >
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1] drop-shadow-md" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
-              The Ultimate <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-brand to-purple-500">AI Code Reviewer</span>
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
+              The Ultimate <span className="text-brand">AI Code Reviewer</span>
             </h1>
-            <p className="text-lg md:text-xl text-foreground/80 max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
+            <p className="text-lg md:text-xl text-foreground/80 max-w-2xl mx-auto leading-relaxed">
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
@@ -99,7 +99,7 @@ export default function LandingPage() {
                 rel="noopener noreferrer"
                 onMouseEnter={() => githubIconRef.current?.startAnimation()}
                 onMouseLeave={() => githubIconRef.current?.stopAnimation()}
-                className={cn(buttonVariants({ size: "lg" }), "h-12 px-7 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_24px_rgba(147,51,234,0.3)] border-0 transition-all hover:scale-[1.02] gap-2")}
+                className={cn(buttonVariants({ size: "lg" }), "h-12 px-7 text-base bg-gradient-to-r from-blue-600 to-brand hover:from-blue-500 hover:to-brand-hover text-white border-0 transition-all hover:scale-[1.02] gap-2")}
               >
                 Install Revora-PR App
                 <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
@@ -126,7 +126,7 @@ export default function LandingPage() {
                   <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center mx-auto text-brand">
                     <Icon size={20} />
                   </div>
-                  <h3 className="font-semibold text-foreground drop-shadow-sm">{feature.title}</h3>
+                  <h3 className="font-semibold text-foreground">{feature.title}</h3>
                   <p className="text-sm text-foreground/80 leading-relaxed">{feature.description}</p>
                 </div>
               );

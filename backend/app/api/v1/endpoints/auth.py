@@ -164,12 +164,10 @@ async def github_login(
         result = await db.execute(select(UserModel).where(UserModel.email == email))
         user = result.scalars().first()
         if user:
-            user.github_id = github_id
-            user.github_username = github_username
-            user.avatar_url = avatar_url
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
+            raise HTTPException(
+                status_code=400,
+                detail="An account with this email already exists. Please log in with your password to link your GitHub account."
+            )
         else:
             # Register new user
             user = UserModel(
