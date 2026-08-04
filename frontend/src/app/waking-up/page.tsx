@@ -84,13 +84,12 @@ function WakingUpContent() {
           />
         </div>
 
-        <PixelCard variant="blue" className="relative z-10 max-w-md w-full rounded-3xl bg-black/40 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
-          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center">
+        <PixelCard variant="default" colors="#18181b,#27272a,#3f3f46" className="relative z-10 max-w-md w-full rounded-3xl bg-zinc-950/95 border border-zinc-800 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
+          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center font-mono">
           {/* Logo / Icon */}
           <div className="relative">
             <div
-              className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-2xl"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+              className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl bg-zinc-900 border border-zinc-800"
             >
               {status === 'alive' ? (
                 // Checkmark when alive
@@ -112,8 +111,7 @@ function WakingUpContent() {
             </div>
             {/* Pulse ring while waking */}
             {status === 'waking' && (
-              <span className="absolute inset-0 rounded-2xl animate-ping opacity-30"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+              <span className="absolute inset-0 rounded-2xl animate-ping opacity-30 bg-zinc-500"
               />
             )}
           </div>
@@ -122,18 +120,17 @@ function WakingUpContent() {
           {status === 'alive' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
               <h1 className="text-2xl font-bold text-white drop-shadow-md">Server is Ready!</h1>
-              <p className="text-white/80 text-sm mt-2">Redirecting you now{dots}</p>
+              <p className="text-zinc-300 text-sm mt-2">Redirecting you now{dots}</p>
             </div>
           ) : status === 'timeout' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
               <h1 className="text-2xl font-bold text-red-400 drop-shadow-md">Server Taking Too Long</h1>
-              <p className="text-white/80 text-sm leading-relaxed mt-3">
+              <p className="text-zinc-300 text-sm leading-relaxed mt-3">
                 The server hasn't responded in 2 minutes. This can happen on the Render free tier during very high load.
               </p>
               <button
                 onClick={() => { setAttempt(0); setStatus('waking'); }}
-                className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-indigo-500/25"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+                className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold text-zinc-900 bg-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-black/25"
               >
                 Try Again
               </button>
@@ -143,9 +140,9 @@ function WakingUpContent() {
               <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
                 Server Down, Waking Up or Restarting<span className="inline-block w-6 text-left">{dots}</span>
               </h1>
-              <p className="text-white/80 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
+              <p className="text-zinc-300 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
                 Your Revora backend is currently offline, restarting, or waking up from sleep mode.<br />
-                This usually takes <span className="text-white font-bold">30–60 seconds</span>.
+                This usually takes <span className="text-zinc-100 font-bold">30–60 seconds</span>.
               </p>
             </div>
           )}
@@ -155,14 +152,13 @@ function WakingUpContent() {
             <div className="w-full max-w-sm mt-4 animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-150 fill-mode-both">
               <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/10 backdrop-blur-md">
                 <div
-                  className="h-full rounded-full transition-all duration-300"
+                  className="h-full rounded-full transition-all duration-300 bg-white"
                   style={{
                     width: `${progressPct}%`,
-                    background: 'linear-gradient(90deg, #7c3aed, #3b82f6)',
                   }}
                 />
               </div>
-              <p className="text-xs text-white/70 mt-3 font-medium">
+              <p className="text-xs text-zinc-400 mt-3 font-medium">
                 Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
               </p>
             </div>
@@ -170,12 +166,12 @@ function WakingUpContent() {
 
           {/* Educational Note */}
           {status === 'waking' && (
-            <div className="mt-4 p-5 rounded-xl text-left border border-white/10 bg-black/40 backdrop-blur-md animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both shadow-inner">
+            <div className="mt-4 pt-5 text-left border-t border-zinc-800 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both">
               <div className="flex items-center gap-2 mb-2">
                 <span role="img" aria-label="lightbulb">💡</span>
-                <h3 className="font-semibold text-sm text-white">Why is this happening?</h3>
+                <h2 className="font-semibold text-sm text-zinc-100">Why is this happening?</h2>
               </div>
-              <p className="text-xs text-white/80 leading-relaxed">
+              <p className="text-xs text-zinc-400 leading-relaxed">
                 Revora uses a Serverless architecture to reduce compute power and costs.
                 Services pause when inactive and automatically restart upon request. You only see this page when the server is cold-starting.
               </p>

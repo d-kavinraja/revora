@@ -42,7 +42,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden">
       {/* Top Banner */}
-      <StickyBanner className="bg-gradient-to-r from-blue-600 via-indigo-600 to-brand text-white font-medium text-xs md:text-sm">
+      <StickyBanner className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 font-mono text-xs md:text-sm">
         <p className="mx-0 max-w-[90%] flex items-center justify-center gap-2 flex-wrap text-center py-1">
           <span>🚀 <strong>Connect Revora in seconds:</strong> Sign in with GitHub, install <code className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-xs">Revora-PR</code> app & select repositories!</span>
           <a
@@ -87,9 +87,9 @@ export default function LandingPage() {
             className="max-w-4xl space-y-6"
           >
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
-              The Ultimate <span className="text-brand">AI Code Reviewer</span>
+              The Ultimate <span className="text-zinc-100 drop-shadow-sm">AI Code Reviewer</span>
             </h1>
-            <p className="text-lg md:text-xl text-foreground/80 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-zinc-300 font-mono max-w-2xl mx-auto leading-relaxed">
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
@@ -99,7 +99,7 @@ export default function LandingPage() {
                 rel="noopener noreferrer"
                 onMouseEnter={() => githubIconRef.current?.startAnimation()}
                 onMouseLeave={() => githubIconRef.current?.stopAnimation()}
-                className={cn(buttonVariants({ size: "lg" }), "h-12 px-7 text-base bg-gradient-to-r from-blue-600 to-brand hover:from-blue-500 hover:to-brand-hover text-white border-0 transition-all hover:scale-[1.02] gap-2")}
+                className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 text-base bg-zinc-100 hover:bg-white text-zinc-950 border-0 transition-all hover:scale-[1.02] gap-2 shadow-xl shadow-black/20 font-semibold")}
               >
                 Install Revora-PR App
                 <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
@@ -122,12 +122,12 @@ export default function LandingPage() {
             {features.map((feature, i) => {
               const Icon = feature.icon;
               return (
-                <div key={i} className="rounded-xl border border-border bg-surface-1/50 backdrop-blur-md p-6 text-center space-y-3 shadow-lg shadow-black/5">
-                  <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center mx-auto text-brand">
+                <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-950/80 backdrop-blur-md p-6 text-center space-y-3">
+                  <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center mx-auto text-zinc-100">
                     <Icon size={20} />
                   </div>
-                  <h3 className="font-semibold text-foreground">{feature.title}</h3>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{feature.description}</p>
+                  <h3 className="font-semibold text-zinc-100">{feature.title}</h3>
+                  <p className="text-sm text-zinc-400 font-mono leading-relaxed">{feature.description}</p>
                 </div>
               );
             })}
@@ -135,9 +135,9 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <Footer 
-        logoSrc="/icon.png" 
-        className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]" 
+      <Footer
+        logoSrc="/icon.png"
+        className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]"
       />
     </div>
   );

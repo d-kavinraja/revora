@@ -86,27 +86,16 @@ export function ServerStatusOverlay() {
       }}
     >
       {/* Ambient glow */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-15 blur-[100px]"
-          style={{ background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)' }}
-        />
-      </div>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" />
 
       {/* Card */}
       <div
-        className="relative z-10 flex flex-col items-center gap-6 max-w-sm w-full mx-4 p-8 rounded-2xl text-center"
-        style={{
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-        }}
+        className="relative z-10 flex flex-col items-center gap-6 max-w-sm w-full mx-4 p-8 rounded-2xl text-center bg-zinc-950/90 border border-zinc-800 shadow-xl shadow-black/40 backdrop-blur-md"
       >
         {/* Animated server icon */}
         <div className="relative">
           <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+            className="w-16 h-16 rounded-2xl flex items-center justify-center bg-zinc-900 border border-zinc-800"
           >
             {recovering ? (
               // Checkmark when recovering
@@ -126,8 +115,7 @@ export function ServerStatusOverlay() {
           {/* Pulse ring */}
           {!recovering && (
             <span
-              className="absolute inset-0 rounded-2xl animate-ping opacity-25"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}
+              className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-zinc-700"
             />
           )}
         </div>
@@ -136,8 +124,8 @@ export function ServerStatusOverlay() {
         {recovering ? (
           <>
             <div>
-              <h2 className="text-xl font-bold text-white">Server is Back!</h2>
-              <p className="text-sm mt-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <h2 className="text-xl font-bold text-zinc-100">Server is Back!</h2>
+              <p className="text-sm mt-1.5 font-mono text-zinc-400">
                 Resuming your session…
               </p>
             </div>
@@ -145,10 +133,10 @@ export function ServerStatusOverlay() {
         ) : (
           <>
             <div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-zinc-100">
                 Server is Restarting{dots}
               </h2>
-              <p className="text-sm mt-2 leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              <p className="text-sm mt-2 font-mono leading-relaxed text-zinc-400">
                 The Revora backend is waking up from sleep mode. Your work is safe — please wait a moment.
               </p>
             </div>
@@ -158,17 +146,13 @@ export function ServerStatusOverlay() {
               {['Backend', 'Database', 'AI Engine'].map((service, i) => (
                 <div
                   key={service}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium bg-zinc-900 border border-zinc-800 text-zinc-400"
                   style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: 'rgba(255,255,255,0.5)',
                     animationDelay: `${i * 0.3}s`,
                   }}
                 >
                   <span
-                    className="w-1.5 h-1.5 rounded-full animate-pulse"
-                    style={{ background: '#eab308' }}
+                    className="w-1.5 h-1.5 rounded-full animate-pulse bg-zinc-400"
                   />
                   {service}
                 </div>
@@ -176,7 +160,7 @@ export function ServerStatusOverlay() {
             </div>
 
             {/* Info note */}
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-xs font-mono text-zinc-500">
               Free-tier services pause after 15 min of inactivity. Auto-recovering every 3s.
             </p>
           </>

@@ -8,9 +8,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono, ui-monospace, monospace);
-  --font-heading: var(--font-oxanium, var(--font-inter, ui-sans-serif));
+  --font-heading: var(--font-oxanium, ui-sans-serif);
 
   /* Surface levels */
   --color-surface-1: var(--surface-1);
@@ -183,9 +183,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }
@@ -198,8 +200,13 @@
 }
 
 @keyframes spin-ring {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin-ring {
@@ -207,8 +214,8 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid rgba(59, 130, 246, 0.25);
-  border-top-color: #3b82f6;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
   animation: spin-ring 0.75s linear infinite;
   flex-shrink: 0;
 }
