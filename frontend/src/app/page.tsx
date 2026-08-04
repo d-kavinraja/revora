@@ -87,9 +87,9 @@ export default function LandingPage() {
             className="max-w-4xl space-y-6"
           >
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
-              The Ultimate <span className="text-zinc-100 drop-shadow-sm">AI Code Reviewer</span>
+              The Ultimate <span className="text-foreground drop-shadow-sm">AI Code Reviewer</span>
             </h1>
-            <p className="text-lg md:text-xl text-zinc-300 font-mono max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-muted-foreground font-mono max-w-2xl mx-auto leading-relaxed">
               Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
@@ -99,7 +99,7 @@ export default function LandingPage() {
                 rel="noopener noreferrer"
                 onMouseEnter={() => githubIconRef.current?.startAnimation()}
                 onMouseLeave={() => githubIconRef.current?.stopAnimation()}
-                className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 text-base bg-zinc-100 hover:bg-white text-zinc-950 border-0 transition-all hover:scale-[1.02] gap-2 shadow-xl shadow-black/20 font-semibold")}
+                className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 text-base bg-foreground text-background hover:bg-foreground/90 border-0 transition-all hover:scale-[1.02] gap-2 shadow-xl shadow-black/10 font-semibold")}
               >
                 Install Revora-PR App
                 <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
@@ -122,12 +122,18 @@ export default function LandingPage() {
             {features.map((feature, i) => {
               const Icon = feature.icon;
               return (
-                <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-950/80 backdrop-blur-md p-6 text-center space-y-3">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center mx-auto text-zinc-100">
+                <div key={i} className={cn(
+                  "rounded-xl border backdrop-blur-md p-6 text-center space-y-3 transition-all duration-300",
+                  isLight ? "border-border bg-surface-1/70 shadow-slate-200/50" : "border-zinc-800 bg-zinc-950/80 shadow-black/20"
+                )}>
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center mx-auto transition-colors",
+                    isLight ? "bg-black/[0.05] text-foreground" : "bg-zinc-800 text-zinc-100"
+                  )}>
                     <Icon size={20} />
                   </div>
-                  <h3 className="font-semibold text-zinc-100">{feature.title}</h3>
-                  <p className="text-sm text-zinc-400 font-mono leading-relaxed">{feature.description}</p>
+                  <h3 className={cn("font-semibold transition-colors", isLight ? "text-foreground" : "text-zinc-100")}>{feature.title}</h3>
+                  <p className={cn("text-sm font-mono leading-relaxed transition-colors", isLight ? "text-muted-foreground" : "text-zinc-400")}>{feature.description}</p>
                 </div>
               );
             })}
