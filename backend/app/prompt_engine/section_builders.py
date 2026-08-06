@@ -1,4 +1,4 @@
-﻿"""Section builders for prompt construction.
+"""Section builders for prompt construction.
 
 Each builder produces one of the 14 prompt sections following the ABC pattern
 with safe_* wrappers for error isolation.
@@ -307,7 +307,12 @@ class StaticAnalysisBuilder(BaseSectionBuilder):
 
 
 class ReviewContextBuilder(BaseSectionBuilder):
-    """Builds the review context section with PR metadata."""
+    """Builds the review context section with PR metadata and the code diff.
+
+    This is the HIGHEST priority user-facing section because the diff is
+    the primary artifact the LLM must review.  Repository context, related
+    files, and conventions are supplementary.
+    """
 
     @property
     def name(self) -> str:
@@ -315,7 +320,7 @@ class ReviewContextBuilder(BaseSectionBuilder):
 
     @property
     def priority(self) -> int:
-        return 45
+        return 95
 
     async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
         parts = []

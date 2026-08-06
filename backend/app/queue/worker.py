@@ -562,11 +562,21 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                 # Fetch one queued job with row-level locking
                 stmt = text(
                     """
-                    SELECT id, repo_id, pr_number, head_sha, delivery_id, payload,
-                           attempt_count, created_at
-                    FROM review_jobs
-                    WHERE status = 'queued'
-                    ORDER BY created_at ASC
+                    SELECT j.id, j.repo_id, j.pr_number, j.head_sha, j.delivery_id, j.payload,
+                           j.attempt_count, j.created_at
+                    FROM review_jobs j
+                    WHERE j.status = 'queued'
+                      AND (
+                          j.repo_id IS NULL OR (
+                              NOT EXISTS (
+                                  SELECT 1 FROM review_jobs r
+                                  WHERE r.repo_id = j.repo_id
+                                    AND r.status = 'running'
+                              )
+                              AND pg_try_advisory_xact_lock(hashtext(j.repo_id::text))
+                          )
+                      )
+                    ORDER BY j.created_at ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 """

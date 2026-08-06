@@ -110,11 +110,16 @@ class GitHubReviewGenerator:
                     loc = f"`{finding.file_path}`"
                     if finding.line_number:
                         loc += f" line {finding.line_number}"
-                    sections.append(f"- {sev} **[{finding.severity.upper()}]** {loc}")
-                    sections.append(f"  {finding.description[:200]}")
+                    
+                    title_str = f" **{finding.title}**" if getattr(finding, "title", None) else ""
+                    sections.append(f"- {sev} **[{finding.severity.upper()}]**{title_str} at {loc}")
+                    
+                    desc = finding.description.strip().replace("\n", "\n  ")
+                    sections.append(f"  {desc}")
                     if finding.suggestion:
                         sug = finding.suggestion[0] if isinstance(finding.suggestion, list) else finding.suggestion
-                        sections.append(f"  > 💡 Suggestion: {sug[:200]}")
+                        sug = sug.strip().replace("\n", "\n    ")
+                        sections.append(f"  > 💡 **Suggestion:**\n    {sug}")
                     sections.append("")
 
         # Positive feedback
@@ -144,10 +149,11 @@ class GitHubReviewGenerator:
         for finding in verified.findings:
             body_parts = []
             sev = SEVERITY_EMOJI.get(finding.severity, "•")
-            body_parts.append(f"{sev} **{finding.severity.upper()}** — {finding.description[:300]}")
+            title_str = f" **{finding.title}**" if getattr(finding, "title", None) else ""
+            body_parts.append(f"{sev} **{finding.severity.upper()}**{title_str}\n\n{finding.description}")
             if finding.suggestion:
                 sug = finding.suggestion[0] if isinstance(finding.suggestion, list) else finding.suggestion
-                body_parts.append(f"\n> 💡 **Suggestion:** {sug[:200]}")
+                body_parts.append(f"\n> 💡 **Suggestion:**\n> {sug}")
 
             comments.append(GitHubReviewComment(
                 path=finding.file_path,

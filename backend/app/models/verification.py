@@ -14,6 +14,7 @@ class VerificationResultModel(Base):
     line_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False) # SECURITY, PERFORMANCE, etc.
     severity: Mapped[str] = mapped_column(String(20), nullable=False) # HIGH, MEDIUM, LOW, CRITICAL
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     suggested_fix: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     

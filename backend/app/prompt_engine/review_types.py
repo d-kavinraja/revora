@@ -1,4 +1,4 @@
-﻿"""Review type configurations for prompt building.
+"""Review type configurations for prompt building.
 
 Each review type defines system instructions, analysis focus, and output format.
 """
@@ -25,25 +25,24 @@ You must NOT:
 - Provide vague or generic feedback
 - Ignore the repository's established patterns""",
         "analysis_focus": "bugs, security vulnerabilities, performance issues, code style, improvements",
-        "output_format": """Provide your review as a Markdown document with these sections:
+        "output_format": """Provide your output strictly as a JSON object wrapped in a ```json code block. Do not add any conversational text outside the block.
 
-### Summary
-Brief overall assessment of the PR quality and readiness.
-
-### Security Findings
-Any security issues (OWASP Top 10, secrets, injection, authentication, authorization).
-
-### Bug Findings
-Logic errors, edge cases, runtime exceptions, null pointer risks.
-
-### Performance Findings
-Inefficiency, memory issues, N+1 queries, blocking operations.
-
-### Suggestions
-Code improvements, refactoring opportunities, best practices.
-
-### Positive Feedback
-What's done well and should be preserved.""",
+```json
+{
+  "summary": "Brief overall assessment of the PR quality and readiness.",
+  "findings": [
+    {
+      "title": "A short, descriptive title of the issue",
+      "file_path": "Path to the file where the issue was found (empty string if general issue)",
+      "line_number": 123,
+      "category": "SECURITY", // Must be one of: SECURITY, BUG, PERFORMANCE, IMPROVEMENT
+      "severity": "HIGH", // Must be one of: CRITICAL, HIGH, MEDIUM, LOW
+      "description": "Detailed explanation of the issue and why it matters.",
+      "suggested_fix": "Concrete code suggestion or steps to resolve the issue. Can be a markdown code block."
+    }
+  ]
+}
+```""",
     },
     ReviewType.REPO_REVIEW: {
         "system_instruction": """You are Revora AI, a senior software architect reviewing an entire repository.

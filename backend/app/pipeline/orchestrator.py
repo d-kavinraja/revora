@@ -199,6 +199,20 @@ class ReviewPipeline:
                 diff_content, retrieval_result, provider
             )
 
+            # Model quality check — warn when a model is too weak for code review
+            _WEAK_MODEL_PATTERNS = ("flash-lite", "nano", "micro")
+            model_lower = (model or "").lower()
+            if any(p in model_lower for p in _WEAK_MODEL_PATTERNS):
+                weak_msg = (
+                    f"Model '{model}' may not have sufficient reasoning capability "
+                    f"for thorough code review. Consider using a stronger model "
+                    f"(e.g., gemini-2.5-flash or gemini-2.5-pro) for better results."
+                )
+                logger.warning(f"Weak model detected for review {review_id}: {weak_msg}")
+                await emitter.emit("model_quality_warning", "warning",
+                                   message=weak_msg,
+                                   metrics={"model": model, "provider": provider})
+
             # Stage 8: LLM call — immutable execution context
             llm_response = await self._stage_llm(
                 emitter, prompt, user_id, provider, model, api_key_id, config_source

@@ -47,10 +47,22 @@ class VerificationPipeline:
         
         total_confidence = 0.0
         
-        # Deduplication
+        # Pre-validation and Deduplication
         unique_findings = []
         seen = set()
         for finding in findings:
+            # Filter empty findings
+            if not finding.get("description", "").strip():
+                metrics["rejected_findings"] += 1
+                finding_id = finding.get("id", str(uuid.uuid4()))
+                metrics["false_positive_reports"].append({
+                    "finding_id": finding_id,
+                    "finding": finding,
+                    "reason_category": "EMPTY",
+                    "details": "Finding has no description."
+                })
+                continue
+                
             key = (finding.get("file_path"), finding.get("line_number"), finding.get("category"))
             if key in seen:
                 metrics["false_positives_filtered"] += 1

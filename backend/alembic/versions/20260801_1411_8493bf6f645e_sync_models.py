@@ -86,7 +86,7 @@ def upgrade() -> None:
         nullable=False,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(op.f("ix_cost_budgets_user_active"), table_name="cost_budgets")
+    op.execute("DROP INDEX IF EXISTS ix_cost_budgets_user_active")
     op.create_index(
         op.f("ix_cost_budgets_user_id"), "cost_budgets", ["user_id"], unique=False
     )

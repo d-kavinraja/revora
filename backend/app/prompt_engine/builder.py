@@ -1,4 +1,4 @@
-﻿"""Production-grade Prompt Builder Engine.
+"""Production-grade Prompt Builder Engine.
 
 Orchestrates prompt construction from context retrieval results through
 section building, ranking, compression, optimization, validation, and caching.
@@ -93,9 +93,10 @@ class PromptBuilder:
         system_prompt = system_section.content if system_section else ""
 
         priority_order = [
+            "review_context",  # PR metadata + diff — MUST be first
             "repository_summary", "architecture_summary", "repository_rules",
             "coding_conventions", "organization_rules", "relevant_files",
-            "relevant_code", "static_analysis", "review_context",
+            "relevant_code", "static_analysis",
             "issue_context", "output_format",
         ]
 

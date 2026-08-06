@@ -42,6 +42,7 @@ class VerificationEngine:
         for finding in verified_raw:
             verified_findings.append(VerifiedFinding(
                 id=finding.get("id", str(uuid.uuid4())[:8]),
+                title=finding.get("title", ""),
                 file_path=finding.get("file_path", ""),
                 line_number=finding.get("line_number"),
                 issue_type=finding.get("category", "improvement").lower(),
@@ -100,6 +101,7 @@ class VerificationEngine:
                 db_finding = VerificationResultModel(
                     review_id=review_id,
                     finding_id=finding.get("id", str(uuid.uuid4())),
+                    title=finding.get("title", ""),
                     file_path=finding.get("file_path", ""),
                     line_number=finding.get("line_number"),
                     category=finding.get("category", "IMPROVEMENT"),
@@ -203,9 +205,60 @@ class VerificationEngine:
     def _parse_findings(self, response: str) -> List[Dict[str, Any]]:
         """
         Robust implementation of the Review Parser.
-        Extracts findings from LLM response, handling various formats.
+        Extracts findings from LLM response, handling JSON formats.
         """
+        import json
         findings = []
+        
+        # Try to parse as JSON first
+        try:
+            # Find the JSON block if it's wrapped in markdown or conversational text
+            json_str = response
+            
+            # Robustly extract the outermost JSON object or array
+            first_curly = response.find('{')
+            last_curly = response.rfind('}')
+            first_square = response.find('[')
+            last_square = response.rfind(']')
+            
+            is_obj = first_curly != -1 and last_curly != -1
+            is_arr = first_square != -1 and last_square != -1
+            
+            if is_obj and is_arr:
+                if first_curly < first_square and last_curly > last_square:
+                    json_str = response[first_curly:last_curly+1]
+                else:
+                    json_str = response[first_square:last_square+1]
+            elif is_obj:
+                json_str = response[first_curly:last_curly+1]
+            elif is_arr:
+                json_str = response[first_square:last_square+1]
+                
+            data = json.loads(json_str)
+            
+            # Expecting either a list of findings or an object with a "findings" key
+            raw_findings = data.get("findings", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+            
+            for item in raw_findings:
+                if not isinstance(item, dict):
+                    continue
+                findings.append({
+                    "id": str(uuid.uuid4())[:8],
+                    "title": item.get("title", ""),
+                    "file_path": item.get("file_path", ""),
+                    "line_number": item.get("line_number"),
+                    "category": item.get("category", "IMPROVEMENT").upper(),
+                    "severity": item.get("severity", "MEDIUM").upper(),
+                    "description": item.get("description", ""),
+                    "suggested_fix": item.get("suggested_fix", "")
+                })
+                
+            if findings:
+                return findings
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse LLM response as JSON: {e}. Falling back to regex.")
+
+        # Fallback regex parsing
         sections = re.split(r"###\s+", response) if "###" in response else [response]
 
         for section in sections:
@@ -220,6 +273,9 @@ class VerificationEngine:
                 category = "BUG"
             elif "performance" in section_lower:
                 category = "PERFORMANCE"
+
+            if "summary" in section_lower and len(section_lower.split()) < 200:
+                continue
 
             blocks = re.split(r"\n\s*(?:\d+\.|\*|-|\*\*|•)\s+", "\n" + section)
             for block in blocks:
@@ -239,39 +295,23 @@ class VerificationEngine:
                 if sug_match:
                     suggested_fix = sug_match.group(1).strip()
 
+                title_match = re.search(r"^\*\*(.*?)\*\*", block) or re.search(r"^([^\.\n]+)", block)
+                title = title_match.group(1).strip() if title_match else "Finding"
+
                 # Create finding even without file match if description is substantial
                 if len(block) >= 20:
                     findings.append({
                         "id": str(uuid.uuid4())[:8],
+                        "title": title[:255],
                         "file_path": file_match.group(1) if file_match else "",
                         "line_number": int(line_match.group(1)) if line_match else None,
                         "category": category,
                         "severity": severity_match.group(1).upper() if severity_match else "MEDIUM",
-                        "description": block[:500],
+                        "description": block,
                         "suggested_fix": suggested_fix
                     })
 
-        # Fallback: extract any file mentions from the full response
-        if not findings:
-            file_matches = re.finditer(
-                r"`?([a-zA-Z0-9_\-\./\\]+\.(?:py|js|ts|tsx|jsx|go|java|rs|rb|php|swift|kt|scala|c|cpp|h|hpp|sh|yaml|yml|json|tf|sql))`?",
-                response
-            )
-            seen_files = set()
-            for m in file_matches:
-                filepath = m.group(1)
-                if filepath not in seen_files:
-                    seen_files.add(filepath)
-                    findings.append({
-                        "id": str(uuid.uuid4())[:8],
-                        "file_path": filepath,
-                        "line_number": None,
-                        "category": "BUG" if "bug" in response.lower() else "IMPROVEMENT",
-                        "severity": "MEDIUM",
-                        "description": response.strip()[:500],
-                        "suggested_fix": ""
-                    })
-
+        # Return empty list if all parsing fails
         return findings
 
 verification_engine = VerificationEngine()
