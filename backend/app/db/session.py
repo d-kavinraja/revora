@@ -21,6 +21,7 @@ from app.db.base import Base
 
 logger = logging.getLogger(__name__)
 
+
 def is_db_connectable(url: str) -> bool:
     try:
         if url.startswith("sqlite"):
@@ -34,18 +35,22 @@ def is_db_connectable(url: str) -> bool:
     except Exception:
         return False
 
+
 # Register SQLite compilers for PostgreSQL-specific types
 @compiles(PG_UUID, "sqlite")
 def compile_uuid_sqlite(type_, compiler, **kw):
     return "CHAR(32)"
 
+
 @compiles(PG_JSONB, "sqlite")
 def compile_jsonb_sqlite(type_, compiler, **kw):
     return "TEXT"
 
+
 _engine: AsyncEngine | None = None
 _sessionmaker = None
 _init_lock = asyncio.Lock()
+
 
 async def get_engine_and_sessionmaker():
     global _engine, _sessionmaker
@@ -62,7 +67,9 @@ async def get_engine_and_sessionmaker():
         if not db_url:
             is_sqlite = True
             db_url = "sqlite+aiosqlite:///revora.db"
-            logger.warning("DATABASE_URL is missing. Falling back to local SQLite database.")
+            logger.warning(
+                "DATABASE_URL is missing. Falling back to local SQLite database."
+            )
         else:
             # Check connectable in executor to prevent blocking
             loop = asyncio.get_running_loop()
@@ -70,7 +77,9 @@ async def get_engine_and_sessionmaker():
             if not connectable:
                 is_sqlite = True
                 db_url = "sqlite+aiosqlite:///revora.db"
-                logger.warning(f"Database at {settings.DATABASE_URL} is unreachable. Falling back to local SQLite database.")
+                logger.warning(
+                    f"Database at {settings.DATABASE_URL} is unreachable. Falling back to local SQLite database."
+                )
 
         if is_sqlite:
             engine = create_async_engine(
@@ -88,8 +97,10 @@ async def get_engine_and_sessionmaker():
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.close()
-                dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.UTC).isoformat())
-            
+                dbapi_connection.create_function(
+                    "now", 0, lambda: datetime.datetime.now(datetime.UTC).isoformat()
+                )
+
             # Automatically perform Base.metadata.create_all for SQLite fallback
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
@@ -113,11 +124,13 @@ async def get_engine_and_sessionmaker():
         _sessionmaker = sessionmaker_local
         return _engine, _sessionmaker
 
+
 class LazyAsyncSession:
     """
-    Transparent session wrapper that performs lazy engine initialization 
+    Transparent session wrapper that performs lazy engine initialization
     when the context manager is entered or when attributes are accessed.
     """
+
     def __init__(self):
         self._session = None
 
@@ -138,11 +151,15 @@ class LazyAsyncSession:
 
     def __getattr__(self, name):
         if self._session is None:
-            raise RuntimeError(f"Session not initialized. Cannot access attribute '{name}' before initialization.")
+            raise RuntimeError(
+                f"Session not initialized. Cannot access attribute '{name}' before initialization."
+            )
         return getattr(self._session, name)
+
 
 def AsyncSessionLocal() -> LazyAsyncSession:
     return LazyAsyncSession()
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """

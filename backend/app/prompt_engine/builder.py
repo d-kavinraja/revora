@@ -31,11 +31,27 @@ logger = logging.getLogger(__name__)
 
 # All valid PromptBuildRequest field names
 _PROMPT_BUILD_REQUEST_FIELDS = {
-    "review_type", "repo_id", "repo_path", "repo_size", "diff_content",
-    "retrieval_result", "intelligence_data", "conventions", "rules",
-    "static_analysis", "provider", "model", "token_budget", "pr_number",
-    "pr_title", "pr_description", "issue_context", "organization_rules",
-    "enable_caching", "enable_compression", "enable_versioning",
+    "review_type",
+    "repo_id",
+    "repo_path",
+    "repo_size",
+    "diff_content",
+    "retrieval_result",
+    "intelligence_data",
+    "conventions",
+    "rules",
+    "static_analysis",
+    "provider",
+    "model",
+    "token_budget",
+    "pr_number",
+    "pr_title",
+    "pr_description",
+    "issue_context",
+    "organization_rules",
+    "enable_caching",
+    "enable_compression",
+    "enable_versioning",
 }
 
 
@@ -71,7 +87,9 @@ class PromptBuilder:
             cached = await self.cache.get(cache_key)
             if cached:
                 logger.info(f"Cache hit for prompt {cached.prompt_id}")
-                await self.observability.record_build(cached, request, 0, cache_hit=True)
+                await self.observability.record_build(
+                    cached, request, 0, cache_hit=True
+                )
                 return cached
 
         ranked = await self.ranker.rank_contexts(
@@ -87,7 +105,9 @@ class PromptBuilder:
                 sections[section.name] = section
 
         if request.enable_compression:
-            sections = await self.compressor.compress_sections(sections, request.token_budget)
+            sections = await self.compressor.compress_sections(
+                sections, request.token_budget
+            )
 
         sections = await self.optimizer.optimize(sections, budget_manager)
 
@@ -96,10 +116,16 @@ class PromptBuilder:
 
         priority_order = [
             "review_context",  # PR metadata + diff — MUST be first
-            "repository_summary", "architecture_summary", "repository_rules",
-            "coding_conventions", "organization_rules", "relevant_files",
-            "relevant_code", "static_analysis",
-            "issue_context", "output_format",
+            "repository_summary",
+            "architecture_summary",
+            "repository_rules",
+            "coding_conventions",
+            "organization_rules",
+            "relevant_files",
+            "relevant_code",
+            "static_analysis",
+            "issue_context",
+            "output_format",
         ]
 
         user_parts = []
@@ -176,7 +202,9 @@ class PromptBuilder:
         """
         if "review_type" in kwargs and isinstance(kwargs["review_type"], ReviewType):
             # New interface: filter to only PromptBuildRequest fields
-            filtered = {k: v for k, v in kwargs.items() if k in _PROMPT_BUILD_REQUEST_FIELDS}
+            filtered = {
+                k: v for k, v in kwargs.items() if k in _PROMPT_BUILD_REQUEST_FIELDS
+            }
             return PromptBuildRequest(**filtered)
 
         request = PromptBuildRequest()
@@ -185,9 +213,13 @@ class PromptBuilder:
             request.intelligence_data = {"summary": kwargs["repo_summary"]}
         if "architecture_summary" in kwargs:
             if request.intelligence_data:
-                request.intelligence_data["architecture"] = {"pattern": kwargs["architecture_summary"]}
+                request.intelligence_data["architecture"] = {
+                    "pattern": kwargs["architecture_summary"]
+                }
             else:
-                request.intelligence_data = {"architecture": {"pattern": kwargs["architecture_summary"]}}
+                request.intelligence_data = {
+                    "architecture": {"pattern": kwargs["architecture_summary"]}
+                }
         if "intelligence_data" in kwargs:
             request.intelligence_data = kwargs["intelligence_data"]
         if "conventions" in kwargs:
@@ -201,10 +233,24 @@ class PromptBuilder:
         if "static_analysis" in kwargs:
             request.static_analysis = kwargs["static_analysis"]
 
-        for key in ["review_type", "repo_id", "repo_path", "repo_size", "provider",
-                     "model", "token_budget", "pr_number", "pr_title", "pr_description",
-                     "issue_context", "organization_rules", "enable_caching",
-                     "enable_compression", "enable_versioning", "retrieval_result"]:
+        for key in [
+            "review_type",
+            "repo_id",
+            "repo_path",
+            "repo_size",
+            "provider",
+            "model",
+            "token_budget",
+            "pr_number",
+            "pr_title",
+            "pr_description",
+            "issue_context",
+            "organization_rules",
+            "enable_caching",
+            "enable_compression",
+            "enable_versioning",
+            "retrieval_result",
+        ]:
             if key in kwargs:
                 setattr(request, key, kwargs[key])
 
@@ -212,7 +258,11 @@ class PromptBuilder:
 
     def _build_cache_key(self, request: PromptBuildRequest) -> str:
         """Build a deterministic cache key."""
-        diff_hash = hashlib.sha256(request.diff_content.encode()).hexdigest()[:8] if request.diff_content else "none"
+        diff_hash = (
+            hashlib.sha256(request.diff_content.encode()).hexdigest()[:8]
+            if request.diff_content
+            else "none"
+        )
         return build_cache_key(
             review_type=request.review_type.value,
             repo_id=request.repo_id or "unknown",

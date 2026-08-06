@@ -43,10 +43,16 @@ async def get_models_per_provider(
     for provider_name, key in user_keys.items():
         try:
             raw_key = encryption_service.decrypt(key.encrypted_key)
-            models = await model_discovery_engine.get_available_models(provider_name, raw_key)
+            models = await model_discovery_engine.get_available_models(
+                provider_name, raw_key
+            )
             result[provider_name] = [
-                {"model": m["canonical_model_name"], "litellm_model": m["litellm_model_name"]}
-                for m in models if m.get("accessible", True)
+                {
+                    "model": m["canonical_model_name"],
+                    "litellm_model": m["litellm_model_name"],
+                }
+                for m in models
+                if m.get("accessible", True)
             ]
         except Exception:
             result[provider_name] = []
@@ -63,7 +69,10 @@ async def recommend_route(
     """Get the recommended route for a specific feature."""
     routes = await model_router.route(db, current_user.id, feature)
     if not routes:
-        raise HTTPException(status_code=404, detail="No available routes. Add an API key for a supported provider.")
+        raise HTTPException(
+            status_code=404,
+            detail="No available routes. Add an API key for a supported provider.",
+        )
     return routes[0].model_dump()
 
 
@@ -94,27 +103,32 @@ async def update_routing_preferences(
         # Initialize settings if not present
         if not hasattr(user, "settings") or user.settings is None:
             user.settings = {}
-        
+
         if not isinstance(user.settings, dict):
             user.settings = {}
 
         # Update model_routing
         user.settings["model_routing"] = data.routing
-        
+
         # Force update by marking the attribute as modified
         from sqlalchemy.orm.attributes import flag_modified
+
         flag_modified(user, "settings")
-        
+
         db.add(user)
         await db.commit()
         await db.refresh(user)
 
-        logger.info(f"Updated routing preferences for user {current_user.id}: {data.routing}")
+        logger.info(
+            f"Updated routing preferences for user {current_user.id}: {data.routing}"
+        )
         return {"status": "updated", "routing": data.routing}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to update routing preferences: {e}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to save preferences: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save preferences: {e!s}"
+        )

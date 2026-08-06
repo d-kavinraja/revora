@@ -114,12 +114,24 @@ class RepositoryService:
             "removed_at": repo.removed_at.isoformat() if repo.removed_at else None,
             "reviews_enabled": repo.reviews_enabled,
             "is_archived": repo.is_archived,
-            "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
+            "last_synced_at": (
+                repo.last_synced_at.isoformat() if repo.last_synced_at else None
+            ),
             "settings": repo.settings or {},
             "permissions": {},
         }
 
-    async def _audit(self, db, actor_id, action, entity_type, entity_id, details, ip_address=None, user_agent=None):
+    async def _audit(
+        self,
+        db,
+        actor_id,
+        action,
+        entity_type,
+        entity_id,
+        details,
+        ip_address=None,
+        user_agent=None,
+    ):
         """Write an audit log entry (best-effort)."""
         try:
             entry = AuditLog(

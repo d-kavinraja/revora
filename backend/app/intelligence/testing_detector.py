@@ -6,7 +6,6 @@ Uses the shared RepoWalker for efficient filesystem access.
 """
 
 
-
 from app.intelligence._async_util import run_async
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.intelligence.models import TestingInfo
@@ -23,8 +22,16 @@ TEST_FRAMEWORKS = {
 }
 
 TEST_DIRS = {
-    "tests", "test", "__tests__", "spec", "e2e", "integration",
-    "src/tests", "src/test", "tests/unit", "tests/integration",
+    "tests",
+    "test",
+    "__tests__",
+    "spec",
+    "e2e",
+    "integration",
+    "src/tests",
+    "src/test",
+    "tests/unit",
+    "tests/integration",
 }
 
 TEST_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"}
@@ -41,7 +48,7 @@ class TestingDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect testing frameworks using the RepoWalker cache.
 
         Args:
@@ -59,7 +66,8 @@ class TestingDetector(BaseDetector):
         for fw_name, markers in TEST_FRAMEWORKS.items():
             for marker in markers:
                 matching_files = [
-                    fp for fp in walker.file_paths
+                    fp
+                    for fp in walker.file_paths
                     if fp.endswith("/" + marker) or fp == marker
                 ]
                 if matching_files:
@@ -71,7 +79,8 @@ class TestingDetector(BaseDetector):
         # Count test files in known test directories
         for test_dir in TEST_DIRS:
             dir_files = [
-                fp for fp in walker.file_paths
+                fp
+                for fp in walker.file_paths
                 if ("/" + test_dir + "/") in fp or fp.startswith(test_dir + "/")
             ]
             if dir_files:
@@ -85,8 +94,8 @@ class TestingDetector(BaseDetector):
         if not has_tests:
             for fp in walker.file_paths:
                 filename = fp.split("/")[-1].split("\\")[-1]
-                if (
-                    filename.startswith("test_") or filename.endswith(("_test.py", ".test.js", ".test.ts", "_test.go"))
+                if filename.startswith("test_") or filename.endswith(
+                    ("_test.py", ".test.js", ".test.ts", "_test.go")
                 ):
                     has_tests = True
                     test_count += 1

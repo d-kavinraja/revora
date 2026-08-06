@@ -21,7 +21,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_index("ix_review_execution_contexts_review_id", table_name="review_execution_contexts")
+    op.drop_index(
+        "ix_review_execution_contexts_review_id", table_name="review_execution_contexts"
+    )
 
 
 def downgrade() -> None:

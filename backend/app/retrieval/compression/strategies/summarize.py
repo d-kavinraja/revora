@@ -50,9 +50,13 @@ class SummarizeStrategy(BaseCompressionStrategy):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if stripped.startswith(("class ", "def ", "async def", "function ", "func ")):
+            if stripped.startswith(
+                ("class ", "def ", "async def", "function ", "func ")
+            ):
                 summary_lines.append(line)
-            elif stripped.startswith(("import ", "from ", "require(", "const ", "let ", "var ")):
+            elif stripped.startswith(
+                ("import ", "from ", "require(", "const ", "let ", "var ")
+            ):
                 if len(summary_lines) < 20:
                     summary_lines.append(line)
 
@@ -73,7 +77,11 @@ class SummarizeStrategy(BaseCompressionStrategy):
             content=summary or f"[Summarized: {context.file_path}]",
             relevance_score=context.relevance_score,
             source=context.source,
-            metadata={**context.metadata, "compressed": True, "compression_strategy": "heuristic_summary"},
+            metadata={
+                **context.metadata,
+                "compressed": True,
+                "compression_strategy": "heuristic_summary",
+            },
             compressed=True,
             original_tokens=context.token_count,
         )
@@ -105,10 +113,14 @@ class SummarizeStrategy(BaseCompressionStrategy):
             if response:
                 return RetrievedContext(
                     file_path=context.file_path,
-                    content=response[:max_tokens * 4],
+                    content=response[: max_tokens * 4],
                     relevance_score=context.relevance_score,
                     source=context.source,
-                    metadata={**context.metadata, "compressed": True, "compression_strategy": "llm_summary"},
+                    metadata={
+                        **context.metadata,
+                        "compressed": True,
+                        "compression_strategy": "llm_summary",
+                    },
                     compressed=True,
                     original_tokens=len(content) // 4,
                 )

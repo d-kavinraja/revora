@@ -42,4 +42,5 @@ class TestWorkerLoop:
 
     def test_worker_id_format(self):
         from app.queue.worker import _worker_id
+
         assert len(_worker_id) == 8

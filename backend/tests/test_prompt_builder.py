@@ -1,6 +1,5 @@
 ﻿"""Comprehensive tests for the Prompt Builder Engine."""
 
-
 import pytest
 
 from app.prompt_engine.builder import PromptBuilder
@@ -33,6 +32,7 @@ from app.prompt_engine.versioning import PromptVersionManager
 # ============================================================
 # Model Tests
 # ============================================================
+
 
 class TestModels:
     def test_review_type_values(self):
@@ -71,7 +71,9 @@ class TestModels:
             total_tokens=5000,
             review_type="pr_review",
             token_metadata=TokenMetadata(budget_limit=10000, budget_used=0.5),
-            provider_metadata=ProviderMetadata(provider="gemini", model="gemini-2.5-flash"),
+            provider_metadata=ProviderMetadata(
+                provider="gemini", model="gemini-2.5-flash"
+            ),
             explainability=PromptExplainability(
                 context_size=4000,
                 files_retrieved=10,
@@ -98,9 +100,11 @@ class TestModels:
 # Context Ranker Tests
 # ============================================================
 
+
 class TestContextRanker:
     def test_priority_weights(self):
         from app.prompt_engine.context_ranker import PRIORITY_WEIGHTS
+
         assert PRIORITY_WEIGHTS["changed_file"] == 10
         assert PRIORITY_WEIGHTS["import_graph"] == 9
         assert PRIORITY_WEIGHTS["test_graph"] == 8
@@ -135,6 +139,7 @@ class TestContextRanker:
 # ============================================================
 # Token Budget Tests
 # ============================================================
+
 
 class TestTokenBudget:
     def test_estimate_tokens(self):
@@ -210,6 +215,7 @@ class TestTokenBudget:
 # Optimizer Tests
 # ============================================================
 
+
 class TestPromptOptimizer:
     @pytest.mark.asyncio
     async def test_optimize_empty(self):
@@ -223,7 +229,9 @@ class TestPromptOptimizer:
         optimizer = PromptOptimizer()
         budget = PromptTokenBudget(RepositorySize.MEDIUM, 10000)
         sections = {
-            "system_instructions": PromptSection("system_instructions", "You are a reviewer.", 10),
+            "system_instructions": PromptSection(
+                "system_instructions", "You are a reviewer.", 10
+            ),
             "code": PromptSection("code", "x = 1", 1),
         }
         result = await optimizer.optimize(sections, budget)
@@ -234,6 +242,7 @@ class TestPromptOptimizer:
 # ============================================================
 # Compressor Tests
 # ============================================================
+
 
 class TestPromptCompressor:
     @pytest.mark.asyncio
@@ -264,6 +273,7 @@ class TestPromptCompressor:
 # ============================================================
 # Validator Tests
 # ============================================================
+
 
 class TestPromptValidator:
     @pytest.mark.asyncio
@@ -312,6 +322,7 @@ class TestPromptValidator:
 # ============================================================
 # Cache Tests
 # ============================================================
+
 
 class TestPromptCache:
     @pytest.mark.asyncio
@@ -369,6 +380,7 @@ class TestPromptCache:
 # Versioning Tests
 # ============================================================
 
+
 class TestPromptVersionManager:
     @pytest.mark.asyncio
     async def test_register_and_get_version(self):
@@ -415,6 +427,7 @@ class TestPromptVersionManager:
 # Observability Tests
 # ============================================================
 
+
 class TestPromptObservability:
     @pytest.mark.asyncio
     async def test_record_and_get_metrics(self):
@@ -425,7 +438,9 @@ class TestPromptObservability:
             token_metadata=TokenMetadata(budget_limit=10000),
             explainability=PromptExplainability(files_retrieved=10),
         )
-        request = PromptBuildRequest(review_type=ReviewType.PR_REVIEW, provider="gemini")
+        request = PromptBuildRequest(
+            review_type=ReviewType.PR_REVIEW, provider="gemini"
+        )
         await obs.record_build(prompt, request, 100.0)
 
         metrics = await obs.get_metrics("test_123")
@@ -441,7 +456,9 @@ class TestPromptObservability:
             token_metadata=TokenMetadata(budget_limit=10000),
             explainability=PromptExplainability(files_retrieved=5),
         )
-        request = PromptBuildRequest(review_type=ReviewType.PR_REVIEW, provider="gemini")
+        request = PromptBuildRequest(
+            review_type=ReviewType.PR_REVIEW, provider="gemini"
+        )
         await obs.record_build(prompt, request, 100.0)
 
         agg = await obs.get_aggregate_metrics(provider="gemini")
@@ -452,6 +469,7 @@ class TestPromptObservability:
 # ============================================================
 # Review Types Tests
 # ============================================================
+
 
 class TestReviewTypes:
     def test_all_review_types_have_config(self):
@@ -475,6 +493,7 @@ class TestReviewTypes:
 # Section Builders Tests
 # ============================================================
 
+
 class TestSectionBuilders:
     def test_all_builders_registered(self):
         assert len(ALL_SECTION_BUILDERS) == 14
@@ -486,6 +505,7 @@ class TestSectionBuilders:
     @pytest.mark.asyncio
     async def test_system_instructions_builder(self):
         from app.prompt_engine.section_builders import SystemInstructionsBuilder
+
         builder = SystemInstructionsBuilder()
         request = PromptBuildRequest(review_type=ReviewType.PR_REVIEW)
         section = await builder.safe_build(request, {})
@@ -495,6 +515,7 @@ class TestSectionBuilders:
     @pytest.mark.asyncio
     async def test_repository_summary_builder_no_data(self):
         from app.prompt_engine.section_builders import RepositorySummaryBuilder
+
         builder = RepositorySummaryBuilder()
         request = PromptBuildRequest(intelligence_data={})
         section = await builder.safe_build(request, {})
@@ -503,6 +524,7 @@ class TestSectionBuilders:
     @pytest.mark.asyncio
     async def test_output_format_builder(self):
         from app.prompt_engine.section_builders import OutputFormatBuilder
+
         builder = OutputFormatBuilder()
         request = PromptBuildRequest(review_type=ReviewType.PR_REVIEW)
         section = await builder.safe_build(request, {})
@@ -512,6 +534,7 @@ class TestSectionBuilders:
     def test_file_extension_detection(self):
         """Test that .tsx and .jsx are detected correctly (Bug 5)."""
         from app.prompt_engine.section_builders import RelevantCodeBuilder
+
         builder = RelevantCodeBuilder()
         assert builder._detect_language("Component.tsx") == "tsx"
         assert builder._detect_language("Component.jsx") == "jsx"
@@ -524,6 +547,7 @@ class TestSectionBuilders:
 # ============================================================
 # Builder Integration Tests
 # ============================================================
+
 
 class TestPromptBuilder:
     @pytest.mark.asyncio
@@ -570,7 +594,10 @@ class TestPromptBuilder:
             conventions="PEP 8",
             rules=["Rule 1"],
         )
-        assert "system_instructions" in [s for s in prompt.sections] or prompt.system_prompt
+        assert (
+            "system_instructions" in [s for s in prompt.sections]
+            or prompt.system_prompt
+        )
         assert "output_format" in [s for s in prompt.sections]
 
     @pytest.mark.asyncio
@@ -669,4 +696,3 @@ class TestPromptBuilder:
         prompt = await builder.compile(diff_content="test")
         # With no compression, ratio should be 0.0
         assert 0.0 <= prompt.token_metadata.compression_ratio <= 1.0
-

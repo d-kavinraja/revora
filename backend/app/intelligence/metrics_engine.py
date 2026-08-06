@@ -4,14 +4,12 @@ Collects quantitative metrics about the repository:
 file counts, line counts, size distribution, etc.
 """
 
-
 from typing import TYPE_CHECKING
 
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 if TYPE_CHECKING:
     from app.intelligence.repo_walker import RepoWalker
-
 
 
 class MetricsEngine(BaseDetector):
@@ -25,7 +23,7 @@ class MetricsEngine(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Collect repository metrics.
 
         Args:
@@ -77,25 +75,59 @@ class MetricsEngine(BaseDetector):
                 "file_types": {
                     "code": sum(
                         ext_counts.get(ext, 0)
-                        for ext in [".py", ".js", ".ts", ".tsx", ".jsx",
-                                    ".go", ".java", ".rb", ".rs", ".cs"]
+                        for ext in [
+                            ".py",
+                            ".js",
+                            ".ts",
+                            ".tsx",
+                            ".jsx",
+                            ".go",
+                            ".java",
+                            ".rb",
+                            ".rs",
+                            ".cs",
+                        ]
                     ),
                     "config": sum(
                         ext_counts.get(ext, 0)
-                        for ext in [".json", ".yaml", ".yml", ".toml",
-                                    ".ini", ".cfg", ".xml"]
+                        for ext in [
+                            ".json",
+                            ".yaml",
+                            ".yml",
+                            ".toml",
+                            ".ini",
+                            ".cfg",
+                            ".xml",
+                        ]
                     ),
                     "documentation": sum(
-                        ext_counts.get(ext, 0)
-                        for ext in [".md", ".rst", ".txt"]
+                        ext_counts.get(ext, 0) for ext in [".md", ".rst", ".txt"]
                     ),
-                    "other": total_files - sum(
+                    "other": total_files
+                    - sum(
                         ext_counts.get(ext, 0)
-                        for ext in [".py", ".js", ".ts", ".tsx", ".jsx",
-                                    ".go", ".java", ".rb", ".rs", ".cs",
-                                    ".json", ".yaml", ".yml", ".toml",
-                                    ".ini", ".cfg", ".xml",
-                                    ".md", ".rst", ".txt"]
+                        for ext in [
+                            ".py",
+                            ".js",
+                            ".ts",
+                            ".tsx",
+                            ".jsx",
+                            ".go",
+                            ".java",
+                            ".rb",
+                            ".rs",
+                            ".cs",
+                            ".json",
+                            ".yaml",
+                            ".yml",
+                            ".toml",
+                            ".ini",
+                            ".cfg",
+                            ".xml",
+                            ".md",
+                            ".rst",
+                            ".txt",
+                        ]
                     ),
                 },
             },

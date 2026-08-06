@@ -37,7 +37,7 @@ class BuildDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect build tools using the RepoWalker cache.
 
         Args:
@@ -50,8 +50,12 @@ class BuildDetector(BaseDetector):
 
         # Check for Docker files
         docker_files = [
-            fp for fp in walker.file_paths
-            if fp.lower().endswith("dockerfile") or fp.endswith(("docker-compose.yml", "docker-compose.yaml", "docker-compose.json"))
+            fp
+            for fp in walker.file_paths
+            if fp.lower().endswith("dockerfile")
+            or fp.endswith(
+                ("docker-compose.yml", "docker-compose.yaml", "docker-compose.json")
+            )
         ]
         has_dockerfile = any("dockerfile" in fp.lower() for fp in docker_files)
         has_docker_compose = any("docker-compose" in fp for fp in docker_files)
@@ -60,7 +64,8 @@ class BuildDetector(BaseDetector):
         for tool_name, config_files in BUILD_TOOLS.items():
             for config_file in config_files:
                 matching_files = [
-                    fp for fp in walker.file_paths
+                    fp
+                    for fp in walker.file_paths
                     if fp.endswith("/" + config_file) or fp == config_file
                 ]
                 if matching_files:

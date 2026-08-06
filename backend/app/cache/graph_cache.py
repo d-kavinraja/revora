@@ -53,8 +53,13 @@ class GraphCache:
             "graphs": {
                 name: self._serialize_graph(getattr(index, name, CodeGraph()))
                 for name in [
-                    "import_graph", "call_graph", "module_graph",
-                    "api_graph", "db_graph", "config_graph", "test_graph",
+                    "import_graph",
+                    "call_graph",
+                    "module_graph",
+                    "api_graph",
+                    "db_graph",
+                    "config_graph",
+                    "test_graph",
                 ]
             },
         }
@@ -63,17 +68,23 @@ class GraphCache:
         return {
             "nodes": [
                 {
-                    "id": n.id, "type": n.type, "name": n.name,
+                    "id": n.id,
+                    "type": n.type,
+                    "name": n.name,
                     "file_path": n.file_path,
-                    "line_start": n.line_start, "line_end": n.line_end,
-                    "parent_id": n.parent_id, "metadata": n.metadata,
+                    "line_start": n.line_start,
+                    "line_end": n.line_end,
+                    "parent_id": n.parent_id,
+                    "metadata": n.metadata,
                 }
                 for n in graph.nodes
             ],
             "edges": [
                 {
-                    "source": e.source, "target": e.target,
-                    "type": e.type, "weight": e.weight,
+                    "source": e.source,
+                    "target": e.target,
+                    "type": e.type,
+                    "weight": e.weight,
                     "metadata": e.metadata,
                 }
                 for e in graph.edges
@@ -88,24 +99,28 @@ class GraphCache:
         for graph_name, graph_data in data.get("graphs", {}).items():
             graph = CodeGraph()
             for node_data in graph_data.get("nodes", []):
-                graph.nodes.append(GraphNode(
-                    id=node_data["id"],
-                    type=node_data["type"],
-                    name=node_data["name"],
-                    file_path=node_data.get("file_path", ""),
-                    line_start=node_data.get("line_start", 0),
-                    line_end=node_data.get("line_end", 0),
-                    parent_id=node_data.get("parent_id"),
-                    metadata=node_data.get("metadata", {}),
-                ))
+                graph.nodes.append(
+                    GraphNode(
+                        id=node_data["id"],
+                        type=node_data["type"],
+                        name=node_data["name"],
+                        file_path=node_data.get("file_path", ""),
+                        line_start=node_data.get("line_start", 0),
+                        line_end=node_data.get("line_end", 0),
+                        parent_id=node_data.get("parent_id"),
+                        metadata=node_data.get("metadata", {}),
+                    )
+                )
             for edge_data in graph_data.get("edges", []):
-                graph.edges.append(GraphEdge(
-                    source=edge_data["source"],
-                    target=edge_data["target"],
-                    type=edge_data.get("type", "references"),
-                    weight=edge_data.get("weight", 1.0),
-                    metadata=edge_data.get("metadata", {}),
-                ))
+                graph.edges.append(
+                    GraphEdge(
+                        source=edge_data["source"],
+                        target=edge_data["target"],
+                        type=edge_data.get("type", "references"),
+                        weight=edge_data.get("weight", 1.0),
+                        metadata=edge_data.get("metadata", {}),
+                    )
+                )
             setattr(index, graph_name, graph)
 
         return index

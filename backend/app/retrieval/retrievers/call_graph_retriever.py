@@ -50,13 +50,15 @@ class CallGraphRetriever(BaseRetriever):
                 content = self._read_file(repo_path, neighbor_file, max_lines=150)
                 if content:
                     score = max(0.1, 0.7 - (depth * 0.15))
-                    contexts.append(RetrievedContext(
-                        file_path=neighbor_file,
-                        content=content,
-                        relevance_score=score,
-                        source="call_graph",
-                        metadata={"graph_depth": depth, "graph_type": "call"},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=neighbor_file,
+                            content=content,
+                            relevance_score=score,
+                            source="call_graph",
+                            metadata={"graph_depth": depth, "graph_type": "call"},
+                        )
+                    )
 
             callers = graph_traversal.reachable_nodes(
                 index.call_graph,
@@ -77,23 +79,30 @@ class CallGraphRetriever(BaseRetriever):
 
                 content = self._read_file(repo_path, caller_file, max_lines=100)
                 if content:
-                    contexts.append(RetrievedContext(
-                        file_path=caller_file,
-                        content=content,
-                        relevance_score=0.5,
-                        source="call_graph",
-                        metadata={"graph_type": "caller"},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=caller_file,
+                            content=content,
+                            relevance_score=0.5,
+                            source="call_graph",
+                            metadata={"graph_type": "caller"},
+                        )
+                    )
 
-        return contexts[:config.max_related_files]
+        return contexts[: config.max_related_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 300) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 300
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

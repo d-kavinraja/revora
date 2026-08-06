@@ -85,7 +85,9 @@ class PromptCompressor:
             else:
                 if in_import_block and import_lines:
                     if len(import_lines) > 5:
-                        result.append(f"# {len(import_lines)} import statements (compressed)")
+                        result.append(
+                            f"# {len(import_lines)} import statements (compressed)"
+                        )
                     else:
                         result.extend(import_lines)
                     import_lines = []
@@ -111,7 +113,11 @@ class PromptCompressor:
             if line.strip().startswith("```"):
                 if in_code_block:
                     if len(code_lines) > 30:
-                        kept = code_lines[:15] + [f"    # ... {len(code_lines) - 30} lines compressed ..."] + code_lines[-15:]
+                        kept = (
+                            code_lines[:15]
+                            + [f"    # ... {len(code_lines) - 30} lines compressed ..."]
+                            + code_lines[-15:]
+                        )
                         result.extend(kept)
                     else:
                         result.extend(code_lines)

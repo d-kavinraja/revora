@@ -7,21 +7,18 @@ from app.retrieval.models import RetrievedContext
 class BaseScorer(ABC):
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def weight(self) -> float:
-        ...
+    def weight(self) -> float: ...
 
     @abstractmethod
     async def score(
         self,
         context: RetrievedContext,
         index: RepositoryIndex | None = None,
-    ) -> float:
-        ...
+    ) -> float: ...
 
     async def safe_score(
         self,

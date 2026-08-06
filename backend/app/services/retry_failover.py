@@ -11,7 +11,15 @@ from app.services.cost_estimator import cost_estimator
 logger = logging.getLogger(__name__)
 
 # Transient errors where retrying the SAME provider/key/model may succeed
-_TRANSIENT_ERRORS = {"timeout", "connection", "service_unavailable", "503", "500", "502", "504"}
+_TRANSIENT_ERRORS = {
+    "timeout",
+    "connection",
+    "service_unavailable",
+    "503",
+    "500",
+    "502",
+    "504",
+}
 
 
 def _is_transient_error(error_str: str) -> bool:
@@ -69,7 +77,11 @@ class RetryFailoverService:
                 input_tokens = (
                     real_input_tokens
                     if real_input_tokens > 0
-                    else sum(len(m.get("content", "")) // 4 for m in messages) if messages else 0
+                    else (
+                        sum(len(m.get("content", "")) // 4 for m in messages)
+                        if messages
+                        else 0
+                    )
                 )
                 output_tokens = (
                     real_output_tokens
@@ -79,7 +91,9 @@ class RetryFailoverService:
 
                 if api_key_id:
                     try:
-                        await api_key_service.mark_last_used(None, uuid.UUID(api_key_id))
+                        await api_key_service.mark_last_used(
+                            None, uuid.UUID(api_key_id)
+                        )
                     except Exception:
                         pass
 
@@ -90,7 +104,9 @@ class RetryFailoverService:
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     latency_ms=latency_ms,
-                    estimated_cost_usd=cost_estimator.estimate(provider, input_tokens, output_tokens),
+                    estimated_cost_usd=cost_estimator.estimate(
+                        provider, input_tokens, output_tokens
+                    ),
                     is_fallback=False,
                 )
 
@@ -102,7 +118,7 @@ class RetryFailoverService:
                 )
 
                 if attempt < max_retries and _is_transient_error(error_str):
-                    backoff = min(2 ** attempt, 4)
+                    backoff = min(2**attempt, 4)
                     logger.info(
                         f"Transient error, retrying {provider} in {backoff}s..."
                     )
@@ -112,7 +128,9 @@ class RetryFailoverService:
                 raise  # Non-transient or out of retries
 
         # Should never reach here
-        raise RuntimeError(str(last_error) if last_error else f"Provider {provider} failed.")
+        raise RuntimeError(
+            str(last_error) if last_error else f"Provider {provider} failed."
+        )
 
 
 retry_failover = RetryFailoverService()

@@ -26,7 +26,10 @@ SECRET_PATTERNS = [
     # AWS keys
     (r"(?:AKIA|ASIA)[A-Z0-9]{16}", "[REDACTED]"),
     # Generic password/secret/token/key assignments
-    (r"(?:password|secret|token|key|passwd|pwd)\s*[:=]\s*['\"]?[^\s'\"]{10,}['\"]?", "[REDACTED]"),
+    (
+        r"(?:password|secret|token|key|passwd|pwd)\s*[:=]\s*['\"]?[^\s'\"]{10,}['\"]?",
+        "[REDACTED]",
+    ),
     # Private keys
     (r"-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----", "[REDACTED]"),
     # Generic API key assignments

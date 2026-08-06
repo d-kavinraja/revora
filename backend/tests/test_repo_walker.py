@@ -1,6 +1,5 @@
 """Tests for RepoWalker module."""
 
-
 import pytest
 
 from app.intelligence.repo_walker import RepoWalker
@@ -59,7 +58,9 @@ async def test_repo_walker_file_paths(temp_repo):
 
     # Should include Python files
     py_files = walker.get_files_by_extension(".py")
-    assert len(py_files) >= 3  # main.py, utils.py, models.py, test_main.py, src/module.py
+    assert (
+        len(py_files) >= 3
+    )  # main.py, utils.py, models.py, test_main.py, src/module.py
 
 
 @pytest.mark.asyncio

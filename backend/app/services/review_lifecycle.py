@@ -22,6 +22,7 @@ from app.services.github_service import github_service
 
 logger = logging.getLogger(__name__)
 
+
 # Raised when an action conflicts with another active review on the same PR
 # (e.g. rerun attempted while a newer review for the same PR is still running).
 class ReviewLifecycleConflict(Exception):
@@ -60,7 +61,9 @@ class ReviewLifecycleService:
             )
 
         # Fetch PR
-        pr_result = await db.execute(select(PullRequest).where(PullRequest.id == review.pr_id))
+        pr_result = await db.execute(
+            select(PullRequest).where(PullRequest.id == review.pr_id)
+        )
         pr = pr_result.scalars().first()
         if not pr:
             raise ValueError("Pull request not found for this review.")
@@ -85,13 +88,17 @@ class ReviewLifecycleService:
                 )
 
         # Fetch repo
-        repo_result = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+        repo_result = await db.execute(
+            select(Repository).where(Repository.id == pr.repo_id)
+        )
         repo = repo_result.scalars().first()
         if not repo:
             raise ValueError("Repository not found.")
 
         # Fetch installation
-        inst_result = await db.execute(select(Installation).where(Installation.id == repo.installation_id))
+        inst_result = await db.execute(
+            select(Installation).where(Installation.id == repo.installation_id)
+        )
         installation = inst_result.scalars().first()
         if not installation:
             raise ValueError("GitHub App installation not found.")
@@ -130,18 +137,25 @@ class ReviewLifecycleService:
             raise ValueError("Review not found.")
 
         if review.status not in _ALLOWED_ACTIONS["cancel"]:
-            return {"status": "success", "message": f"Review already in terminal state: {review.status}"}
+            return {
+                "status": "success",
+                "message": f"Review already in terminal state: {review.status}",
+            }
 
         old_status = review.status
         await db.execute(
-            __import__("sqlalchemy").update(Review)
+            __import__("sqlalchemy")
+            .update(Review)
             .where(Review.id == review_id)
             .values(status="cancelled", error_message="Cancelled by user")
         )
         from app.services.review_execution_service import mark_execution_final
+
         await mark_execution_final(db, review_id, "cancelled")
 
-        pr_result = await db.execute(select(PullRequest).where(PullRequest.id == review.pr_id))
+        pr_result = await db.execute(
+            select(PullRequest).where(PullRequest.id == review.pr_id)
+        )
         pr = pr_result.scalars().first()
 
         if pr:
@@ -149,7 +163,8 @@ class ReviewLifecycleService:
             # Lifecycle jobs embed the review ID in delivery_id ("{action}-{review_id}").
             # Fall back to repo+PR match for webhook jobs (delivery GUID has no review link).
             job_cancel = await db.execute(
-                __import__("sqlalchemy").update(ReviewJob)
+                __import__("sqlalchemy")
+                .update(ReviewJob)
                 .where(
                     ReviewJob.repo_id == pr.repo_id,
                     ReviewJob.pr_number == pr.pr_number,
@@ -160,7 +175,8 @@ class ReviewLifecycleService:
             )
             if job_cancel.rowcount == 0:
                 await db.execute(
-                    __import__("sqlalchemy").update(ReviewJob)
+                    __import__("sqlalchemy")
+                    .update(ReviewJob)
                     .where(
                         ReviewJob.repo_id == pr.repo_id,
                         ReviewJob.pr_number == pr.pr_number,
@@ -172,15 +188,20 @@ class ReviewLifecycleService:
             check_run_id = review.github_check_run_id
             if check_run_id:
                 try:
-                    repo_result = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+                    repo_result = await db.execute(
+                        select(Repository).where(Repository.id == pr.repo_id)
+                    )
                     repo = repo_result.scalars().first()
                     if repo:
                         inst_result = await db.execute(
-                            select(Installation).where(Installation.id == repo.installation_id)
+                            select(Installation).where(
+                                Installation.id == repo.installation_id
+                            )
                         )
                         installation = inst_result.scalars().first()
                         if installation:
                             from app.github.client import GitHubClient
+
                             owner, repo_name = repo.full_name.split("/", 1)
                             await GitHubClient().update_check_run(
                                 installation_id=installation.installation_id,
@@ -200,37 +221,68 @@ class ReviewLifecycleService:
         await db.commit()
 
         await self._audit(
-            db, actor_id=str(user_id), action="review.cancelled",
-            entity_type="review", entity_id=str(review_id),
+            db,
+            actor_id=str(user_id),
+            action="review.cancelled",
+            entity_type="review",
+            entity_id=str(review_id),
             details={"old_status": old_status},
-            ip_address=ip_address, user_agent=user_agent,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         await db.commit()
 
         return {"status": "success", "message": "Review cancelled."}
 
     async def rerun_completed_review(
-        self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: str | None = None, user_agent: str | None = None,
+        self,
+        db: AsyncSession,
+        review_id: UUID,
+        user_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> dict[str, Any]:
         return await self._lifecycle_action(
-            "rerun", db, review_id, user_id, ip_address, user_agent,
+            "rerun",
+            db,
+            review_id,
+            user_id,
+            ip_address,
+            user_agent,
         )
 
     async def retry_failed_review(
-        self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: str | None = None, user_agent: str | None = None,
+        self,
+        db: AsyncSession,
+        review_id: UUID,
+        user_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> dict[str, Any]:
         return await self._lifecycle_action(
-            "retry", db, review_id, user_id, ip_address, user_agent,
+            "retry",
+            db,
+            review_id,
+            user_id,
+            ip_address,
+            user_agent,
         )
 
     async def restart_stopped_review(
-        self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: str | None = None, user_agent: str | None = None,
+        self,
+        db: AsyncSession,
+        review_id: UUID,
+        user_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> dict[str, Any]:
         return await self._lifecycle_action(
-            "restart", db, review_id, user_id, ip_address, user_agent,
+            "restart",
+            db,
+            review_id,
+            user_id,
+            ip_address,
+            user_agent,
         )
 
     async def _lifecycle_action(
@@ -259,7 +311,9 @@ class ReviewLifecycleService:
         )
         pr_lock.fetchone()
 
-        pr, repo, installation = await self._validate_and_get_pr_data(db, review, action)
+        pr, repo, installation = await self._validate_and_get_pr_data(
+            db, review, action
+        )
 
         settings = repo.settings or {}
         provider = settings.get("assigned_provider", "")
@@ -278,6 +332,7 @@ class ReviewLifecycleService:
 
         # Record this run as a new execution on the reused review row
         from app.services.review_execution_service import create_execution
+
         execution = await create_execution(
             db, review.id, trigger=action, commit_sha=pr.head_sha
         )
@@ -287,15 +342,20 @@ class ReviewLifecycleService:
             "installation": {"id": installation.installation_id},
             "repository": {
                 "owner": {"login": repo.full_name.split("/")[0]},
-                "name": repo.name, "full_name": repo.full_name,
-                "private": repo.is_private, "id": repo.github_id,
+                "name": repo.name,
+                "full_name": repo.full_name,
+                "private": repo.is_private,
+                "id": repo.github_id,
             },
             "pull_request": {
-                "number": pr.pr_number, "title": pr.title, "body": "",
+                "number": pr.pr_number,
+                "title": pr.title,
+                "body": "",
                 "head": {"sha": pr.head_sha, "ref": pr.head_branch},
                 "base": {"ref": pr.base_branch},
                 "user": {"login": pr.author},
-                "additions": pr.additions, "deletions": pr.deletions,
+                "additions": pr.additions,
+                "deletions": pr.deletions,
                 "changed_files": pr.changed_files,
             },
             "_lifecycle": {
@@ -303,7 +363,9 @@ class ReviewLifecycleService:
                 "original_review_id": str(review_id),
                 "new_review_id": str(review.id),
                 "execution_id": str(execution.id),
-                "provider": provider, "model": model, "api_key_id": key_id,
+                "provider": provider,
+                "model": model,
+                "api_key_id": key_id,
             },
         }
 
@@ -329,11 +391,18 @@ class ReviewLifecycleService:
         delivery_id = f"{action}-{execution.id}"
         try:
             await enqueue_lifecycle_job(
-                db, payload, delivery_id,
-                repo_id=pr.repo_id, pr_number=pr.pr_number, head_sha=pr.head_sha,
+                db,
+                payload,
+                delivery_id,
+                repo_id=pr.repo_id,
+                pr_number=pr.pr_number,
+                head_sha=pr.head_sha,
             )
         except Exception as e:
-            logger.error(f"Failed to enqueue lifecycle job for review {review.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to enqueue lifecycle job for review {review.id}: {e}",
+                exc_info=True,
+            )
             await db.rollback()
             review.status = "failed"
             review.error_message = f"Failed to enqueue {action} job: {e}"
@@ -341,7 +410,8 @@ class ReviewLifecycleService:
             await db.commit()
 
         await self._audit(
-            db, actor_id=str(user_id),
+            db,
+            actor_id=str(user_id),
             action=f"review.{action}",
             entity_type="review",
             entity_id=str(review.id),
@@ -352,7 +422,8 @@ class ReviewLifecycleService:
                 "provider": provider,
                 "model": model,
             },
-            ip_address=ip_address, user_agent=user_agent,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         await db.commit()
 
@@ -363,7 +434,10 @@ class ReviewLifecycleService:
         }
 
     async def get_review_history(
-        self, db: AsyncSession, pr_id: UUID, current_review_id: UUID,
+        self,
+        db: AsyncSession,
+        pr_id: UUID,
+        current_review_id: UUID,
     ) -> dict[str, Any]:
         """Return all review lifecycles for the PR plus the current review's executions.
 
@@ -382,17 +456,21 @@ class ReviewLifecycleService:
 
         lifecycles = []
         for r in reviews:
-            lifecycles.append({
-                "id": str(r.id),
-                "status": r.status,
-                "summary": r.summary,
-                "stats": r.stats or {},
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                "error_message": r.error_message,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "github_check_run_id": r.github_check_run_id,
-            })
+            lifecycles.append(
+                {
+                    "id": str(r.id),
+                    "status": r.status,
+                    "summary": r.summary,
+                    "stats": r.stats or {},
+                    "started_at": r.started_at.isoformat() if r.started_at else None,
+                    "completed_at": (
+                        r.completed_at.isoformat() if r.completed_at else None
+                    ),
+                    "error_message": r.error_message,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "github_check_run_id": r.github_check_run_id,
+                }
+            )
 
         exec_result = await db.execute(
             select(ReviewExecution)
@@ -401,18 +479,22 @@ class ReviewLifecycleService:
         )
         executions = []
         for e in exec_result.scalars().all():
-            executions.append({
-                "id": str(e.id),
-                "execution_number": e.execution_number,
-                "trigger": e.trigger,
-                "status": e.status,
-                "started_at": e.started_at.isoformat() if e.started_at else None,
-                "completed_at": e.completed_at.isoformat() if e.completed_at else None,
-                "duration_ms": e.duration_ms,
-                "model": e.model,
-                "provider": e.provider,
-                "tokens": e.tokens or {},
-            })
+            executions.append(
+                {
+                    "id": str(e.id),
+                    "execution_number": e.execution_number,
+                    "trigger": e.trigger,
+                    "status": e.status,
+                    "started_at": e.started_at.isoformat() if e.started_at else None,
+                    "completed_at": (
+                        e.completed_at.isoformat() if e.completed_at else None
+                    ),
+                    "duration_ms": e.duration_ms,
+                    "model": e.model,
+                    "provider": e.provider,
+                    "tokens": e.tokens or {},
+                }
+            )
 
         return {
             "lifecycles": lifecycles,
@@ -420,24 +502,33 @@ class ReviewLifecycleService:
         }
 
     async def get_review_timeline(
-        self, db: AsyncSession, review_id: UUID,
+        self,
+        db: AsyncSession,
+        review_id: UUID,
     ) -> list[dict[str, Any]]:
         from sqlalchemy import text
-        stmt = text("""
+
+        stmt = text(
+            """
             SELECT id, stage, status, started_at, completed_at, duration_ms, message, metrics
             FROM review_timelines
             WHERE review_id = :review_id
             ORDER BY COALESCE(started_at, created_at) ASC
-        """)
+        """
+        )
         result = await db.execute(stmt, {"review_id": str(review_id)})
         rows = result.fetchall()
 
         return [
             {
-                "id": str(r[0]), "stage": r[1], "status": r[2],
+                "id": str(r[0]),
+                "stage": r[1],
+                "status": r[2],
                 "started_at": r[3].isoformat() if r[3] else None,
                 "completed_at": r[4].isoformat() if r[4] else None,
-                "duration_ms": r[5], "message": r[6], "metrics": r[7] or {},
+                "duration_ms": r[5],
+                "message": r[6],
+                "metrics": r[7] or {},
             }
             for r in rows
         ]
@@ -452,16 +543,24 @@ class ReviewLifecycleService:
             return None
 
     async def _audit(
-        self, db: AsyncSession, actor_id: str, action: str,
-        entity_type: str, entity_id: str,
+        self,
+        db: AsyncSession,
+        actor_id: str,
+        action: str,
+        entity_type: str,
+        entity_id: str,
         details: dict[str, Any] | None = None,
-        ip_address: str | None = None, user_agent: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ):
         log = AuditLog(
-            actor_id=actor_id, action=action,
-            entity_type=entity_type, entity_id=entity_id,
+            actor_id=actor_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
             details=details or {},
-            ip_address=ip_address, user_agent=user_agent,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         db.add(log)
         await db.flush()

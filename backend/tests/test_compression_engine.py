@@ -53,12 +53,16 @@ class TestCompressionEngine:
     async def test_dedup_identical_content(self):
         strategy = DedupStrategy()
         ctx1 = RetrievedContext(
-            file_path="a.py", content="same content",
-            relevance_score=0.5, source="test",
+            file_path="a.py",
+            content="same content",
+            relevance_score=0.5,
+            source="test",
         )
         ctx2 = RetrievedContext(
-            file_path="b.py", content="same content",
-            relevance_score=0.5, source="test",
+            file_path="b.py",
+            content="same content",
+            relevance_score=0.5,
+            source="test",
         )
 
         result1 = await strategy.compress(ctx1, 1000)
@@ -114,13 +118,16 @@ class TestCompressionEngine:
 
     async def test_budget_allocator(self):
         from app.retrieval.compression.budget_allocator import budget_allocator
+
         result = RetrievalResult()
-        result.changed_files.append(RetrievedContext(
-            file_path="test.py",
-            content="x\n" * 5000,
-            relevance_score=1.0,
-            source="changed_file",
-        ))
+        result.changed_files.append(
+            RetrievedContext(
+                file_path="test.py",
+                content="x\n" * 5000,
+                relevance_score=1.0,
+                source="changed_file",
+            )
+        )
 
         budget = budget_allocator.allocate(result, 1000)
         assert budget.total == 1000

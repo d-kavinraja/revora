@@ -4,6 +4,7 @@ Revision ID: h34lth_f4ll0v3r
 Revises: tk3n_us4g3_c0st
 Create Date: 2026-07-16 13:00:00.000000
 """
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -31,8 +32,12 @@ def upgrade() -> None:
         sa.Column("consecutive_failures", sa.Integer(), server_default="0"),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("last_error_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_provider_health_provider", "provider_health", ["provider"])
 
@@ -54,8 +59,12 @@ def upgrade() -> None:
         sa.Column("fallback_model", sa.String(100), nullable=False),
         sa.Column("attempt_number", sa.Integer(), nullable=False),
         sa.Column("total_latency_ms", sa.Float(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_failover_log_user_id", "failover_log", ["user_id"])
 
@@ -93,8 +102,12 @@ def upgrade() -> None:
             sa.ForeignKey("api_keys.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_llm_request_log_user_id", "llm_request_log", ["user_id"])
 

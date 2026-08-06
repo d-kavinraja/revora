@@ -47,12 +47,14 @@ class HistoricalRetriever(BaseRetriever):
         if row is None:
             return []
 
-        return [RetrievedContext(
-            file_path=".historical-context",
-            content=str(row[0]),
-            relevance_score=0.5,
-            source="historical",
-            metadata={
-                "knowledge_type": "historical_learnings",
-            },
-        )]
+        return [
+            RetrievedContext(
+                file_path=".historical-context",
+                content=str(row[0]),
+                relevance_score=0.5,
+                source="historical",
+                metadata={
+                    "knowledge_type": "historical_learnings",
+                },
+            )
+        ]

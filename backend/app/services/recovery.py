@@ -35,29 +35,45 @@ async def recover_stale_reviews_on_startup() -> int:
     failed_count = 0
     async with AsyncSessionLocal() as db:
         active = (
-            await db.execute(
-                select(Review).where(Review.status.in_(["queued", "pending", "running"]))
+            (
+                await db.execute(
+                    select(Review).where(
+                        Review.status.in_(["queued", "pending", "running"])
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for review in active:
             pr = (
-                await db.execute(select(PullRequest).where(PullRequest.id == review.pr_id))
-            ).scalars().first()
+                (
+                    await db.execute(
+                        select(PullRequest).where(PullRequest.id == review.pr_id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if not pr:
                 continue
 
             job = (
-                await db.execute(
-                    select(ReviewJob.id)
-                    .where(
-                        ReviewJob.repo_id == pr.repo_id,
-                        ReviewJob.pr_number == pr.pr_number,
-                        ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+                (
+                    await db.execute(
+                        select(ReviewJob.id)
+                        .where(
+                            ReviewJob.repo_id == pr.repo_id,
+                            ReviewJob.pr_number == pr.pr_number,
+                            ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+                        )
+                        .limit(1)
                     )
-                    .limit(1)
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if job is not None:
                 continue
 

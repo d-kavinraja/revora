@@ -49,9 +49,13 @@ async def list_repositories(
 
     q = select(Repository).where(Repository.installation_id.in_(installation_ids))
     if include_removed:
-        q = q.where(Repository.removed_at.isnot(None)).order_by(Repository.removed_at.desc())
+        q = q.where(Repository.removed_at.isnot(None)).order_by(
+            Repository.removed_at.desc()
+        )
     else:
-        q = q.where(Repository.removed_at.is_(None)).order_by(Repository.full_name.asc())
+        q = q.where(Repository.removed_at.is_(None)).order_by(
+            Repository.full_name.asc()
+        )
     repos_result = await db.execute(q)
     repos = repos_result.scalars().all()
 
@@ -78,7 +82,7 @@ async def list_repositories(
                 select(Review.status)
                 .where(
                     Review.pr_id.in_(pr_ids),
-                    Review.status.in_(["queued", "pending", "running"])
+                    Review.status.in_(["queued", "pending", "running"]),
                 )
                 .order_by(Review.created_at.desc())
             )
@@ -103,39 +107,51 @@ async def list_repositories(
         elif not repo.reviews_enabled:
             status = "disabled"
 
-        result.append({
-            "id": str(repo.id),
-            "name": repo.name,
-            "full_name": repo.full_name,
-            "description": repo.description,
-            "language": repo.language,
-            "is_private": repo.is_private,
-            "is_archived": repo.is_archived,
-            "reviews_enabled": repo.reviews_enabled,
-            "status": status,
-            "removed_at": repo.removed_at.isoformat() if repo.removed_at else None,
-            "total_reviews": total_reviews,
-            "active_review_status": active_review_status,
-            "last_reviewed_at": last_reviewed_at.isoformat() if last_reviewed_at else None,
-            "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
-            "settings": repo.settings or {},
-            "permissions_ok": bool(inst.permissions_ok) if inst else True,
-            "last_sync": {
-                "completed_at": inst.last_sync_completed_at.isoformat()
-                if inst and inst.last_sync_completed_at else None,
-                "status": inst.last_sync_status if inst else None,
-                "error": inst.last_sync_error if inst else None,
-                "reason": inst.last_sync_reason if inst else None,
-            } if inst else None,
-        })
+        result.append(
+            {
+                "id": str(repo.id),
+                "name": repo.name,
+                "full_name": repo.full_name,
+                "description": repo.description,
+                "language": repo.language,
+                "is_private": repo.is_private,
+                "is_archived": repo.is_archived,
+                "reviews_enabled": repo.reviews_enabled,
+                "status": status,
+                "removed_at": repo.removed_at.isoformat() if repo.removed_at else None,
+                "total_reviews": total_reviews,
+                "active_review_status": active_review_status,
+                "last_reviewed_at": (
+                    last_reviewed_at.isoformat() if last_reviewed_at else None
+                ),
+                "last_synced_at": (
+                    repo.last_synced_at.isoformat() if repo.last_synced_at else None
+                ),
+                "settings": repo.settings or {},
+                "permissions_ok": bool(inst.permissions_ok) if inst else True,
+                "last_sync": (
+                    {
+                        "completed_at": (
+                            inst.last_sync_completed_at.isoformat()
+                            if inst and inst.last_sync_completed_at
+                            else None
+                        ),
+                        "status": inst.last_sync_status if inst else None,
+                        "error": inst.last_sync_error if inst else None,
+                        "reason": inst.last_sync_reason if inst else None,
+                    }
+                    if inst
+                    else None
+                ),
+            }
+        )
 
     return result
 
 
 @router.post("/sync-all", response_model=dict)
 async def sync_all_repositories(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Fetch and sync connected repositories directly from GitHub API for all installations of this user.
 
@@ -154,7 +170,7 @@ async def sync_all_repositories(
 async def sync_repository(
     repo_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Sync pull requests and bot reviews (Revora, CodeRabbit, etc.) from GitHub."""
     try:
@@ -175,21 +191,32 @@ async def sync_repository(
             )
 
         # Get installation
-        inst_result = await db.execute(select(Installation).where(Installation.id == repo.installation_id))
+        inst_result = await db.execute(
+            select(Installation).where(Installation.id == repo.installation_id)
+        )
         installation = inst_result.scalars().first()
         if not installation:
-            raise HTTPException(status_code=404, detail="GitHub App Installation not found for this repository.")
+            raise HTTPException(
+                status_code=404,
+                detail="GitHub App Installation not found for this repository.",
+            )
 
         # Get GitHub installation token
         try:
-            token = await github_app_auth.get_installation_token(installation.installation_id)
+            token = await github_app_auth.get_installation_token(
+                installation.installation_id
+            )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to authenticate with GitHub App: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to authenticate with GitHub App: {e}"
+            )
 
         # Parse owner and repo name
         parts = repo.full_name.split("/")
         if len(parts) != 2:
-            raise HTTPException(status_code=400, detail="Invalid repository full name format.")
+            raise HTTPException(
+                status_code=400, detail="Invalid repository full name format."
+            )
         owner, repo_name = parts
 
         async with httpx.AsyncClient() as client:
@@ -200,12 +227,16 @@ async def sync_repository(
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
             }
-            
+
             # Get both open and closed PRs
-            pulls_res = await client.get(f"{pulls_url}?state=all&per_page=50", headers=headers)
+            pulls_res = await client.get(
+                f"{pulls_url}?state=all&per_page=50", headers=headers
+            )
             if not pulls_res.is_success:
-                raise HTTPException(status_code=400, detail="Failed to fetch pull requests from GitHub.")
-            
+                raise HTTPException(
+                    status_code=400, detail="Failed to fetch pull requests from GitHub."
+                )
+
             gh_pulls = pulls_res.json()
             imported_prs = 0
             imported_reviews = 0
@@ -218,10 +249,12 @@ async def sync_repository(
                 head_sha = gh_pr["head"]["sha"]
                 base_branch = gh_pr["base"]["ref"]
                 head_branch = gh_pr["head"]["ref"]
-                status_str = gh_pr["state"] # open or closed
-                
+                status_str = gh_pr["state"]  # open or closed
+
                 # Fetch detailed PR for additions/deletions
-                detail_res = await client.get(f"{pulls_url}/{pr_number}", headers=headers)
+                detail_res = await client.get(
+                    f"{pulls_url}/{pr_number}", headers=headers
+                )
                 additions, deletions, changed_files = 0, 0, 0
                 if detail_res.is_success:
                     detail_data = detail_res.json()
@@ -233,7 +266,7 @@ async def sync_repository(
                 pr_check = await db.execute(
                     select(PullRequest).where(
                         PullRequest.repo_id == repo.id,
-                        PullRequest.pr_number == pr_number
+                        PullRequest.pr_number == pr_number,
                     )
                 )
                 db_pr = pr_check.scalars().first()
@@ -250,7 +283,7 @@ async def sync_repository(
                         status=status_str,
                         additions=additions,
                         deletions=deletions,
-                        changed_files=changed_files
+                        changed_files=changed_files,
                     )
                     db.add(db_pr)
                     await db.commit()
@@ -268,31 +301,32 @@ async def sync_repository(
                 imported_prs += 1
 
                 # 2. Fetch Reviews for this PR to import bot reviews (Revora, CodeRabbit, etc.)
-                reviews_res = await client.get(f"{pulls_url}/{pr_number}/reviews", headers=headers)
+                reviews_res = await client.get(
+                    f"{pulls_url}/{pr_number}/reviews", headers=headers
+                )
                 has_bot_review = False
                 if reviews_res.is_success:
                     gh_reviews = reviews_res.json()
                     for gh_review in gh_reviews:
                         body = gh_review.get("body") or ""
                         reviewer_login = gh_review.get("user", {}).get("login", "")
-                        
+
                         # Identify bot reviews (Revora, CodeRabbit, coderabbitai, or check if body looks like AI review)
                         is_bot = (
-                            "coderabbit" in reviewer_login.lower() or
-                            "revora" in reviewer_login.lower() or
-                            "coderabbit" in body.lower() or
-                            "revora" in body.lower() or
-                            "gemini" in body.lower() or
-                            reviewer_login.endswith("[bot]")
+                            "coderabbit" in reviewer_login.lower()
+                            or "revora" in reviewer_login.lower()
+                            or "coderabbit" in body.lower()
+                            or "revora" in body.lower()
+                            or "gemini" in body.lower()
+                            or reviewer_login.endswith("[bot]")
                         )
-                        
+
                         if is_bot and body.strip():
                             has_bot_review = True
                             # Check if we already imported this review
                             rev_check = await db.execute(
                                 select(Review).where(
-                                    Review.pr_id == db_pr.id,
-                                    Review.summary == body
+                                    Review.pr_id == db_pr.id, Review.summary == body
                                 )
                             )
                             db_review = rev_check.scalars().first()
@@ -307,7 +341,7 @@ async def sync_repository(
                                     stats={
                                         "provider": "imported",
                                         "model": reviewer_login,
-                                    }
+                                    },
                                 )
                                 db.add(db_review)
                                 await db.commit()
@@ -326,7 +360,9 @@ async def sync_repository(
                     from app.services.sync_engine import _execution_exists_for_sha
 
                     if await _execution_exists_for_sha(db, db_pr.id, head_sha):
-                        logger.info(f"PR #{pr_number} already reviewed at {head_sha[:12]} — sync skipped trigger")
+                        logger.info(
+                            f"PR #{pr_number} already reviewed at {head_sha[:12]} — sync skipped trigger"
+                        )
                     else:
                         from app.queue.dispatcher import enqueue_review_job
                         from app.services.sync_engine import sync_delivery_id
@@ -350,7 +386,7 @@ async def sync_repository(
                                 "additions": additions,
                                 "deletions": deletions,
                                 "changed_files": changed_files,
-                            }
+                            },
                         }
                         job = await enqueue_review_job(
                             db,
@@ -367,7 +403,7 @@ async def sync_repository(
 
             return {
                 "status": "success",
-                "message": f"Successfully synced repository. Synced {imported_prs} PRs, imported {imported_reviews} bot reviews, and triggered {triggered_reviews} new reviews in the background."
+                "message": f"Successfully synced repository. Synced {imported_prs} PRs, imported {imported_reviews} bot reviews, and triggered {triggered_reviews} new reviews in the background.",
             }
 
     except HTTPException:
@@ -400,6 +436,7 @@ async def get_available_models(
 
     from app.core.security import encryption_service
     from app.services.model_discovery import model_discovery_engine
+
     logger = _logging.getLogger(__name__)
 
     api_keys_list = await api_key_service.get_all_for_user(db, current_user.id)
@@ -408,7 +445,9 @@ async def get_available_models(
     for key_obj in api_keys_list:
         if key_obj.is_valid:
             try:
-                provider_keys[key_obj.provider.lower()] = encryption_service.decrypt(key_obj.encrypted_key)
+                provider_keys[key_obj.provider.lower()] = encryption_service.decrypt(
+                    key_obj.encrypted_key
+                )
             except Exception:
                 pass
 
@@ -416,7 +455,9 @@ async def get_available_models(
 
     for provider, raw_key in provider_keys.items():
         try:
-            models = await model_discovery_engine.get_available_models(provider, raw_key)
+            models = await model_discovery_engine.get_available_models(
+                provider, raw_key
+            )
             if models:
                 # Sort by model_name
                 available[provider] = sorted(models, key=lambda x: x["model_name"])
@@ -463,43 +504,58 @@ async def update_repository_config(
     existing_pr_ids = [r[0] for r in pr_ids_check.all()]
     if existing_pr_ids:
         active_rev_check = await db.execute(
-            select(Review.status)
-            .where(
+            select(Review.status).where(
                 Review.pr_id.in_(existing_pr_ids),
-                Review.status.in_(["queued", "pending", "running"])
+                Review.status.in_(["queued", "pending", "running"]),
             )
         )
         active_status = active_rev_check.scalars().first()
         if active_status:
             raise HTTPException(
                 status_code=400,
-                detail=f"Model configuration is locked while a Pull Request review is currently {active_status}. Please wait until the review completes."
+                detail=f"Model configuration is locked while a Pull Request review is currently {active_status}. Please wait until the review completes.",
             )
 
     # Validate model if assigned_model and assigned_key_id are provided
     if config.assigned_provider and config.assigned_model and config.assigned_key_id:
         from app.core.security import encryption_service
         from app.services.model_discovery import model_discovery_engine
-        
+
         # Get the API key to validate access
         db_key = await api_key_service.get_by_id(db, uuid.UUID(config.assigned_key_id))
         if not db_key or not db_key.is_valid:
-             raise HTTPException(status_code=400, detail="Invalid API key selected.")
-             
+            raise HTTPException(status_code=400, detail="Invalid API key selected.")
+
         try:
-             raw_key = encryption_service.decrypt(db_key.encrypted_key)
+            raw_key = encryption_service.decrypt(db_key.encrypted_key)
         except Exception:
-             raise HTTPException(status_code=500, detail="Failed to decrypt API key.")
-             
+            raise HTTPException(status_code=500, detail="Failed to decrypt API key.")
+
         # Allow deprecated assignment? Let's check if the model exists and is accessible.
-        models = await model_discovery_engine.get_available_models(config.assigned_provider, raw_key)
-        target_model = next((m for m in models if m["canonical_model_name"] == config.assigned_model or m.get("model_name") == config.assigned_model), None)
-        
+        models = await model_discovery_engine.get_available_models(
+            config.assigned_provider, raw_key
+        )
+        target_model = next(
+            (
+                m
+                for m in models
+                if m["canonical_model_name"] == config.assigned_model
+                or m.get("model_name") == config.assigned_model
+            ),
+            None,
+        )
+
         if not target_model:
-             raise HTTPException(status_code=400, detail=f"Model '{config.assigned_model}' not found in provider's available models.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{config.assigned_model}' not found in provider's available models.",
+            )
         if not target_model["accessible"]:
-             raise HTTPException(status_code=400, detail=f"Model '{config.assigned_model}' is currently inaccessible with your API key.")
-        
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{config.assigned_model}' is currently inaccessible with your API key.",
+            )
+
     # Update fields
     if config.reviews_enabled is not None:
         repo.reviews_enabled = config.reviews_enabled
@@ -538,7 +594,9 @@ async def update_repository_config(
         "is_private": repo.is_private,
         "reviews_enabled": repo.reviews_enabled,
         "total_reviews": total_reviews,
-        "last_synced_at": repo.last_synced_at.isoformat() if repo.last_synced_at else None,
+        "last_synced_at": (
+            repo.last_synced_at.isoformat() if repo.last_synced_at else None
+        ),
         "settings": repo.settings or {},
     }
 
@@ -560,7 +618,9 @@ async def refresh_installation(
         result = await repository_service.refresh_installation(db, current_user.id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to refresh installation: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to refresh installation: {e}"
+        )
 
 
 @router.get("/sync-runs", response_model=list[dict[str, Any]])
@@ -578,8 +638,7 @@ async def list_sync_runs(
     runs_result = await db.execute(
         select(SyncRun)
         .where(
-            (SyncRun.triggered_by == current_user.id)
-            | (SyncRun.triggered_by.is_(None))
+            (SyncRun.triggered_by == current_user.id) | (SyncRun.triggered_by.is_(None))
         )
         .order_by(SyncRun.started_at.desc())
         .limit(limit)
@@ -621,9 +680,13 @@ async def get_repository_status(
         raise HTTPException(status_code=400, detail="Invalid repository ID")
 
     try:
-        result = await repository_service.get_repository_status(db, rid, current_user.id)
+        result = await repository_service.get_repository_status(
+            db, rid, current_user.id
+        )
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get repository status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get repository status: {e}"
+        )

@@ -53,7 +53,10 @@ class ModelRouter:
             # Apply feature requirements filtering
             if reqs.get("supports_streaming") and not provider.supports_streaming:
                 continue
-            if reqs.get("supports_function_calling") and not provider.supports_function_calling:
+            if (
+                reqs.get("supports_function_calling")
+                and not provider.supports_function_calling
+            ):
                 continue
             if reqs.get("supports_vision") and not provider.supports_vision:
                 continue
@@ -61,27 +64,41 @@ class ModelRouter:
                 continue
 
             key = user_keys[provider.name]
-            model = preferred_model if (preferred_provider == provider.name and preferred_model) else provider.default_model
+            model = (
+                preferred_model
+                if (preferred_provider == provider.name and preferred_model)
+                else provider.default_model
+            )
 
             cost = cost_estimator.estimate(provider.name, 1000, 1000)
 
-            routes.append(ModelRoute(
-                provider=provider.name,
-                model=model,
-                litellm_model=f"{provider.litellm_provider}/{model}",
-                api_key_id=str(key.id),
-                estimated_cost_per_1k=cost,
-            ))
+            routes.append(
+                ModelRoute(
+                    provider=provider.name,
+                    model=model,
+                    litellm_model=f"{provider.litellm_provider}/{model}",
+                    api_key_id=str(key.id),
+                    estimated_cost_per_1k=cost,
+                )
+            )
 
         if preferred_provider:
-            routes.sort(key=lambda r: (0 if r.provider == preferred_provider else 1, r.estimated_cost_per_1k))
+            routes.sort(
+                key=lambda r: (
+                    0 if r.provider == preferred_provider else 1,
+                    r.estimated_cost_per_1k,
+                )
+            )
         else:
             routes.sort(key=lambda r: r.estimated_cost_per_1k)
 
         return routes
 
     async def get_available_routes(
-        self, db: AsyncSession, user_id: uuid.UUID, feature: str,
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        feature: str,
     ) -> list[ModelRoute]:
         return await self.route(db, user_id, feature)
 

@@ -46,8 +46,12 @@ class SyncRun(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 

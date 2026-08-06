@@ -6,7 +6,6 @@ Uses the shared RepoWalker for efficient filesystem access.
 """
 
 
-
 from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence._async_util import run_async
 from app.intelligence.base_detector import BaseDetector, DetectorResult
@@ -42,7 +41,7 @@ class QueueDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect queues and caches using the RepoWalker cache.
 
         Args:
@@ -56,12 +55,26 @@ class QueueDetector(BaseDetector):
 
         # Collect file content for analysis
         config_files = [
-            fp for fp in walker.file_paths
-            if any(fp.endswith(ext) for ext in [
-                ".py", ".js", ".ts", ".tsx", ".jsx",
-                ".go", ".java", ".rb", ".php",
-                ".yaml", ".yml", ".json", ".toml",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                fp.endswith(ext)
+                for ext in [
+                    ".py",
+                    ".js",
+                    ".ts",
+                    ".tsx",
+                    ".jsx",
+                    ".go",
+                    ".java",
+                    ".rb",
+                    ".php",
+                    ".yaml",
+                    ".yml",
+                    ".json",
+                    ".toml",
+                ]
+            )
         ]
 
         all_content = ""

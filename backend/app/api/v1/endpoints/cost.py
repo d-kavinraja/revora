@@ -72,4 +72,3 @@ async def estimate_cost(
         "estimated_cost_usd": estimated,
         "rates_per_1k": rates,
     }
-

@@ -54,6 +54,7 @@ async def enqueue_review_job(
         from sqlalchemy import select as sel
 
         from app.models.github import Repository
+
         repo_result = await session.execute(
             sel(Repository.id).where(Repository.github_id == repo_github_id)
         )
@@ -63,6 +64,7 @@ async def enqueue_review_job(
     if repo_id:
         from app.models.github import PullRequest as PRModel
         from app.models.review import Review as ReviewModel
+
         pr_find = await session.execute(
             select(PRModel).where(
                 PRModel.repo_id == repo_id,
@@ -82,9 +84,13 @@ async def enqueue_review_job(
                     # Supersede the in-flight run: cancel its jobs and
                     # executions, then reuse the same Review row below.
                     await _supersede_inflight(session, db_pr, payload, head_sha)
-                    logger.info(f"Superseding in-flight review for PR #{pr_number} on new commit")
+                    logger.info(
+                        f"Superseding in-flight review for PR #{pr_number} on new commit"
+                    )
                 else:
-                    logger.info(f"Active review exists for PR #{pr_number} — skipping webhook enqueue")
+                    logger.info(
+                        f"Active review exists for PR #{pr_number} — skipping webhook enqueue"
+                    )
                     return None
 
     # Insert with idempotency
@@ -109,11 +115,14 @@ async def enqueue_review_job(
 
     if job:
         await session.commit()
-        logger.info(f"Enqueued review job {job.id} for PR #{pr_number} (action={webhook_action})")
+        logger.info(
+            f"Enqueued review job {job.id} for PR #{pr_number} (action={webhook_action})"
+        )
 
         # Create/reuse the Review record immediately so UI shows "Pending"
         try:
             from app.github.shared import get_or_create_review_records
+
             installation_id = installation.get("id")
             if installation_id:
                 if webhook_action == "synchronize" and db_pr is not None:
@@ -134,11 +143,15 @@ async def enqueue_review_job(
 
         return job
     else:
-        logger.info(f"Duplicate job ignored: delivery={delivery_id} sha={head_sha[:12]}")
+        logger.info(
+            f"Duplicate job ignored: delivery={delivery_id} sha={head_sha[:12]}"
+        )
         return None
 
 
-async def _supersede_inflight(session, db_pr, payload: dict[str, Any], new_sha: str) -> None:
+async def _supersede_inflight(
+    session, db_pr, payload: dict[str, Any], new_sha: str
+) -> None:
     """Cancel in-flight jobs and executions for a PR before a new commit run.
 
     The Review row itself is untouched here — it is reset by
@@ -147,7 +160,9 @@ async def _supersede_inflight(session, db_pr, payload: dict[str, Any], new_sha: 
     from app.models.review import Review
     from app.services.review_execution_service import cancel_active_executions
 
-    await supersede_jobs(session, payload.get("repository", {}), db_pr.pr_number, new_sha)
+    await supersede_jobs(
+        session, payload.get("repository", {}), db_pr.pr_number, new_sha
+    )
 
     active_reviews = await session.execute(
         select(Review).where(
@@ -159,7 +174,9 @@ async def _supersede_inflight(session, db_pr, payload: dict[str, Any], new_sha: 
         await cancel_active_executions(session, rev.id)
 
 
-async def _reuse_latest_review_for_pr(session, db_pr, payload: dict[str, Any], installation_id: int, head_sha: str) -> None:
+async def _reuse_latest_review_for_pr(
+    session, db_pr, payload: dict[str, Any], installation_id: int, head_sha: str
+) -> None:
     """Reuse the latest Review row for a PR (synchronize event).
 
     Resets the row to 'pending', clears stale content, and creates a new
@@ -169,7 +186,10 @@ async def _reuse_latest_review_for_pr(session, db_pr, payload: dict[str, Any], i
     from app.services.review_execution_service import create_execution
 
     latest = await session.execute(
-        select(Review).where(Review.pr_id == db_pr.id).order_by(Review.created_at.desc()).limit(1)
+        select(Review)
+        .where(Review.pr_id == db_pr.id)
+        .order_by(Review.created_at.desc())
+        .limit(1)
     )
     db_review = latest.scalars().first()
 
@@ -177,7 +197,9 @@ async def _reuse_latest_review_for_pr(session, db_pr, payload: dict[str, Any], i
         db_review = Review(pr_id=db_pr.id, status="pending")
         session.add(db_review)
         await session.flush()
-        logger.info(f"Created Review record {db_review.id} for reused PR #{db_pr.pr_number}")
+        logger.info(
+            f"Created Review record {db_review.id} for reused PR #{db_pr.pr_number}"
+        )
 
     db_review.status = "pending"
     db_review.started_at = None
@@ -187,9 +209,13 @@ async def _reuse_latest_review_for_pr(session, db_pr, payload: dict[str, Any], i
     session.add(db_review)
     await session.flush()
 
-    await create_execution(session, db_review.id, trigger="webhook", commit_sha=head_sha)
+    await create_execution(
+        session, db_review.id, trigger="webhook", commit_sha=head_sha
+    )
     await session.commit()
-    logger.info(f"Reused Review {db_review.id} for synchronize on PR #{db_pr.pr_number}")
+    logger.info(
+        f"Reused Review {db_review.id} for synchronize on PR #{db_pr.pr_number}"
+    )
 
 
 async def supersede_jobs(
@@ -243,7 +269,9 @@ async def supersede_jobs(
 
     if count > 0:
         await session.commit()
-        logger.info(f"Superseded {count} job(s) for PR #{pr_number} (new SHA: {new_sha[:12]})")
+        logger.info(
+            f"Superseded {count} job(s) for PR #{pr_number} (new SHA: {new_sha[:12]})"
+        )
 
     return count
 
@@ -260,7 +288,8 @@ async def get_pending_jobs(session, limit: int = 1) -> list[ReviewJob]:
     """
     from sqlalchemy import text
 
-    stmt = text("""
+    stmt = text(
+        """
         SELECT j.id, j.repo_id, j.pr_number, j.head_sha, j.delivery_id, j.payload,
                j.attempt_count, j.created_at
         FROM review_jobs j
@@ -278,7 +307,8 @@ async def get_pending_jobs(session, limit: int = 1) -> list[ReviewJob]:
         ORDER BY j.created_at ASC
         LIMIT :limit
         FOR UPDATE SKIP LOCKED
-    """)
+    """
+    )
 
     result = await session.execute(stmt, {"limit": limit})
     rows = result.fetchall()
@@ -337,7 +367,9 @@ async def enqueue_lifecycle_job(
     if job:
         await session.commit()
         lifecycle_action = payload.get("_lifecycle", {}).get("action", "unknown")
-        logger.info(f"Enqueued lifecycle job ({lifecycle_action}) {job.id} for PR #{target_pr_number}")
+        logger.info(
+            f"Enqueued lifecycle job ({lifecycle_action}) {job.id} for PR #{target_pr_number}"
+        )
         return job
 
     return None

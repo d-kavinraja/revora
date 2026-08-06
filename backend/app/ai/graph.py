@@ -92,9 +92,19 @@ async def coordinator_agent(state: ReviewState) -> dict[str, Any]:
 
         prompt = COORDINATOR_PROMPT.format(
             pr_title=state.get("pr_title", ""),
-            bug_analysis="\n".join(bug_analysis) if bug_analysis else "No bug analysis available",
-            security_analysis="\n".join(security_analysis) if security_analysis else "No security analysis available",
-            performance_analysis="\n".join(performance_analysis) if performance_analysis else "No performance analysis available",
+            bug_analysis=(
+                "\n".join(bug_analysis) if bug_analysis else "No bug analysis available"
+            ),
+            security_analysis=(
+                "\n".join(security_analysis)
+                if security_analysis
+                else "No security analysis available"
+            ),
+            performance_analysis=(
+                "\n".join(performance_analysis)
+                if performance_analysis
+                else "No performance analysis available"
+            ),
         )
         result, _, _ = await llm_service.get_completion(
             user_id=uuid.UUID(state["user_id"]),

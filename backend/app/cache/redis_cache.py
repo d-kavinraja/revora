@@ -22,6 +22,7 @@ class RedisCache(BaseCache):
             return False
         try:
             import redis.asyncio as aioredis
+
             self._client = aioredis.from_url(
                 self._redis_url,
                 decode_responses=True,
@@ -78,7 +79,11 @@ class RedisCache(BaseCache):
         Uses SCAN to find matching keys, then DEL to remove them.
         Falls back to memory_cache pattern deletion.
         """
-        await memory_cache.delete_pattern(pattern) if hasattr(memory_cache, 'delete_pattern') else None
+        (
+            await memory_cache.delete_pattern(pattern)
+            if hasattr(memory_cache, "delete_pattern")
+            else None
+        )
         if not await self._ensure_client():
             return
         try:

@@ -20,9 +20,11 @@ class RetrievalEngine:
 
     def configure(self, config: RetrievalConfig) -> None:
         self._config = config
-        logger.info(f"RetrievalEngine configured: budget={config.budget}, "
-                     f"ranking={config.enable_ranking}, compression={config.enable_compression}, "
-                     f"cache={config.enable_cache}, fallback={config.enable_fallback}")
+        logger.info(
+            f"RetrievalEngine configured: budget={config.budget}, "
+            f"ranking={config.enable_ranking}, compression={config.enable_compression}, "
+            f"cache={config.enable_cache}, fallback={config.enable_fallback}"
+        )
 
     def register_retriever(self, retriever) -> None:
         self._retrievers.append(retriever)
@@ -76,14 +78,22 @@ class RetrievalEngine:
         elif retrieval_fallback.current_strategy != "graph_retrieval":
             result.fallback_used = retrieval_fallback.current_strategy
 
-        if self._config.enable_ranking and self._ranking_engine and not retrieval_fallback.is_failed():
+        if (
+            self._config.enable_ranking
+            and self._ranking_engine
+            and not retrieval_fallback.is_failed()
+        ):
             try:
                 ranked = await self._ranking_engine.rank(result.all_contexts())
                 self._apply_ranked(result, ranked)
             except Exception as e:
                 logger.warning(f"Ranking failed: {e}")
 
-        if self._config.enable_compression and self._compression_engine and not retrieval_fallback.is_failed():
+        if (
+            self._config.enable_compression
+            and self._compression_engine
+            and not retrieval_fallback.is_failed()
+        ):
             try:
                 await self._compression_engine.compress(result, self._config.budget)
             except Exception as e:
@@ -103,7 +113,9 @@ class RetrievalEngine:
 
         return result
 
-    async def _execute_with_graph(self, result: RetrievalResult, index: RepositoryIndex) -> None:
+    async def _execute_with_graph(
+        self, result: RetrievalResult, index: RepositoryIndex
+    ) -> None:
         if self._retrievers:
             tasks = []
             for retriever in self._retrievers:
@@ -127,7 +139,10 @@ class RetrievalEngine:
         if retrieval_fallback.should_use_graph():
             retrieval_fallback.escalate()
 
-        if retrieval_fallback.should_use_knowledge_base() or retrieval_fallback.should_use_static_analysis():
+        if (
+            retrieval_fallback.should_use_knowledge_base()
+            or retrieval_fallback.should_use_static_analysis()
+        ):
             self._fallback_to_basic(result)
             retrieval_fallback.escalate()
 
@@ -146,13 +161,15 @@ class RetrievalEngine:
         for fp in changed_files:
             content = read_file_content(repo_path, fp)
             if content:
-                result.changed_files.append(RetrievedContext(
-                    file_path=fp,
-                    content=content,
-                    relevance_score=1.0,
-                    source="changed_file",
-                    metadata={"tokens": len(content) // 4},
-                ))
+                result.changed_files.append(
+                    RetrievedContext(
+                        file_path=fp,
+                        content=content,
+                        relevance_score=1.0,
+                        source="changed_file",
+                        metadata={"tokens": len(content) // 4},
+                    )
+                )
 
         if index:
             import_related = get_related_files_from_imports(
@@ -202,7 +219,9 @@ class RetrievalEngine:
         else:
             result.related_files.append(ctx)
 
-    def _apply_ranked(self, result: RetrievalResult, ranked: list[RetrievedContext]) -> None:
+    def _apply_ranked(
+        self, result: RetrievalResult, ranked: list[RetrievedContext]
+    ) -> None:
         result.related_files.clear()
         result.test_files.clear()
         result.api_endpoints.clear()
@@ -223,7 +242,9 @@ class RetrievalEngine:
         result.total_tokens = total
         result.budget_used = round(total / max(result.budget_limit, 1), 2)
 
-    def _build_cache_key(self, repo_path: str, changed_files: list[str], diff_content: str | None = None) -> str:
+    def _build_cache_key(
+        self, repo_path: str, changed_files: list[str], diff_content: str | None = None
+    ) -> str:
         raw = f"{repo_path}:{sorted(changed_files)}:{diff_content or ''}:{self._config.budget}"
         return f"retrieval:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
@@ -231,7 +252,9 @@ class RetrievalEngine:
         cached = await redis_cache.get(key)
         if cached is not None:
             if isinstance(cached, dict):
-                result = RetrievalResult(**{k: v for k, v in cached.items() if k != "changed_files"})
+                result = RetrievalResult(
+                    **{k: v for k, v in cached.items() if k != "changed_files"}
+                )
                 result.cache_hit = True
                 return result
             if isinstance(cached, RetrievalResult):

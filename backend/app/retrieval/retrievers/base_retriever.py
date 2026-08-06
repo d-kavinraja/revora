@@ -10,16 +10,14 @@ logger = logging.getLogger(__name__)
 class BaseRetriever(ABC):
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @abstractmethod
     async def retrieve(
         self,
         config: RetrievalConfig,
         result: RetrievalResult,
-    ) -> list[RetrievedContext]:
-        ...
+    ) -> list[RetrievedContext]: ...
 
     async def safe_retrieve(
         self,

@@ -14,38 +14,75 @@ PRESET_BUDGETS = {
 
 DEFAULT_ALLOCATIONS = {
     "4K": {
-        "system": 200, "repo_summary": 200, "architecture": 100,
-        "rules": 100, "changed_files": 1200, "related_context": 1000,
-        "static_analysis": 200, "output_buffer": 1000,
+        "system": 200,
+        "repo_summary": 200,
+        "architecture": 100,
+        "rules": 100,
+        "changed_files": 1200,
+        "related_context": 1000,
+        "static_analysis": 200,
+        "output_buffer": 1000,
     },
     "8K": {
-        "system": 300, "repo_summary": 300, "architecture": 200,
-        "rules": 200, "changed_files": 2500, "related_context": 2000,
-        "static_analysis": 300, "output_buffer": 1200,
+        "system": 300,
+        "repo_summary": 300,
+        "architecture": 200,
+        "rules": 200,
+        "changed_files": 2500,
+        "related_context": 2000,
+        "static_analysis": 300,
+        "output_buffer": 1200,
     },
     "16K": {
-        "system": 500, "repo_summary": 500, "architecture": 500,
-        "rules": 300, "changed_files": 4000, "related_context": 5000,
-        "tests": 1000, "static_analysis": 500, "output_buffer": 1700,
+        "system": 500,
+        "repo_summary": 500,
+        "architecture": 500,
+        "rules": 300,
+        "changed_files": 4000,
+        "related_context": 5000,
+        "tests": 1000,
+        "static_analysis": 500,
+        "output_buffer": 1700,
     },
     "32K": {
-        "system": 1000, "repo_summary": 1000, "architecture": 1000,
-        "rules": 500, "changed_files": 8000, "related_context": 10000,
-        "tests": 2000, "static_analysis": 1000, "dependencies": 2000,
+        "system": 1000,
+        "repo_summary": 1000,
+        "architecture": 1000,
+        "rules": 500,
+        "changed_files": 8000,
+        "related_context": 10000,
+        "tests": 2000,
+        "static_analysis": 1000,
+        "dependencies": 2000,
         "output_buffer": 3500,
     },
     "64K": {
-        "system": 2000, "repo_summary": 2000, "architecture": 2000,
-        "rules": 1000, "changed_files": 15000, "related_context": 20000,
-        "tests": 4000, "static_analysis": 2000, "dependencies": 5000,
-        "impact_analysis": 3000, "output_buffer": 5000,
+        "system": 2000,
+        "repo_summary": 2000,
+        "architecture": 2000,
+        "rules": 1000,
+        "changed_files": 15000,
+        "related_context": 20000,
+        "tests": 4000,
+        "static_analysis": 2000,
+        "dependencies": 5000,
+        "impact_analysis": 3000,
+        "output_buffer": 5000,
     },
     "128K": {
-        "system": 4000, "repo_summary": 4000, "architecture": 3000,
-        "rules": 2000, "changed_files": 30000, "related_context": 40000,
-        "tests": 8000, "static_analysis": 4000, "dependencies": 10000,
-        "impact_analysis": 8000, "historical_context": 3000,
-        "security_context": 2000, "documentation": 3000,
+        "system": 4000,
+        "repo_summary": 4000,
+        "architecture": 3000,
+        "rules": 2000,
+        "changed_files": 30000,
+        "related_context": 40000,
+        "tests": 8000,
+        "static_analysis": 4000,
+        "dependencies": 10000,
+        "impact_analysis": 8000,
+        "historical_context": 3000,
+        "security_context": 2000,
+        "documentation": 3000,
         "output_buffer": 12000,
     },
 }
@@ -128,7 +165,9 @@ class TokenBudgetEngine:
         else:
             return dict(DEFAULT_ALLOCATIONS["128K"])
 
-    def set_custom_allocation(self, budget_label: str, allocations: dict[str, int]) -> None:
+    def set_custom_allocation(
+        self, budget_label: str, allocations: dict[str, int]
+    ) -> None:
         self._custom_allocations[budget_label.upper()] = allocations
         logger.info(f"Custom allocation set for {budget_label}: {allocations}")
 

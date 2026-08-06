@@ -24,7 +24,7 @@ class ArchitectureDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect architecture using the RepoWalker cache.
 
         Args:
@@ -82,7 +82,8 @@ class ArchitectureDetector(BaseDetector):
         has_services = "services" in all_dirs or "microservices" in all_dirs
         if has_services:
             service_files = [
-                fp for fp in walker.file_paths
+                fp
+                for fp in walker.file_paths
                 if "/services/" in fp or "/microservices/" in fp
             ]
             # Count unique service directories

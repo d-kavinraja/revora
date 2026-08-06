@@ -32,10 +32,14 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
     async with AsyncSessionLocal() as db:
         user = None
         if sender_github_id:
-            result = await db.execute(select(User).where(User.github_id == sender_github_id))
+            result = await db.execute(
+                select(User).where(User.github_id == sender_github_id)
+            )
             user = result.scalars().first()
         if not user and sender_login:
-            result = await db.execute(select(User).where(User.github_username == sender_login))
+            result = await db.execute(
+                select(User).where(User.github_username == sender_login)
+            )
             user = result.scalars().first()
 
         if not user:
@@ -45,7 +49,9 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
             )
             return
 
-        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == inst_id)
+        )
         db_inst = res.scalars().first()
         if not db_inst:
             db_inst = Installation(
@@ -61,7 +67,9 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
             db.add(db_inst)
             await db.commit()
             await db.refresh(db_inst)
-            print(f"Stored installation {inst_id} for user {user.email} (sender={sender_login})")
+            print(
+                f"Stored installation {inst_id} for user {user.email} (sender={sender_login})"
+            )
         else:
             db_inst.user_id = user.id
             db_inst.account_id = account_id
@@ -80,7 +88,9 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
 
         for r in payload.get("repositories", []):
             repo_gid = r.get("id")
-            res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+            res = await db.execute(
+                select(Repository).where(Repository.github_id == repo_gid)
+            )
             db_repo = res.scalars().first()
             if not db_repo:
                 db_repo = Repository(
@@ -92,7 +102,9 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                     reviews_enabled=True,
                 )
                 db.add(db_repo)
-                print(f"Created repository {r.get('full_name')} from installation payload.")
+                print(
+                    f"Created repository {r.get('full_name')} from installation payload."
+                )
             else:
                 db_repo.installation_id = db_inst.id
                 db_repo.name = r.get("name")
@@ -102,9 +114,13 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                 # Explicit re-add: clear the Removed marker, history stays attached.
                 if db_repo.removed_at is not None:
                     db_repo.removed_at = None
-                    print(f"Re-activated previously removed repository {r.get('full_name')}.")
+                    print(
+                        f"Re-activated previously removed repository {r.get('full_name')}."
+                    )
                 db.add(db_repo)
-                print(f"Re-linked repository {r.get('full_name')} to installation {db_inst.id}.")
+                print(
+                    f"Re-linked repository {r.get('full_name')} to installation {db_inst.id}."
+                )
         await db.commit()
 
 
@@ -114,10 +130,14 @@ async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str)
     inst_id = installation_payload.get("id")
 
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == inst_id)
+        )
         db_inst = res.scalars().first()
         if db_inst:
-            repos_res = await db.execute(select(Repository).where(Repository.installation_id == db_inst.id))
+            repos_res = await db.execute(
+                select(Repository).where(Repository.installation_id == db_inst.id)
+            )
             repos = repos_res.scalars().all()
             for r in repos:
                 # Keep installation_id for history attribution; the removed_at
@@ -126,7 +146,9 @@ async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str)
                 if r.removed_at is None:
                     r.removed_at = datetime.now(UTC)
                 db.add(r)
-                print(f"Marked repository {r.full_name} as removed due to app uninstallation.")
+                print(
+                    f"Marked repository {r.full_name} as removed due to app uninstallation."
+                )
 
             # Keep the installation row for history attribution; mark it
             # suspended so the sync engine stops trying to fetch it.
@@ -146,7 +168,9 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
     inst_id = installation_payload.get("id")
 
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == inst_id)
+        )
         db_inst = res.scalars().first()
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
@@ -154,7 +178,9 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
 
         for r in payload.get("repositories_added", []):
             repo_gid = r.get("id")
-            res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+            res = await db.execute(
+                select(Repository).where(Repository.github_id == repo_gid)
+            )
             db_repo = res.scalars().first()
             if not db_repo:
                 db_repo = Repository(
@@ -166,7 +192,9 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
                     reviews_enabled=True,
                 )
                 db.add(db_repo)
-                print(f"Added repository {r.get('full_name')} from repositories_added webhook event.")
+                print(
+                    f"Added repository {r.get('full_name')} from repositories_added webhook event."
+                )
             else:
                 db_repo.installation_id = db_inst.id
                 db_repo.name = r.get("name")
@@ -175,13 +203,17 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
                 db_repo.reviews_enabled = True
                 if db_repo.removed_at is not None:
                     db_repo.removed_at = None
-                    print(f"Re-activated previously removed repository {r.get('full_name')}.")
+                    print(
+                        f"Re-activated previously removed repository {r.get('full_name')}."
+                    )
                 db.add(db_repo)
                 print(f"Updated repository {r.get('full_name')} installation mapping.")
 
         for r in payload.get("repositories_removed", []):
             repo_gid = r.get("id")
-            res = await db.execute(select(Repository).where(Repository.github_id == repo_gid))
+            res = await db.execute(
+                select(Repository).where(Repository.github_id == repo_gid)
+            )
             db_repo = res.scalars().first()
             if db_repo:
                 # Keep installation_id for history attribution; removed_at
@@ -209,14 +241,18 @@ async def handle_installation_permissions(payload: dict[str, Any], delivery_id: 
     permissions = installation_payload.get("permissions", {})
 
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == inst_id)
+        )
         db_inst = res.scalars().first()
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
             return
         if permissions:
             db_inst.permissions = permissions
-        db_inst.permissions_ok = _has_required_permissions(db_inst.permissions, db_inst.suspended_at)
+        db_inst.permissions_ok = _has_required_permissions(
+            db_inst.permissions, db_inst.suspended_at
+        )
         db.add(db_inst)
         await db.commit()
         print(
@@ -224,14 +260,20 @@ async def handle_installation_permissions(payload: dict[str, Any], delivery_id: 
         )
 
 
-async def handle_installation_suspend(payload: dict[str, Any], delivery_id: str, suspended: bool):
+async def handle_installation_suspend(
+    payload: dict[str, Any], delivery_id: str, suspended: bool
+):
     """Handle installation.suspend / installation.unsuspend."""
-    print(f"[{delivery_id}] Handling installation.{'suspend' if suspended else 'unsuspend'} event...")
+    print(
+        f"[{delivery_id}] Handling installation.{'suspend' if suspended else 'unsuspend'} event..."
+    )
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
 
     async with AsyncSessionLocal() as db:
-        res = await db.execute(select(Installation).where(Installation.installation_id == inst_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == inst_id)
+        )
         db_inst = res.scalars().first()
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
@@ -240,7 +282,9 @@ async def handle_installation_suspend(payload: dict[str, Any], delivery_id: str,
             db_inst.suspended_at = datetime.now(UTC)
         else:
             db_inst.suspended_at = None
-        db_inst.permissions_ok = _has_required_permissions(db_inst.permissions, db_inst.suspended_at)
+        db_inst.permissions_ok = _has_required_permissions(
+            db_inst.permissions, db_inst.suspended_at
+        )
         db.add(db_inst)
         await db.commit()
         print(f"Installation {inst_id} suspended_at={db_inst.suspended_at}")
@@ -258,8 +302,11 @@ async def get_pr_diff(owner: str, repo: str, pr_number: int, token: str) -> str:
         return res.text
 
 
-async def handle_pr_opened(payload: dict[str, Any], delivery_id: str, action: str = "opened"):
+async def handle_pr_opened(
+    payload: dict[str, Any], delivery_id: str, action: str = "opened"
+):
     from app.queue.dispatcher import enqueue_review_job
+
     async with AsyncSessionLocal() as db:
         repository = payload.get("repository", {})
         pull_request = payload.get("pull_request", {})
@@ -275,7 +322,9 @@ async def handle_pr_opened(payload: dict[str, Any], delivery_id: str, action: st
             )
             db_repo = res.scalars().first()
             if db_repo is not None and db_repo.removed_at is not None:
-                print(f"[{delivery_id}] Ignoring PR #{pr_number} event for removed repository {db_repo.full_name}")
+                print(
+                    f"[{delivery_id}] Ignoring PR #{pr_number} event for removed repository {db_repo.full_name}"
+                )
                 return
 
         await enqueue_review_job(db, payload, delivery_id, webhook_action=action)
@@ -300,14 +349,16 @@ async def handle_pr_opened(payload: dict[str, Any], delivery_id: str, action: st
                         db_pr.status = "open"
                         db.add(db_pr)
                         await db.commit()
-                        print(f"[{delivery_id}] Marked PR #{pr_number} as open (reopened)")
+                        print(
+                            f"[{delivery_id}] Marked PR #{pr_number} as open (reopened)"
+                        )
                     elif action == "synchronize":
-                        db_pr.head_sha = pull_request.get("head", {}).get("sha", db_pr.head_sha)
+                        db_pr.head_sha = pull_request.get("head", {}).get(
+                            "sha", db_pr.head_sha
+                        )
                         db.add(db_pr)
                         await db.commit()
-        await github_service.invalidate_pr_cache(
-            repo_full_name, pr_number
-        )
+        await github_service.invalidate_pr_cache(repo_full_name, pr_number)
 
 
 async def handle_pr_closed(payload: dict[str, Any], delivery_id: str):
@@ -324,7 +375,9 @@ async def handle_pr_closed(payload: dict[str, Any], delivery_id: str):
         )
         db_repo = res.scalars().first()
         if db_repo and db_repo.removed_at is not None:
-            print(f"[{delivery_id}] Ignoring PR #{pr_number} close event for removed repository {db_repo.full_name}")
+            print(
+                f"[{delivery_id}] Ignoring PR #{pr_number} close event for removed repository {db_repo.full_name}"
+            )
             return
         if db_repo:
             pr_res = await db.execute(
@@ -350,30 +403,49 @@ class GitHubWebhookService:
     def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
         if not signature or not secret:
             return False
-        expected = "sha256=" + hmac.new(
-            secret.encode(),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(
+                secret.encode(),
+                payload,
+                hashlib.sha256,
+            ).hexdigest()
+        )
         return hmac.compare_digest(expected, signature)
 
     @staticmethod
-    async def process_webhook(event: str, action: str, payload: dict[str, Any], delivery_id: str):
-        print(f"Received webhook: event={event}, action={action}, delivery_id={delivery_id}")
+    async def process_webhook(
+        event: str, action: str, payload: dict[str, Any], delivery_id: str
+    ):
+        print(
+            f"Received webhook: event={event}, action={action}, delivery_id={delivery_id}"
+        )
 
         import json
+
         print(f"Webhook payload detail:\n{json.dumps(payload, indent=2)}")
 
         handlers = {
             ("pull_request", "opened"): lambda p, d: handle_pr_opened(p, d, "opened"),
-            ("pull_request", "reopened"): lambda p, d: handle_pr_opened(p, d, "reopened"),
-            ("pull_request", "synchronize"): lambda p, d: handle_pr_opened(p, d, "synchronize"),
+            ("pull_request", "reopened"): lambda p, d: handle_pr_opened(
+                p, d, "reopened"
+            ),
+            ("pull_request", "synchronize"): lambda p, d: handle_pr_opened(
+                p, d, "synchronize"
+            ),
             ("pull_request", "closed"): handle_pr_closed,
             ("installation", "created"): handle_installation_created,
             ("installation", "deleted"): handle_installation_deleted,
-            ("installation", "new_permissions_accepted"): handle_installation_permissions,
-            ("installation", "suspend"): lambda p, d: handle_installation_suspend(p, d, True),
-            ("installation", "unsuspend"): lambda p, d: handle_installation_suspend(p, d, False),
+            (
+                "installation",
+                "new_permissions_accepted",
+            ): handle_installation_permissions,
+            ("installation", "suspend"): lambda p, d: handle_installation_suspend(
+                p, d, True
+            ),
+            ("installation", "unsuspend"): lambda p, d: handle_installation_suspend(
+                p, d, False
+            ),
             ("installation_repositories", "added"): handle_installation_repositories,
             ("installation_repositories", "removed"): handle_installation_repositories,
         }
@@ -383,4 +455,3 @@ class GitHubWebhookService:
 
 
 github_webhook_service = GitHubWebhookService()
-

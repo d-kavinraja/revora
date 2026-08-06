@@ -1,4 +1,3 @@
-
 from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
@@ -32,9 +31,13 @@ class DependencyWeightScorer(BaseScorer):
         if total_edges == 0:
             return 0.3
 
-        max_edges = max(
-            len(import_graph.get_edges_to(n.id)) + len(import_graph.get_edges_from(n.id))
-            for n in import_graph.nodes
-        ) or 1
+        max_edges = (
+            max(
+                len(import_graph.get_edges_to(n.id))
+                + len(import_graph.get_edges_from(n.id))
+                for n in import_graph.nodes
+            )
+            or 1
+        )
 
         return min(1.0, (incoming * 1.5 + outgoing * 0.5) / max_edges)

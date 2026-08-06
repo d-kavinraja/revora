@@ -1,15 +1,37 @@
-
 from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
 
 SECURITY_KEYWORDS = [
-    "auth", "login", "password", "token", "jwt", "oauth",
-    "permission", "role", "rbac", "cors", "csrf", "xss",
-    "injection", "sanitize", "encrypt", "decrypt", "hash",
-    "secret", "ssl", "tls", "https", "certificate",
-    "rate.limit", "throttle", "firewall", "audit",
-    "validator", "middleware", "guard",
+    "auth",
+    "login",
+    "password",
+    "token",
+    "jwt",
+    "oauth",
+    "permission",
+    "role",
+    "rbac",
+    "cors",
+    "csrf",
+    "xss",
+    "injection",
+    "sanitize",
+    "encrypt",
+    "decrypt",
+    "hash",
+    "secret",
+    "ssl",
+    "tls",
+    "https",
+    "certificate",
+    "rate.limit",
+    "throttle",
+    "firewall",
+    "audit",
+    "validator",
+    "middleware",
+    "guard",
 ]
 
 

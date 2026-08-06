@@ -9,13 +9,19 @@ def build_import_graph(repo_path: str) -> CodeGraph:
     file_imports: dict[str, set[str]] = {}
 
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}
+        ]
         for f in files:
             fp = os.path.join(root, f)
             rel_path = os.path.relpath(fp, repo_path)
             file_id = f"file:{rel_path}"
 
-            graph.nodes.append(GraphNode(id=file_id, type="file", name=f, file_path=rel_path))
+            graph.nodes.append(
+                GraphNode(id=file_id, type="file", name=f, file_path=rel_path)
+            )
 
             if f.endswith((".py",)):
                 imports = _parse_python_imports(fp)
@@ -30,8 +36,12 @@ def build_import_graph(repo_path: str) -> CodeGraph:
             for imp in imports:
                 target_id = f"module:{imp}"
                 if not any(n.id == target_id for n in graph.nodes):
-                    graph.nodes.append(GraphNode(id=target_id, type="module", name=imp, file_path=""))
-                graph.edges.append(GraphEdge(source=file_id, target=target_id, type="imports"))
+                    graph.nodes.append(
+                        GraphNode(id=target_id, type="module", name=imp, file_path="")
+                    )
+                graph.edges.append(
+                    GraphEdge(source=file_id, target=target_id, type="imports")
+                )
 
     return graph
 

@@ -31,7 +31,9 @@ class LlmTokenUsage(Base):
     total_cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Context
-    feature: Mapped[str] = mapped_column(String(50), nullable=False)  # "code_review", etc.
+    feature: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # "code_review", etc.
     review_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("reviews.id", ondelete="SET NULL"), nullable=True
     )
@@ -51,7 +53,9 @@ class CostBudget(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    budget_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "daily", "monthly"
+    budget_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "daily", "monthly"
     limit_usd: Mapped[float] = mapped_column(Float, nullable=False)
     spent_usd: Mapped[float] = mapped_column(Float, default=0.0)
 
@@ -61,4 +65,6 @@ class CostBudget(Base):
 
     # State
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    reset_at: Mapped[str | None] = mapped_column(String(30), nullable=True)  # ISO datetime
+    reset_at: Mapped[str | None] = mapped_column(
+        String(30), nullable=True
+    )  # ISO datetime

@@ -40,7 +40,7 @@ class DependencyAnalyzer(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect package managers using the RepoWalker cache.
 
         Args:
@@ -50,6 +50,7 @@ class DependencyAnalyzer(BaseDetector):
             DetectorResult with package manager info.
         """
         import os as _os
+
         detected_pm: str | None = None
         lock_file: str | None = None
 
@@ -57,8 +58,10 @@ class DependencyAnalyzer(BaseDetector):
         for pm_name, pm_info in PACKAGE_MANAGERS.items():
             if pm_info["lock"]:
                 lock_files = [
-                    fp for fp in walker.file_paths
-                    if fp.endswith(("/" + pm_info["lock"], _os.sep + pm_info["lock"])) or fp == pm_info["lock"]
+                    fp
+                    for fp in walker.file_paths
+                    if fp.endswith(("/" + pm_info["lock"], _os.sep + pm_info["lock"]))
+                    or fp == pm_info["lock"]
                 ]
                 if lock_files:
                     detected_pm = pm_name
@@ -70,8 +73,12 @@ class DependencyAnalyzer(BaseDetector):
             for pm_name, pm_info in PACKAGE_MANAGERS.items():
                 if pm_info["config"]:
                     config_files = [
-                        fp for fp in walker.file_paths
-                        if fp.endswith(("/" + pm_info["config"], _os.sep + pm_info["config"])) or fp == pm_info["config"]
+                        fp
+                        for fp in walker.file_paths
+                        if fp.endswith(
+                            ("/" + pm_info["config"], _os.sep + pm_info["config"])
+                        )
+                        or fp == pm_info["config"]
                     ]
                     if config_files:
                         detected_pm = pm_name

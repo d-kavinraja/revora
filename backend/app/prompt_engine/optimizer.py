@@ -31,7 +31,9 @@ class PromptOptimizer:
 
         optimized = {}
 
-        sorted_sections = sorted(sections.values(), key=lambda s: s.priority, reverse=True)
+        sorted_sections = sorted(
+            sections.values(), key=lambda s: s.priority, reverse=True
+        )
 
         for section in sorted_sections:
             if section.name == "system_instructions":
@@ -67,7 +69,7 @@ class PromptOptimizer:
         if len(content) <= max_chars:
             return content
 
-        truncated = content[:max_chars - 50]
+        truncated = content[: max_chars - 50]
         last_newline = truncated.rfind("\n")
         if last_newline > max_chars * 0.8:
             truncated = truncated[:last_newline]

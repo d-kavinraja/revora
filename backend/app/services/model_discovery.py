@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 _MODEL_CACHE: dict[str, dict[str, Any]] = {}
 CACHE_TTL = timedelta(hours=1)
 
+
 def _hash_api_key(raw_key: str) -> str:
     """Hash API key for secure cache storage."""
     return hashlib.sha256(raw_key.encode()).hexdigest()[:16]
+
 
 class ModelDiscoveryEngine:
     """
@@ -42,11 +44,36 @@ class ModelDiscoveryEngine:
 
     # Terms indicating a model is not a chat model
     NON_CHAT_EXCLUSIONS: ClassVar[list[str]] = [
-        "dall-e", "whisper", "embedding", "embed", "tts", "veo", "imagen", "lyria",
-        "moderation", "speech", "audio", "video", "clip", "rerank",
-        "image-generation", "image-preview", "1024-x", "1536-x", "512-x",
-        "learnlm", "aqa", "bison", "chat-bison", "text-bison", "gecko",
-        "reward", "guardrail", "bge-", "deplot", "diffusion"
+        "dall-e",
+        "whisper",
+        "embedding",
+        "embed",
+        "tts",
+        "veo",
+        "imagen",
+        "lyria",
+        "moderation",
+        "speech",
+        "audio",
+        "video",
+        "clip",
+        "rerank",
+        "image-generation",
+        "image-preview",
+        "1024-x",
+        "1536-x",
+        "512-x",
+        "learnlm",
+        "aqa",
+        "bison",
+        "chat-bison",
+        "text-bison",
+        "gecko",
+        "reward",
+        "guardrail",
+        "bge-",
+        "deplot",
+        "diffusion",
     ]
 
     RECOMMENDED_MODELS: ClassVar[list[str]] = [
@@ -65,16 +92,36 @@ class ModelDiscoveryEngine:
     # Gemini 2.0/2.5 models have severe rate limits on both free and paid tiers
     # Excluding them entirely - users should use 1.5, 3, or Gemma models
     GEMINI_RATE_LIMITED_MODELS: ClassVar[list[str]] = [
-        "gemini-2.0", "gemini-2.5", "gemini-2.0-flash", "gemini-2.5-flash",
-        "gemini-2.5-pro", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite",
+        "gemini-2.0",
+        "gemini-2.5",
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash-lite",
     ]
 
-    DEPRECATED_TERMS: ClassVar[list[str]] = ["-001", "-0314", "-0613", "legacy", "deprecated"]
-    PREVIEW_TERMS: ClassVar[list[str]] = ["preview", "exp-", "experimental", "rc", "alpha", "beta"]
+    DEPRECATED_TERMS: ClassVar[list[str]] = [
+        "-001",
+        "-0314",
+        "-0613",
+        "legacy",
+        "deprecated",
+    ]
+    PREVIEW_TERMS: ClassVar[list[str]] = [
+        "preview",
+        "exp-",
+        "experimental",
+        "rc",
+        "alpha",
+        "beta",
+    ]
     ENTERPRISE_TERMS: ClassVar[list[str]] = ["enterprise", "provisioned"]
 
     @classmethod
-    async def get_available_models(cls, provider: str, raw_key: str) -> list[dict[str, Any]]:
+    async def get_available_models(
+        cls, provider: str, raw_key: str
+    ) -> list[dict[str, Any]]:
         """
         Get enriched model metadata for a specific provider and API key.
         Uses caching to prevent excessive API calls.
@@ -96,12 +143,20 @@ class ModelDiscoveryEngine:
             if litellm_prov == "nvidia_nim":
                 try:
                     import httpx
+
                     headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
                     async with httpx.AsyncClient(timeout=10.0) as client:
-                        resp = await client.get("https://integrate.api.nvidia.com/v1/models", headers=headers)
+                        resp = await client.get(
+                            "https://integrate.api.nvidia.com/v1/models",
+                            headers=headers,
+                        )
                         if resp.status_code in (200, 401, 403):
                             data = resp.json().get("data", [])
-                            live_models = [m["id"] for m in data if isinstance(m, dict) and "id" in m]
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict) and "id" in m
+                            ]
                 except Exception as e:
                     logger.warning(f"Direct NVIDIA API model fetch failed: {e}")
 
@@ -128,7 +183,9 @@ class ModelDiscoveryEngine:
             error_str = str(e).lower()
             # Rate limiting is not a permanent failure - return empty but don't cache
             if "429" in error_str or "rate" in error_str or "quota" in error_str:
-                logger.warning(f"Rate limited during model discovery for '{provider}': {e}")
+                logger.warning(
+                    f"Rate limited during model discovery for '{provider}': {e}"
+                )
                 return []
             logger.warning(f"Live model fetch failed for provider '{provider}': {e}")
             return []
@@ -159,7 +216,9 @@ class ModelDiscoveryEngine:
             canonical_registry.register(c_model)
             return c_model.model_dump()
 
-        validated_models = await asyncio.gather(*(verify_and_update(m) for m in enriched_models))
+        validated_models = await asyncio.gather(
+            *(verify_and_update(m) for m in enriched_models)
+        )
 
         # Filter out models that failed the quota check
         final_models = [m for m in validated_models if m["accessible"]]
@@ -174,10 +233,7 @@ class ModelDiscoveryEngine:
         final_models.sort(key=get_model_priority)
 
         # Update cache with hashed key
-        _MODEL_CACHE[cache_key] = {
-            "timestamp": now,
-            "models": final_models
-        }
+        _MODEL_CACHE[cache_key] = {"timestamp": now, "models": final_models}
 
         return final_models
 
@@ -206,7 +262,9 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"groq/{canonical_model_name}"
         elif provider_lower == "grok" and not model_name.startswith("xai/"):
             litellm_model_name = f"xai/{canonical_model_name}"
-        elif provider_lower == "openrouter" and not model_name.startswith("openrouter/"):
+        elif provider_lower == "openrouter" and not model_name.startswith(
+            "openrouter/"
+        ):
             litellm_model_name = f"openrouter/{canonical_model_name}"
         elif provider_lower == "azure_openai" and not model_name.startswith("azure/"):
             litellm_model_name = f"azure/{canonical_model_name}"
@@ -226,11 +284,19 @@ class ModelDiscoveryEngine:
         # Check litellm model cost / info mapping if available
         info = litellm.model_cost.get(litellm_model_name, {})
         if not info and litellm_model_name != canonical_model_name:
-             info = litellm.model_cost.get(canonical_model_name, {})
+            info = litellm.model_cost.get(canonical_model_name, {})
 
         context_window = info.get("max_tokens") or info.get("max_input_tokens") or None
-        input_cost = info.get("input_cost_per_token") or info.get("input_cost_per_prompt_token") or 0.0
-        output_cost = info.get("output_cost_per_token") or info.get("output_cost_per_completion_token") or 0.0
+        input_cost = (
+            info.get("input_cost_per_token")
+            or info.get("input_cost_per_prompt_token")
+            or 0.0
+        )
+        output_cost = (
+            info.get("output_cost_per_token")
+            or info.get("output_cost_per_completion_token")
+            or 0.0
+        )
 
         supports_vision = info.get("supports_vision", False)
         supports_function_calling = info.get("supports_function_calling", False)
@@ -264,11 +330,13 @@ class ModelDiscoveryEngine:
             supports_vision=supports_vision,
             supports_reasoning="reasoning" in m_lower or "o1" in m_lower,
             status=status,
-            validation_timestamp=datetime.now(UTC).isoformat()
+            validation_timestamp=datetime.now(UTC).isoformat(),
         )
 
     @classmethod
-    async def verify_model_quota(cls, canonical_model: CanonicalModel, raw_key: str) -> bool:
+    async def verify_model_quota(
+        cls, canonical_model: CanonicalModel, raw_key: str
+    ) -> bool:
         """
         Executes a 1-token smoke test to verify if the API key has quota for this model.
         Returns True if successful, False if 404/unsupported.
@@ -281,29 +349,44 @@ class ModelDiscoveryEngine:
                     messages=[{"role": "user", "content": "hi"}],
                     api_key=raw_key,
                     max_tokens=1,
-                    drop_params=True
+                    drop_params=True,
                 ),
-                timeout=5
+                timeout=5,
             )
             return True
         except Exception as e:
             error_str = str(e).lower()
-            if "404" in error_str or "not found" in error_str or "unsupported" in error_str:
-                logger.warning(f"Model {canonical_model.canonical_model_name} not supported: {e}")
+            if (
+                "404" in error_str
+                or "not found" in error_str
+                or "unsupported" in error_str
+            ):
+                logger.warning(
+                    f"Model {canonical_model.canonical_model_name} not supported: {e}"
+                )
                 return False
 
             # If it fails due to transient 403, 429, timeout or server error, retain model as accessible
-            logger.info(f"Smoke test soft failure for {canonical_model.canonical_model_name}: {e}")
+            logger.info(
+                f"Smoke test soft failure for {canonical_model.canonical_model_name}: {e}"
+            )
             return True
 
     @classmethod
-    async def validate_model_access(cls, provider: str, model_name: str, raw_key: str) -> bool:
+    async def validate_model_access(
+        cls, provider: str, model_name: str, raw_key: str
+    ) -> bool:
         """
         Validates if a specific model is accessible with the given key.
         """
         available = await cls.get_available_models(provider, raw_key)
         for m in available:
-            if model_name in [m["canonical_model_name"], m["litellm_model_name"], m["provider_model_name"], m.get("model_name", "")]:
+            if model_name in [
+                m["canonical_model_name"],
+                m["litellm_model_name"],
+                m["provider_model_name"],
+                m.get("model_name", ""),
+            ]:
                 return m["accessible"] and not m["deprecated"]
         return False
 
@@ -315,5 +398,5 @@ class ModelDiscoveryEngine:
         cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
         _MODEL_CACHE.pop(cache_key, None)
 
-model_discovery_engine = ModelDiscoveryEngine()
 
+model_discovery_engine = ModelDiscoveryEngine()

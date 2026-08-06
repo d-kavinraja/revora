@@ -27,6 +27,7 @@ async def test_create_api_key(client: TestClient, test_db: AsyncSession):
     assert data["masked_key"] == "sk-1...cdef"
     assert "api_key" not in data
 
+
 @pytest.mark.asyncio
 async def test_api_keys_nvidia_prevalidation(client: TestClient, test_db: AsyncSession):
     # Missing nvapi-
@@ -36,11 +37,15 @@ async def test_api_keys_nvidia_prevalidation(client: TestClient, test_db: AsyncS
     )
     assert response.status_code == 422
     assert "nvapi-" in response.json()["detail"]
-    
+
     # Valid nvapi-
     response = client.post(
         "/api/v1/api-keys",
-        json={"provider": "nvidia", "label": "test", "api_key": "nvapi-1234567890abcdef"},
+        json={
+            "provider": "nvidia",
+            "label": "test",
+            "api_key": "nvapi-1234567890abcdef",
+        },
     )
     assert response.status_code == 201
 
@@ -55,6 +60,7 @@ async def test_api_keys_nvidia_prevalidation(client: TestClient, test_db: AsyncS
     # Decrypt and verify
     decrypted = encryption_service.decrypt(db_key.encrypted_key)
     assert decrypted == "nvapi-1234567890abcdef"
+
 
 @pytest.mark.asyncio
 async def test_list_api_keys(client: TestClient, test_db: AsyncSession, mock_user):
@@ -77,6 +83,7 @@ async def test_list_api_keys(client: TestClient, test_db: AsyncSession, mock_use
     assert data[0]["provider"] == "gemini"
     assert data[0]["label"] == "Gemini Key"
     assert data[0]["masked_key"] == "gemi...-999"
+
 
 @pytest.mark.asyncio
 async def test_update_api_key(client: TestClient, test_db: AsyncSession, mock_user):
@@ -109,6 +116,7 @@ async def test_update_api_key(client: TestClient, test_db: AsyncSession, mock_us
     decrypted = encryption_service.decrypt(key.encrypted_key)
     assert decrypted == "newgroqkey12345"
 
+
 @pytest.mark.asyncio
 async def test_delete_api_key(client: TestClient, test_db: AsyncSession, mock_user):
     encrypted = encryption_service.encrypt("testkey")
@@ -130,9 +138,12 @@ async def test_delete_api_key(client: TestClient, test_db: AsyncSession, mock_us
     db_key = result.scalars().first()
     assert db_key is None
 
+
 @pytest.mark.asyncio
 @patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
-async def test_test_api_key_valid(mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user):
+async def test_test_api_key_valid(
+    mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user
+):
     # Setup mock: to_thread returns a list of models (key is valid)
     mock_to_thread.return_value = ["gpt-4o", "gpt-4o-mini"]
 
@@ -156,11 +167,16 @@ async def test_test_api_key_valid(mock_to_thread, client: TestClient, test_db: A
     await test_db.refresh(key)
     assert key.is_valid is True
 
+
 @pytest.mark.asyncio
 @patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
-async def test_test_api_key_invalid(mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user):
+async def test_test_api_key_invalid(
+    mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user
+):
     # Setup mock: to_thread raises an auth error (key is invalid)
-    mock_to_thread.side_effect = Exception("Invalid API Key credentials — 401 unauthorized")
+    mock_to_thread.side_effect = Exception(
+        "Invalid API Key credentials — 401 unauthorized"
+    )
 
     encrypted = encryption_service.encrypt("sk-bad-key-0000000000000")
     key = ApiKey(

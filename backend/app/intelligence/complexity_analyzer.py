@@ -16,17 +16,88 @@ if TYPE_CHECKING:
 
 # Complexity-increasing keywords by language
 COMPLEXITY_KEYWORDS = {
-    "python": ["if ", "elif ", "else:", "for ", "while ", "try:", "except", "with ", "and ", "or ", "lambda "],
-    "javascript": ["if ", "else ", "for ", "while ", "switch ", "case ", "catch ", "&&", "||", "?.", "??"],
-    "typescript": ["if ", "else ", "for ", "while ", "switch ", "case ", "catch ", "&&", "||", "?.", "??"],
+    "python": [
+        "if ",
+        "elif ",
+        "else:",
+        "for ",
+        "while ",
+        "try:",
+        "except",
+        "with ",
+        "and ",
+        "or ",
+        "lambda ",
+    ],
+    "javascript": [
+        "if ",
+        "else ",
+        "for ",
+        "while ",
+        "switch ",
+        "case ",
+        "catch ",
+        "&&",
+        "||",
+        "?.",
+        "??",
+    ],
+    "typescript": [
+        "if ",
+        "else ",
+        "for ",
+        "while ",
+        "switch ",
+        "case ",
+        "catch ",
+        "&&",
+        "||",
+        "?.",
+        "??",
+    ],
     "go": ["if ", "else ", "for ", "switch ", "select ", "case ", "||", "&&"],
-    "java": ["if ", "else ", "for ", "while ", "switch ", "case ", "catch ", "&&", "||", "?:"],
+    "java": [
+        "if ",
+        "else ",
+        "for ",
+        "while ",
+        "switch ",
+        "case ",
+        "catch ",
+        "&&",
+        "||",
+        "?:",
+    ],
     "rust": ["if ", "else ", "for ", "while ", "match ", "loop ", "&&", "||", "?"],
-    "ruby": ["if ", "elsif ", "else ", "unless ", "while ", "until ", "for ", "case ", "when ", "&&", "||", "and ", "or "],
+    "ruby": [
+        "if ",
+        "elsif ",
+        "else ",
+        "unless ",
+        "while ",
+        "until ",
+        "for ",
+        "case ",
+        "when ",
+        "&&",
+        "||",
+        "and ",
+        "or ",
+    ],
 }
 
 # File extensions to analyze
-COMPLEXITY_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".rb", ".rs"}
+COMPLEXITY_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".go",
+    ".java",
+    ".rb",
+    ".rs",
+}
 
 
 class ComplexityAnalyzer(BaseDetector):
@@ -40,7 +111,7 @@ class ComplexityAnalyzer(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Analyze code complexity using the RepoWalker cache.
 
         Args:
@@ -55,7 +126,8 @@ class ComplexityAnalyzer(BaseDetector):
 
         # Collect code files
         code_files = [
-            fp for fp in walker.file_paths
+            fp
+            for fp in walker.file_paths
             if any(fp.endswith(ext) for ext in COMPLEXITY_EXTENSIONS)
         ]
 
@@ -76,17 +148,21 @@ class ComplexityAnalyzer(BaseDetector):
                 complexity += content.count(keyword)
 
             # Count functions/methods (rough estimate)
-            func_count = len(re.findall(r"def \w+|function \w+|func \w+|fn \w+", content))
+            func_count = len(
+                re.findall(r"def \w+|function \w+|func \w+|fn \w+", content)
+            )
 
             total_complexity += complexity
 
             if complexity > 10:  # Only report files with meaningful complexity
-                file_complexities.append({
-                    "file": fp,
-                    "complexity": complexity,
-                    "functions": func_count,
-                    "language": language,
-                })
+                file_complexities.append(
+                    {
+                        "file": fp,
+                        "complexity": complexity,
+                        "functions": func_count,
+                        "language": language,
+                    }
+                )
 
         # Sort by complexity descending
         file_complexities.sort(key=lambda x: x["complexity"], reverse=True)

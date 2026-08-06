@@ -27,7 +27,9 @@ async def record_stage(
         stage=stage,
         status=status,
         started_at=datetime.now(UTC) if status == "running" else None,
-        completed_at=datetime.now(UTC) if status in ("completed", "failed", "skipped") else None,
+        completed_at=(
+            datetime.now(UTC) if status in ("completed", "failed", "skipped") else None
+        ),
         duration_ms=duration_ms,
         message=message,
         metrics=metrics or {},
@@ -51,5 +53,7 @@ async def update_stage_duration(db, review_id: UUID, stage: str, duration_ms: fl
     entry = result.scalars().first()
     if entry:
         entry.duration_ms = duration_ms
-        entry.completed_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        entry.completed_at = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        )
         await db.flush()

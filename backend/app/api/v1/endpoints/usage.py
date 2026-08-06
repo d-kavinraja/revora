@@ -28,12 +28,14 @@ async def require_usage_enabled():
             detail={
                 "status": "disabled",
                 "message": "Usage analytics are temporarily disabled while we redesign model-level pricing. "
-                          "No data has been lost; this feature will be re-enabled in a future release.",
+                "No data has been lost; this feature will be re-enabled in a future release.",
             },
         )
 
 
-def _parse_period(period: str, start_date: datetime | None = None, end_date: datetime | None = None):
+def _parse_period(
+    period: str, start_date: datetime | None = None, end_date: datetime | None = None
+):
     if period == "custom" and start_date and end_date:
         return start_date, end_date
     now = datetime.now(UTC)
@@ -66,7 +68,15 @@ async def get_usage_summary(
         db, current_user.id, start, end, provider, model, api_key_id, repo_id
     )
     records = await token_manager.get_usage_by_user(
-        db, current_user.id, start, end, provider, model, api_key_id, repo_id, limit=10000
+        db,
+        current_user.id,
+        start,
+        end,
+        provider,
+        model,
+        api_key_id,
+        repo_id,
+        limit=10000,
     )
 
     return UsageSummary(
@@ -101,7 +111,9 @@ async def get_usage_trend(
         now = end_date
     else:
         now = datetime.now(UTC)
-        start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = (now - timedelta(days=days - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         end_date = now
 
     daily_data = await token_manager.get_daily_trend(
@@ -113,22 +125,22 @@ async def get_usage_trend(
 
     trend = []
     for i in range(days):
-        day_start = (now - timedelta(days=days-1-i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_start = (now - timedelta(days=days - 1 - i)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         date_str = day_start.strftime("%Y-%m-%d")
-        
+
         if date_str in daily_map:
-            trend.append(DailyCost(
-                date=date_str,
-                cost_usd=round(daily_map[date_str]["cost_usd"], 6),
-                tokens=daily_map[date_str]["tokens"]
-            ))
+            trend.append(
+                DailyCost(
+                    date=date_str,
+                    cost_usd=round(daily_map[date_str]["cost_usd"], 6),
+                    tokens=daily_map[date_str]["tokens"],
+                )
+            )
         else:
-            trend.append(DailyCost(
-                date=date_str,
-                cost_usd=0.0,
-                tokens=0
-            ))
-            
+            trend.append(DailyCost(date=date_str, cost_usd=0.0, tokens=0))
+
     return list(reversed(trend))
 
 
@@ -166,9 +178,16 @@ async def get_usage_records(
     _: None = Depends(require_usage_enabled),
 ):
     records = await token_manager.get_usage_by_user(
-        db, current_user.id, start=start_date, end=end_date, 
-        provider=provider, model=model, 
-        api_key_id=api_key_id, repo_id=repo_id, limit=limit, offset=offset
+        db,
+        current_user.id,
+        start=start_date,
+        end=end_date,
+        provider=provider,
+        model=model,
+        api_key_id=api_key_id,
+        repo_id=repo_id,
+        limit=limit,
+        offset=offset,
     )
     return records
 
@@ -202,7 +221,10 @@ async def update_budget(
     _: None = Depends(require_usage_enabled),
 ):
     import uuid
-    budget = await cost_estimator.update_budget(db, uuid.UUID(budget_id), data.model_dump(exclude_unset=True))
+
+    budget = await cost_estimator.update_budget(
+        db, uuid.UUID(budget_id), data.model_dump(exclude_unset=True)
+    )
     if not budget:
         raise HTTPException(status_code=404, detail="Budget not found")
     return budget
@@ -216,7 +238,7 @@ async def delete_budget(
     _: None = Depends(require_usage_enabled),
 ):
     import uuid
+
     deleted = await cost_estimator.delete_budget(db, uuid.UUID(budget_id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Budget not found")
-

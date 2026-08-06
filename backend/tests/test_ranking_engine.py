@@ -53,8 +53,10 @@ class TestRankingEngine:
 
     async def test_rank_single_context(self):
         ctx = RetrievedContext(
-            file_path="test.py", content="x = 1",
-            relevance_score=0.5, source="test",
+            file_path="test.py",
+            content="x = 1",
+            relevance_score=0.5,
+            source="test",
         )
         ranked = await ranking_engine.rank([ctx])
         assert len(ranked) == 1
@@ -75,13 +77,17 @@ class TestRankingEngine:
         scorer = GraphDistanceScorer()
 
         close = RetrievedContext(
-            file_path="a.py", content="x=1",
-            relevance_score=0.5, source="changed_file",
+            file_path="a.py",
+            content="x=1",
+            relevance_score=0.5,
+            source="changed_file",
             metadata={"graph_depth": 0},
         )
         far = RetrievedContext(
-            file_path="z.py", content="x=1",
-            relevance_score=0.5, source="documentation",
+            file_path="z.py",
+            content="x=1",
+            relevance_score=0.5,
+            source="documentation",
             metadata={"graph_depth": 5},
         )
 
@@ -93,12 +99,16 @@ class TestRankingEngine:
         scorer = FileImportanceScorer()
 
         main_file = RetrievedContext(
-            file_path="src/main.py", content="x=1",
-            relevance_score=0.5, source="test",
+            file_path="src/main.py",
+            content="x=1",
+            relevance_score=0.5,
+            source="test",
         )
         obscure = RetrievedContext(
-            file_path="vendor/lib/helper.py", content="x=1",
-            relevance_score=0.5, source="test",
+            file_path="vendor/lib/helper.py",
+            content="x=1",
+            relevance_score=0.5,
+            source="test",
         )
 
         main_score = await scorer.score(main_file)
@@ -128,13 +138,17 @@ class TestRankingEngine:
 
         contexts = [
             RetrievedContext(
-                file_path="a.py", content="x=1",
-                relevance_score=0.5, source="changed_file",
+                file_path="a.py",
+                content="x=1",
+                relevance_score=0.5,
+                source="changed_file",
                 metadata={"graph_depth": 0},
             ),
             RetrievedContext(
-                file_path="b.py", content="x=1",
-                relevance_score=0.5, source="documentation",
+                file_path="b.py",
+                content="x=1",
+                relevance_score=0.5,
+                source="documentation",
                 metadata={"graph_depth": 5},
             ),
         ]

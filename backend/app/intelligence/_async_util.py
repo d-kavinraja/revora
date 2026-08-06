@@ -1,4 +1,5 @@
 """Utility for running async functions from sync legacy interfaces."""
+
 import asyncio
 import concurrent.futures
 

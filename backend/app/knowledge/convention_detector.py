@@ -36,11 +36,13 @@ def _detect_indentation(repo_path: str) -> str:
             if not f.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java")):
                 continue
             try:
-                with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                with open(
+                    os.path.join(root, f), "r", encoding="utf-8", errors="ignore"
+                ) as fh:
                     for line in fh:
                         stripped = line.lstrip()
                         if stripped and line != stripped:
-                            leading = line[:len(line) - len(stripped)]
+                            leading = line[: len(line) - len(stripped)]
                             if leading.startswith("\t"):
                                 tabs += 1
                             elif leading.startswith("    "):
@@ -80,9 +82,13 @@ def _detect_naming_conventions(repo_path: str) -> str:
             if not f.endswith((".py", ".js", ".ts", ".tsx", ".jsx")):
                 continue
             try:
-                with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                with open(
+                    os.path.join(root, f), "r", encoding="utf-8", errors="ignore"
+                ) as fh:
                     for line in fh:
-                        for match in re.finditer(r"\b(def|function|const|let|var|class)\s+(\w+)", line):
+                        for match in re.finditer(
+                            r"\b(def|function|const|let|var|class)\s+(\w+)", line
+                        ):
                             name = match.group(2)
                             if "_" in name and not name.startswith("_"):
                                 snake_count += 1
@@ -121,7 +127,9 @@ def _detect_import_style(repo_path: str) -> str:
             if not f.endswith(".py"):
                 continue
             try:
-                with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                with open(
+                    os.path.join(root, f), "r", encoding="utf-8", errors="ignore"
+                ) as fh:
                     in_imports = False
                     has_stdlib = False
                     has_third = False
@@ -129,7 +137,15 @@ def _detect_import_style(repo_path: str) -> str:
                         stripped = line.strip()
                         if stripped.startswith(("import ", "from ")):
                             in_imports = True
-                            if stripped.startswith(("import os", "import sys", "import json", "from os", "from sys")):
+                            if stripped.startswith(
+                                (
+                                    "import os",
+                                    "import sys",
+                                    "import json",
+                                    "from os",
+                                    "from sys",
+                                )
+                            ):
                                 has_stdlib = True
                             elif not stripped.startswith(("import os", "import sys")):
                                 has_third = True
@@ -157,7 +173,9 @@ def _detect_quote_style(repo_path: str) -> str:
             if not f.endswith((".py", ".js", ".ts")):
                 continue
             try:
-                with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as fh:
+                with open(
+                    os.path.join(root, f), "r", encoding="utf-8", errors="ignore"
+                ) as fh:
                     content = fh.read(10000)
                     single += content.count("'")
                     double += content.count('"')

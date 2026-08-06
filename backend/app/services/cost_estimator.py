@@ -8,16 +8,16 @@ from app.models.token_usage import CostBudget
 
 # Cost per 1K tokens by provider (input/output) - updated 2026 pricing
 PROVIDER_COST_TABLE = {
-    "openai": {"input": 0.0025, "output": 0.01},      # GPT-4o
-    "anthropic": {"input": 0.003, "output": 0.015},    # Claude Sonnet
-    "gemini": {"input": 0.000125, "output": 0.0005},   # Gemini 2.5 Flash
-    "groq": {"input": 0.00059, "output": 0.00079},     # Llama 3.3
-    "deepseek": {"input": 0.00014, "output": 0.00028}, # DeepSeek Chat
-    "openrouter": {"input": 0.003, "output": 0.015},   # Varies by model
-    "azure_openai": {"input": 0.0025, "output": 0.01}, # Same as OpenAI
-    "ollama": {"input": 0.0, "output": 0.0},           # Local, free
-    "cohere": {"input": 0.0015, "output": 0.002},      # Command R+
-    "mistral": {"input": 0.002, "output": 0.006},      # Mistral Large
+    "openai": {"input": 0.0025, "output": 0.01},  # GPT-4o
+    "anthropic": {"input": 0.003, "output": 0.015},  # Claude Sonnet
+    "gemini": {"input": 0.000125, "output": 0.0005},  # Gemini 2.5 Flash
+    "groq": {"input": 0.00059, "output": 0.00079},  # Llama 3.3
+    "deepseek": {"input": 0.00014, "output": 0.00028},  # DeepSeek Chat
+    "openrouter": {"input": 0.003, "output": 0.015},  # Varies by model
+    "azure_openai": {"input": 0.0025, "output": 0.01},  # Same as OpenAI
+    "ollama": {"input": 0.0, "output": 0.0},  # Local, free
+    "cohere": {"input": 0.0015, "output": 0.002},  # Command R+
+    "mistral": {"input": 0.002, "output": 0.006},  # Mistral Large
 }
 
 
@@ -33,8 +33,12 @@ class CostEstimator:
         )
 
     async def check_and_reserve_budget(
-        self, db: AsyncSession, user_id: uuid.UUID, cost_usd: float,
-        provider: str | None = None, feature: str | None = None,
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        cost_usd: float,
+        provider: str | None = None,
+        feature: str | None = None,
     ) -> bool:
         """Atomic check-and-reserve: returns False if budget would be exceeded."""
         now = datetime.now(UTC)
@@ -57,11 +61,19 @@ class CostEstimator:
 
             # Reset if period expired
             needs_reset = False
-            if budget.budget_type == "daily" and budget.reset_at and budget.reset_at < today_start.isoformat():
+            if (
+                budget.budget_type == "daily"
+                and budget.reset_at
+                and budget.reset_at < today_start.isoformat()
+            ):
                 budget.spent_usd = 0.0
                 budget.reset_at = today_start.isoformat()
                 needs_reset = True
-            elif budget.budget_type == "monthly" and budget.reset_at and budget.reset_at < month_start.isoformat():
+            elif (
+                budget.budget_type == "monthly"
+                and budget.reset_at
+                and budget.reset_at < month_start.isoformat()
+            ):
                 budget.spent_usd = 0.0
                 budget.reset_at = month_start.isoformat()
                 needs_reset = True
@@ -78,8 +90,11 @@ class CostEstimator:
         return True
 
     async def check_budget(
-        self, db: AsyncSession, user_id: uuid.UUID,
-        provider: str | None = None, feature: str | None = None,
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        provider: str | None = None,
+        feature: str | None = None,
     ) -> bool:
         """Check if user has any budget remaining."""
         now = datetime.now(UTC)
@@ -121,8 +136,12 @@ class CostEstimator:
         return True
 
     async def record_spend(
-        self, db: AsyncSession, user_id: uuid.UUID, cost_usd: float,
-        provider: str | None = None, feature: str | None = None,
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        cost_usd: float,
+        provider: str | None = None,
+        feature: str | None = None,
     ) -> None:
         """Atomic spend recording - uses SQL-level increment."""
         await db.execute(
@@ -137,20 +156,26 @@ class CostEstimator:
         )
         await db.commit()
 
-    async def get_budgets(self, db: AsyncSession, user_id: uuid.UUID) -> list[CostBudget]:
+    async def get_budgets(
+        self, db: AsyncSession, user_id: uuid.UUID
+    ) -> list[CostBudget]:
         result = await db.execute(
             select(CostBudget).where(CostBudget.user_id == user_id)
         )
         return list(result.scalars().all())
 
-    async def create_budget(self, db: AsyncSession, user_id: uuid.UUID, data: dict) -> CostBudget:
+    async def create_budget(
+        self, db: AsyncSession, user_id: uuid.UUID, data: dict
+    ) -> CostBudget:
         budget = CostBudget(user_id=user_id, **data)
         db.add(budget)
         await db.commit()
         await db.refresh(budget)
         return budget
 
-    async def update_budget(self, db: AsyncSession, budget_id: uuid.UUID, data: dict) -> CostBudget | None:
+    async def update_budget(
+        self, db: AsyncSession, budget_id: uuid.UUID, data: dict
+    ) -> CostBudget | None:
         budget = await db.get(CostBudget, budget_id)
         if not budget:
             return None

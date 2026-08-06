@@ -45,6 +45,7 @@ async def cleanup():
         for review in zombies:
             # Do not touch reviews that still have a live job
             from app.queue.models import JobStatus, ReviewJob
+
             job_result = await db.execute(
                 select(ReviewJob.id).where(
                     ReviewJob.delivery_id.like(f"%-{review.id}"),

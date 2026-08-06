@@ -7,12 +7,20 @@ from app.retrieval.retrievers.base_retriever import BaseRetriever
 logger = logging.getLogger(__name__)
 
 DOC_PATTERNS = [
-    "README.md", "README.rst", "README.txt",
-    "CONTRIBUTING.md", "CONTRIBUTING.rst",
-    "CHANGELOG.md", "CHANGELOG.rst",
-    "LICENSE", "LICENSE.md",
-    "docs/", "documentation/", "wiki/",
-    "*.md", "*.rst",
+    "README.md",
+    "README.rst",
+    "README.txt",
+    "CONTRIBUTING.md",
+    "CONTRIBUTING.rst",
+    "CHANGELOG.md",
+    "CHANGELOG.rst",
+    "LICENSE",
+    "LICENSE.md",
+    "docs/",
+    "documentation/",
+    "wiki/",
+    "*.md",
+    "*.rst",
 ]
 
 
@@ -40,20 +48,26 @@ class DocumentationRetriever(BaseRetriever):
 
         doc_files = self._find_docs_in_dirs(repo_path, changed_dirs)
 
-        for doc_path in doc_files[:config.max_related_files]:
+        for doc_path in doc_files[: config.max_related_files]:
             content = self._read_file(repo_path, doc_path, max_lines=100)
             if content:
                 relevance = 0.4
                 if doc_path.lower() == "readme.md":
                     relevance = 0.6
 
-                contexts.append(RetrievedContext(
-                    file_path=doc_path,
-                    content=content,
-                    relevance_score=relevance,
-                    source="documentation",
-                    metadata={"doc_type": "readme" if "readme" in doc_path.lower() else "docs"},
-                ))
+                contexts.append(
+                    RetrievedContext(
+                        file_path=doc_path,
+                        content=content,
+                        relevance_score=relevance,
+                        source="documentation",
+                        metadata={
+                            "doc_type": (
+                                "readme" if "readme" in doc_path.lower() else "docs"
+                            )
+                        },
+                    )
+                )
 
         return contexts
 
@@ -92,13 +106,18 @@ class DocumentationRetriever(BaseRetriever):
 
         return doc_files
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 100) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 100
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

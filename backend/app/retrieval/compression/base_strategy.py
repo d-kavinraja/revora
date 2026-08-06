@@ -6,16 +6,14 @@ from app.retrieval.models import RetrievedContext
 class BaseCompressionStrategy(ABC):
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @abstractmethod
     async def compress(
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> RetrievedContext | None:
-        ...
+    ) -> RetrievedContext | None: ...
 
     async def safe_compress(
         self,

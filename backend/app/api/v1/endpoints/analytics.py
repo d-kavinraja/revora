@@ -19,7 +19,7 @@ async def require_usage_enabled():
             detail={
                 "status": "disabled",
                 "message": "Usage analytics are temporarily disabled while we redesign model-level pricing. "
-                          "No data has been lost; this feature will be re-enabled in a future release.",
+                "No data has been lost; this feature will be re-enabled in a future release.",
             },
         )
 
@@ -40,7 +40,16 @@ async def list_requests(
 ):
     """Get paginated request log."""
     requests = await usage_tracker.get_user_requests(
-        db, current_user.id, limit, offset, provider, model, api_key_id, repo_id, start_date, end_date
+        db,
+        current_user.id,
+        limit,
+        offset,
+        provider,
+        model,
+        api_key_id,
+        repo_id,
+        start_date,
+        end_date,
     )
     return [r.__dict__ for r in requests]
 

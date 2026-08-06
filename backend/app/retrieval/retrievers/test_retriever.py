@@ -47,23 +47,30 @@ class TestRetriever(BaseRetriever):
 
                 content = self._read_file(repo_path, test_file, max_lines=150)
                 if content:
-                    contexts.append(RetrievedContext(
-                        file_path=test_file,
-                        content=content,
-                        relevance_score=0.85,
-                        source="test_graph",
-                        metadata={"test_file": True, "tested_file": changed_file},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=test_file,
+                            content=content,
+                            relevance_score=0.85,
+                            source="test_graph",
+                            metadata={"test_file": True, "tested_file": changed_file},
+                        )
+                    )
 
-        return contexts[:config.max_test_files]
+        return contexts[: config.max_test_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 150) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 150
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

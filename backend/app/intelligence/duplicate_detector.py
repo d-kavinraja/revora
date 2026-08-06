@@ -32,7 +32,7 @@ class DuplicateDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect duplicate code using the RepoWalker cache.
 
         Args:
@@ -47,7 +47,8 @@ class DuplicateDetector(BaseDetector):
 
         # Collect code files
         code_files = [
-            fp for fp in walker.file_paths
+            fp
+            for fp in walker.file_paths
             if any(fp.endswith(ext) for ext in CODE_EXTENSIONS)
         ]
 
@@ -61,7 +62,7 @@ class DuplicateDetector(BaseDetector):
             # Split into blocks of MIN_LINES
             lines = content.split("\n")
             for i in range(0, len(lines) - MIN_LINES, MIN_LINES):
-                block = "\n".join(lines[i:i + MIN_LINES]).strip()
+                block = "\n".join(lines[i : i + MIN_LINES]).strip()
 
                 # Skip empty or very short blocks
                 if len(block) < 50:
@@ -77,12 +78,14 @@ class DuplicateDetector(BaseDetector):
                 if block_hash not in content_hashes:
                     content_hashes[block_hash] = []
 
-                content_hashes[block_hash].append({
-                    "file": fp,
-                    "line_start": i + 1,
-                    "line_end": i + MIN_LINES,
-                    "preview": block[:100],
-                })
+                content_hashes[block_hash].append(
+                    {
+                        "file": fp,
+                        "line_start": i + 1,
+                        "line_end": i + MIN_LINES,
+                        "preview": block[:100],
+                    }
+                )
 
         # Find duplicates (hashes with multiple locations)
         duplicates: list[dict] = []
@@ -91,11 +94,13 @@ class DuplicateDetector(BaseDetector):
                 # Deduplicate by file
                 files = {loc["file"] for loc in locations}
                 if len(files) > 1:  # Only report if in different files
-                    duplicates.append({
-                        "locations": locations,
-                        "occurrences": len(locations),
-                        "files": list(files),
-                    })
+                    duplicates.append(
+                        {
+                            "locations": locations,
+                            "occurrences": len(locations),
+                            "files": list(files),
+                        }
+                    )
 
         # Sort by number of occurrences
         duplicates.sort(key=lambda x: x["occurrences"], reverse=True)

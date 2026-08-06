@@ -1,6 +1,5 @@
 """Tests for Intelligence Engine and detectors."""
 
-
 import pytest
 
 from app.intelligence.architecture_detector import ArchitectureDetector
@@ -26,7 +25,8 @@ from app.intelligence.testing_detector import TestingDetector
 def temp_repo(tmp_path):
     """Create a temporary repository structure for testing."""
     # Create Python files
-    (tmp_path / "main.py").write_text("""
+    (tmp_path / "main.py").write_text(
+        """
 import os
 from flask import Flask
 
@@ -38,19 +38,24 @@ def index():
 
 if __name__ == '__main__':
     app.run()
-""")
+"""
+    )
 
     # Create requirements.txt
     (tmp_path / "requirements.txt").write_text("flask==2.0.0\nsqlalchemy==1.4.0")
 
     # Create package.json
-    (tmp_path / "package.json").write_text('{"name": "test", "dependencies": {"react": "^18.0.0"}}')
+    (tmp_path / "package.json").write_text(
+        '{"name": "test", "dependencies": {"react": "^18.0.0"}}'
+    )
 
     # Create Dockerfile
     (tmp_path / "Dockerfile").write_text("FROM python:3.9\nCOPY . .")
 
     # Create docker-compose.yml
-    (tmp_path / "docker-compose.yml").write_text("version: '3.8'\nservices:\n  web:\n    build: .")
+    (tmp_path / "docker-compose.yml").write_text(
+        "version: '3.8'\nservices:\n  web:\n    build: ."
+    )
 
     # Create GitHub Actions workflow
     gh_dir = tmp_path / ".github" / "workflows"
@@ -78,10 +83,14 @@ if __name__ == '__main__':
     (src_dir / "repositories" / "user.py").write_text("def get_user(): pass")
 
     # Create environment config file (.ini is in CHECK_EXTENSIONS; .env is skipped as hidden)
-    (tmp_path / "database.ini").write_text("DATABASE_URL=postgresql://localhost/test\nREDIS_URL=redis://localhost")
+    (tmp_path / "database.ini").write_text(
+        "DATABASE_URL=postgresql://localhost/test\nREDIS_URL=redis://localhost"
+    )
 
     # Create secret in code (for secret detector test)
-    (tmp_path / "config.py").write_text('API_KEY = "sk-1234567890abcdef1234567890abcdef"')
+    (tmp_path / "config.py").write_text(
+        'API_KEY = "sk-1234567890abcdef1234567890abcdef"'
+    )
 
     return tmp_path
 

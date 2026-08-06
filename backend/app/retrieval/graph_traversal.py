@@ -141,7 +141,8 @@ class GraphTraversalEngine:
             result.append(current_id)
 
             edges = (
-                graph.get_edges_to(current_id) if reverse
+                graph.get_edges_to(current_id)
+                if reverse
                 else graph.get_edges_from(current_id)
             )
 

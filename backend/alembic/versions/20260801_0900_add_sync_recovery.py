@@ -36,12 +36,16 @@ def upgrade() -> None:
     )
     op.add_column(
         "repositories",
-        sa.Column("is_archived", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "is_archived", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
     )
 
     op.add_column(
         "installations",
-        sa.Column("permissions_ok", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column(
+            "permissions_ok", sa.Boolean(), nullable=False, server_default=sa.true()
+        ),
     )
     op.add_column(
         "installations",
@@ -76,7 +80,9 @@ def upgrade() -> None:
         ),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="running"),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="running"
+        ),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("repo_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("repos_added", sa.Integer(), nullable=False, server_default="0"),
@@ -87,12 +93,20 @@ def upgrade() -> None:
         sa.Column("prs_updated", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("jobs_enqueued", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("details", JSONB(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
-    op.create_index(
-        "ix_sync_runs_started_at", "sync_runs", ["started_at"]
-    )
+    op.create_index("ix_sync_runs_started_at", "sync_runs", ["started_at"])
 
 
 def downgrade() -> None:

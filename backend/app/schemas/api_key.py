@@ -9,13 +9,16 @@ class ApiKeyBase(BaseModel):
     provider: str = Field(..., max_length=50)
     label: str = Field(..., max_length=100)
 
+
 class ApiKeyCreate(ApiKeyBase):
     api_key: str = Field(..., description="The raw API key to be encrypted")
+
 
 class ApiKeyUpdate(BaseModel):
     label: str | None = Field(None, max_length=100)
     api_key: str | None = Field(None, description="The new raw API key")
     is_valid: bool | None = None
+
 
 class ApiKeyInDBBase(ApiKeyBase):
     id: uuid.UUID
@@ -23,8 +26,9 @@ class ApiKeyInDBBase(ApiKeyBase):
     is_valid: bool
     last_used_at: datetime | None = None
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
+
 
 class ApiKey(ApiKeyInDBBase):
     masked_key: str = Field(..., description="Masked version of the key for UI")

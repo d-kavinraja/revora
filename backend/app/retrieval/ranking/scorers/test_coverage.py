@@ -1,4 +1,3 @@
-
 from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
@@ -26,8 +25,7 @@ class TestCoverageScorer(BaseScorer):
 
         test_graph = index.test_graph
         has_test = any(
-            edge.source == file_id and edge.type == "tests"
-            for edge in test_graph.edges
+            edge.source == file_id and edge.type == "tests" for edge in test_graph.edges
         )
 
         if has_test:

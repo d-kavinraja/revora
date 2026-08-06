@@ -8,9 +8,14 @@ from app.retrieval.graph_traversal import GraphTraversalEngine
 def sample_graph():
     graph = CodeGraph()
     for i in range(6):
-        graph.nodes.append(GraphNode(
-            id=f"node:{i}", type="file", name=f"file_{i}.py", file_path=f"src/file_{i}.py"
-        ))
+        graph.nodes.append(
+            GraphNode(
+                id=f"node:{i}",
+                type="file",
+                name=f"file_{i}.py",
+                file_path=f"src/file_{i}.py",
+            )
+        )
 
     edges = [
         ("node:0", "node:1", "imports"),

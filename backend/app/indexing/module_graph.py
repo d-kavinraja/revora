@@ -8,7 +8,11 @@ def build_module_graph(repo_path: str) -> CodeGraph:
     module_map: dict[str, str] = {}
 
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}
+        ]
 
         rel_dir = os.path.relpath(root, repo_path)
         if rel_dir == ".":
@@ -18,17 +22,33 @@ def build_module_graph(repo_path: str) -> CodeGraph:
         if module_id not in module_map:
             module_map[module_id] = rel_dir
             dir_name = os.path.basename(root) or os.path.basename(repo_path)
-            graph.nodes.append(GraphNode(id=module_id, type="module", name=dir_name, file_path=rel_dir))
+            graph.nodes.append(
+                GraphNode(id=module_id, type="module", name=dir_name, file_path=rel_dir)
+            )
 
         py_files = [f for f in files if f.endswith(".py") and f != "__init__.py"]
-        js_files = [f for f in files if f.endswith((".js", ".ts", ".tsx", ".jsx")) and not f.endswith(".d.ts")]
+        js_files = [
+            f
+            for f in files
+            if f.endswith((".js", ".ts", ".tsx", ".jsx")) and not f.endswith(".d.ts")
+        ]
 
         for f in py_files + js_files:
             fp = os.path.join(root, f)
             rel_path = os.path.relpath(fp, repo_path)
             file_id = f"file:{rel_path}"
-            graph.nodes.append(GraphNode(id=file_id, type="file", name=f, file_path=rel_path, parent_id=module_id))
-            graph.edges.append(GraphEdge(source=module_id, target=file_id, type="contains"))
+            graph.nodes.append(
+                GraphNode(
+                    id=file_id,
+                    type="file",
+                    name=f,
+                    file_path=rel_path,
+                    parent_id=module_id,
+                )
+            )
+            graph.edges.append(
+                GraphEdge(source=module_id, target=file_id, type="contains")
+            )
 
     # Build parent-child module relationships
     module_ids = list(module_map.keys())
@@ -39,6 +59,8 @@ def build_module_graph(repo_path: str) -> CodeGraph:
         parent_path = os.path.dirname(mod_path)
         parent_id = f"module:{parent_path}" if parent_path else "module:root"
         if parent_id in [m for m in module_ids]:
-            graph.edges.append(GraphEdge(source=parent_id, target=mod_id, type="contains"))
+            graph.edges.append(
+                GraphEdge(source=parent_id, target=mod_id, type="contains")
+            )
 
     return graph

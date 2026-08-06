@@ -30,7 +30,13 @@ class ImportPruneStrategy(BaseCompressionStrategy):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if re.match(r"^(import |from |require\()", stripped) or re.match(r"^#|^//|^/\*|^\*", stripped) or stripped == "" and import_lines and i == import_lines[-1] + 1:
+            if (
+                re.match(r"^(import |from |require\()", stripped)
+                or re.match(r"^#|^//|^/\*|^\*", stripped)
+                or stripped == ""
+                and import_lines
+                and i == import_lines[-1] + 1
+            ):
                 import_lines.append(i)
             else:
                 non_import_lines.append(i)
@@ -48,7 +54,11 @@ class ImportPruneStrategy(BaseCompressionStrategy):
                 content=pruned,
                 relevance_score=context.relevance_score,
                 source=context.source,
-                metadata={**context.metadata, "compressed": True, "compression_strategy": "import_prune"},
+                metadata={
+                    **context.metadata,
+                    "compressed": True,
+                    "compression_strategy": "import_prune",
+                },
                 compressed=True,
                 original_tokens=current_tokens,
             )

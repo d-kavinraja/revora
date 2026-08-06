@@ -5,26 +5,28 @@ from app.verification.validators import ValidationResult
 
 class ConfidenceEngine:
     """Calculates confidence scores based on validation results."""
-    
+
     BASE_SCORE = 0.5  # Start at 50%
     THRESHOLD_REJECT = 0.30
     THRESHOLD_NEEDS_REVIEW = 0.50
     THRESHOLD_GOOD = 0.70
-    
-    def calculate(self, finding: dict[str, Any], validation_results: list[ValidationResult]) -> float:
+
+    def calculate(
+        self, finding: dict[str, Any], validation_results: list[ValidationResult]
+    ) -> float:
         """
         Returns a confidence score between 0.0 and 1.0.
         """
         score = self.BASE_SCORE
-        
+
         for result in validation_results:
             score += result.score_modifier
-            
+
         # Ensure score is bound between 0 and 1
         score = max(0.0, min(1.0, score))
-        
+
         return score
-        
+
     def get_status(self, score: float) -> str:
         if score <= self.THRESHOLD_REJECT:
             return "REJECT"

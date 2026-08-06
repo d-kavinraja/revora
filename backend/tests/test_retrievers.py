@@ -29,12 +29,14 @@ class TestBaseRetriever:
                 return "success"
 
             async def retrieve(self, config, result):
-                return [RetrievedContext(
-                    file_path="test.py",
-                    content="x=1",
-                    relevance_score=0.5,
-                    source="test",
-                )]
+                return [
+                    RetrievedContext(
+                        file_path="test.py",
+                        content="x=1",
+                        relevance_score=0.5,
+                        source="test",
+                    )
+                ]
 
         retriever = SuccessRetriever()
         config = RetrievalConfig()

@@ -12,7 +12,9 @@ class LLMRequestLog(Base):
 
     __tablename__ = "llm_request_log"
 
-    request_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    request_id: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -21,17 +23,25 @@ class LLMRequestLog(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     feature: Mapped[str] = mapped_column(String(50), nullable=False)
-    messages_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 fingerprint
+    messages_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )  # SHA-256 fingerprint
 
     # Response
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # "success", "error", "fallback"
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "success", "error", "fallback"
     response_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timing
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     latency_ms: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Tokens

@@ -15,11 +15,15 @@ class ApiKeyHealth(Base):
     key_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # "healthy", "degraded", "unhealthy"
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "healthy", "degraded", "unhealthy"
     error_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class ProviderHealth(Base):
@@ -30,7 +34,9 @@ class ProviderHealth(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # "healthy", "degraded", "down"
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "healthy", "degraded", "down"
 
     # Metrics
     avg_latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
@@ -40,13 +46,19 @@ class ProviderHealth(Base):
     failed_requests: Mapped[int] = mapped_column(Integer, default=0)
 
     # Circuit breaker
-    circuit_state: Mapped[str] = mapped_column(String(20), default="closed")  # "closed", "open", "half_open"
-    circuit_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    circuit_state: Mapped[str] = mapped_column(
+        String(20), default="closed"
+    )  # "closed", "open", "half_open"
+    circuit_opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
 
     # Errors
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class FailoverLog(Base):

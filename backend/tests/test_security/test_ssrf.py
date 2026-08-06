@@ -79,5 +79,6 @@ class TestSSRFValidation:
     def test_validate_url_safe_returns_bool(self):
         """validate_url_safe should return True/False instead of raising."""
         from app.security.url_validator import validate_url_safe
+
         assert validate_url_safe("https://api.openai.com/v1") is True
         assert validate_url_safe("http://10.0.0.1/api") is False

@@ -72,10 +72,7 @@ class RepoWalker:
             # NOTE: not filtering d.startswith(".") because legitimate
             # directories like .github/workflows must be traversed.
             # SKIP_DIRS covers specific hidden dirs to exclude (.git, .env, etc.)
-            dirs[:] = [
-                d for d in dirs
-                if d not in self.skip_dirs
-            ]
+            dirs[:] = [d for d in dirs if d not in self.skip_dirs]
 
             for filename in files:
                 # Skip skipped extensions
@@ -152,7 +149,9 @@ class RepoWalker:
                     f"reading first {max_chars} chars"
                 )
 
-            with open(full_path, "r", encoding="utf-8", errors="replace") as f:  # noqa: ASYNC230
+            with open(
+                full_path, "r", encoding="utf-8", errors="replace"
+            ) as f:  # noqa: ASYNC230
                 content = f.read(max_chars)
 
             self._file_contents[cache_key] = content
@@ -172,10 +171,7 @@ class RepoWalker:
             List of relative file paths matching the extension.
         """
         ext = ext.lower()
-        return [
-            fp for fp in self.file_paths
-            if fp.lower().endswith(ext)
-        ]
+        return [fp for fp in self.file_paths if fp.lower().endswith(ext)]
 
     def get_files_by_pattern(self, pattern: str) -> list[str]:
         """Get files matching a glob pattern.
@@ -186,10 +182,7 @@ class RepoWalker:
         Returns:
             List of matching file paths.
         """
-        return [
-            fp for fp in self.file_paths
-            if fnmatch.fnmatch(fp, pattern)
-        ]
+        return [fp for fp in self.file_paths if fnmatch.fnmatch(fp, pattern)]
 
     def get_files_in_directory(self, dir_path: str) -> list[str]:
         """Get all files under a specific directory.
@@ -202,7 +195,8 @@ class RepoWalker:
         """
         dir_path = dir_path.rstrip("/") + "/"
         return [
-            fp for fp in self.file_paths
+            fp
+            for fp in self.file_paths
             if fp.startswith(dir_path) or fp == dir_path.rstrip("/")
         ]
 

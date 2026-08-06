@@ -25,8 +25,9 @@ async def create_execution(
 ) -> ReviewExecution:
     """Create a new execution for a review with the next execution number."""
     next_number = await db.scalar(
-        select(func.coalesce(func.max(ReviewExecution.execution_number), 0))
-        .where(ReviewExecution.review_id == review_id)
+        select(func.coalesce(func.max(ReviewExecution.execution_number), 0)).where(
+            ReviewExecution.review_id == review_id
+        )
     )
     execution = ReviewExecution(
         review_id=review_id,
@@ -37,7 +38,9 @@ async def create_execution(
     )
     db.add(execution)
     await db.flush()
-    logger.info(f"Created execution #{execution.execution_number} ({trigger}) for review {review_id}")
+    logger.info(
+        f"Created execution #{execution.execution_number} ({trigger}) for review {review_id}"
+    )
     return execution
 
 
@@ -93,7 +96,9 @@ async def mark_execution_final(
         execution.started_at = now
     db.add(execution)
     await db.flush()
-    logger.info(f"Marked execution #{execution.execution_number} for review {review_id} as {status}")
+    logger.info(
+        f"Marked execution #{execution.execution_number} for review {review_id} as {status}"
+    )
 
 
 async def cancel_active_executions(db: AsyncSession, review_id) -> int:

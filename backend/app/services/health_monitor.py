@@ -31,13 +31,14 @@ class HealthMonitor:
             await db.refresh(health)
         return health
 
-    async def record_success(self, db: AsyncSession, provider: str, latency_ms: float) -> None:
+    async def record_success(
+        self, db: AsyncSession, provider: str, latency_ms: float
+    ) -> None:
         health = await self.get_or_create(db, provider)
         health.total_requests += 1
         health.avg_latency_ms = (
-            (health.avg_latency_ms * (health.total_requests - 1) + latency_ms)
-            / health.total_requests
-        )
+            health.avg_latency_ms * (health.total_requests - 1) + latency_ms
+        ) / health.total_requests
         health.success_rate = min(1.0, health.success_rate + 0.05)
         health.error_rate = max(0.0, health.error_rate - 0.02)
         health.consecutive_failures = 0
@@ -56,7 +57,9 @@ class HealthMonitor:
         db.add(health)
         await db.commit()
 
-    async def record_failure(self, db: AsyncSession, provider: str, error_type: str, error_msg: str) -> None:
+    async def record_failure(
+        self, db: AsyncSession, provider: str, error_type: str, error_msg: str
+    ) -> None:
         health = await self.get_or_create(db, provider)
         health.total_requests += 1
         health.failed_requests += 1
@@ -111,7 +114,9 @@ class HealthMonitor:
         result = await db.execute(select(ProviderHealth))
         return list(result.scalars().all())
 
-    async def get_health(self, db: AsyncSession, provider: str) -> ProviderHealth | None:
+    async def get_health(
+        self, db: AsyncSession, provider: str
+    ) -> ProviderHealth | None:
         return await self.get_or_create(db, provider)
 
     async def get_circuit_breakers(self, db: AsyncSession) -> dict[str, str]:
@@ -119,10 +124,17 @@ class HealthMonitor:
         return {h.provider: h.circuit_state for h in healths}
 
     async def log_failover(
-        self, db: AsyncSession, user_id: uuid.UUID, feature: str,
-        failed_provider: str, failed_model: str, failure_reason: str,
-        fallback_provider: str, fallback_model: str,
-        attempt_number: int, total_latency_ms: float,
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        feature: str,
+        failed_provider: str,
+        failed_model: str,
+        failure_reason: str,
+        fallback_provider: str,
+        fallback_model: str,
+        attempt_number: int,
+        total_latency_ms: float,
     ) -> FailoverLog:
         log = FailoverLog(
             user_id=user_id,
@@ -140,7 +152,9 @@ class HealthMonitor:
         await db.refresh(log)
         return log
 
-    async def get_recent_failovers(self, db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> list[FailoverLog]:
+    async def get_recent_failovers(
+        self, db: AsyncSession, user_id: uuid.UUID, limit: int = 20
+    ) -> list[FailoverLog]:
         result = await db.execute(
             select(FailoverLog)
             .where(FailoverLog.user_id == user_id)

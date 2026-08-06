@@ -32,6 +32,7 @@ PRIORITY_WEIGHTS = {
 @dataclass
 class RankedContext:
     """Ranked and prioritized context ready for section building."""
+
     rankable_contexts: list = field(default_factory=list)
     total_tokens: int = 0
     files_count: int = 0
@@ -44,7 +45,9 @@ class ContextRanker:
     def __init__(self):
         self.priority_weights = PRIORITY_WEIGHTS.copy()
 
-    async def rank_contexts(self, retrieval_result, token_budget: int = 10000) -> RankedContext:
+    async def rank_contexts(
+        self, retrieval_result, token_budget: int = 10000
+    ) -> RankedContext:
         """Flatten all 11 buckets, rank by priority*relevance, return within budget."""
         if not retrieval_result:
             return RankedContext()
@@ -52,9 +55,17 @@ class ContextRanker:
         all_contexts = []
 
         bucket_attrs = [
-            "changed_files", "related_files", "test_files", "config_files",
-            "api_endpoints", "db_schemas", "security_context", "impact_context",
-            "historical_context", "rule_context", "documentation_context",
+            "changed_files",
+            "related_files",
+            "test_files",
+            "config_files",
+            "api_endpoints",
+            "db_schemas",
+            "security_context",
+            "impact_context",
+            "historical_context",
+            "rule_context",
+            "documentation_context",
         ]
 
         for attr in bucket_attrs:
@@ -83,7 +94,7 @@ class ContextRanker:
             else:
                 remaining = budget_tokens - current_tokens
                 if remaining > 200 and ctx.content:
-                    truncated_content = ctx.content[:remaining * 4]
+                    truncated_content = ctx.content[: remaining * 4]
                     ctx_copy = _copy_context(ctx, truncated_content)
                     selected.append(ctx_copy)
                     current_tokens += remaining
@@ -102,6 +113,7 @@ class ContextRanker:
 def _copy_context(ctx, new_content):
     """Create a copy of a RetrievedContext with modified content."""
     from app.retrieval.models import RetrievedContext
+
     return RetrievedContext(
         file_path=ctx.file_path,
         content=new_content,
@@ -110,5 +122,5 @@ def _copy_context(ctx, new_content):
         metadata=ctx.metadata,
         compressed=True,
         original_tokens=len(ctx.content) // 4,
-        rank_position=getattr(ctx, 'rank_position', 0),
+        rank_position=getattr(ctx, "rank_position", 0),
     )

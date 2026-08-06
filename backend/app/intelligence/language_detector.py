@@ -13,42 +13,60 @@ from app.intelligence.models import LanguageInfo
 
 # Extension to language mapping
 EXTENSION_MAP = {
-    ".py": "Python", ".pyi": "Python",
-    ".ts": "TypeScript", ".tsx": "TypeScript (React)",
-    ".js": "JavaScript", ".jsx": "JavaScript (React)",
-    ".mjs": "JavaScript", ".cjs": "JavaScript",
+    ".py": "Python",
+    ".pyi": "Python",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript (React)",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript (React)",
+    ".mjs": "JavaScript",
+    ".cjs": "JavaScript",
     ".go": "Go",
     ".java": "Java",
     ".rs": "Rust",
     ".rb": "Ruby",
     ".cs": "C#",
-    ".cpp": "C++", ".cc": "C++", ".cxx": "C++",
-    ".c": "C", ".h": "C",
+    ".cpp": "C++",
+    ".cc": "C++",
+    ".cxx": "C++",
+    ".c": "C",
+    ".h": "C",
     ".swift": "Swift",
-    ".kt": "Kotlin", ".kts": "Kotlin",
+    ".kt": "Kotlin",
+    ".kts": "Kotlin",
     ".php": "PHP",
     ".lua": "Lua",
-    ".r": "R", ".R": "R",
+    ".r": "R",
+    ".R": "R",
     ".scala": "Scala",
-    ".ex": "Elixir", ".exs": "Elixir",
+    ".ex": "Elixir",
+    ".exs": "Elixir",
     ".erl": "Erlang",
     ".hs": "Haskell",
     ".dart": "Dart",
     ".vue": "Vue",
     ".svelte": "Svelte",
     ".sql": "SQL",
-    ".sh": "Shell", ".bash": "Shell", ".zsh": "Shell",
-    ".yaml": "YAML", ".yml": "YAML",
+    ".sh": "Shell",
+    ".bash": "Shell",
+    ".zsh": "Shell",
+    ".yaml": "YAML",
+    ".yml": "YAML",
     ".toml": "TOML",
     ".json": "JSON",
     ".xml": "XML",
-    ".html": "HTML", ".htm": "HTML",
-    ".css": "CSS", ".scss": "SCSS", ".less": "LESS",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".css": "CSS",
+    ".scss": "SCSS",
+    ".less": "LESS",
     ".md": "Markdown",
     ".dockerfile": "Dockerfile",
-    ".tf": "Terraform", ".hcl": "HCL",
+    ".tf": "Terraform",
+    ".hcl": "HCL",
     ".proto": "Protocol Buffers",
-    ".graphql": "GraphQL", ".gql": "GraphQL",
+    ".graphql": "GraphQL",
+    ".gql": "GraphQL",
 }
 
 
@@ -63,7 +81,7 @@ class LanguageDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect languages using the RepoWalker cache.
 
         Args:
@@ -106,9 +124,7 @@ class LanguageDetector(BaseDetector):
                 file_count=count,
                 percentage=round(count / total_files * 100, 1),
             )
-            for lang, count in sorted(
-                language_counts.items(), key=lambda x: -x[1]
-            )
+            for lang, count in sorted(language_counts.items(), key=lambda x: -x[1])
         ]
 
         return DetectorResult(

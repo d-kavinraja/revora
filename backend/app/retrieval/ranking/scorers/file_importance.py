@@ -1,4 +1,3 @@
-
 from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
@@ -22,8 +21,15 @@ class FileImportanceScorer(BaseScorer):
         score = 0.5
 
         entry_point_keywords = [
-            "main", "index", "app", "server", "cli", "entry",
-            "router", "__init__", "middleware",
+            "main",
+            "index",
+            "app",
+            "server",
+            "cli",
+            "entry",
+            "router",
+            "__init__",
+            "middleware",
         ]
         for kw in entry_point_keywords:
             if kw in file_path.lower():
@@ -31,8 +37,15 @@ class FileImportanceScorer(BaseScorer):
                 break
 
         core_keywords = [
-            "core", "base", "config", "settings", "constants",
-            "types", "interfaces", "abstract", "contract",
+            "core",
+            "base",
+            "config",
+            "settings",
+            "constants",
+            "types",
+            "interfaces",
+            "abstract",
+            "contract",
         ]
         for kw in core_keywords:
             if kw in file_path.lower():

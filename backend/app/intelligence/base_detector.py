@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DetectorResult:
     """Standard result from any intelligence detector."""
+
     success: bool
     data: dict[str, Any]
     confidence: float = 0.0
@@ -63,7 +64,7 @@ class BaseDetector(ABC):
         ...
 
     @abstractmethod
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Run detection using the shared RepoWalker cache.
 
         Args:
@@ -88,7 +89,7 @@ class BaseDetector(ABC):
         """
         return result.success
 
-    async def safe_detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def safe_detect(self, walker: "RepoWalker") -> DetectorResult:
         """Wrapper around detect() with timing and error handling.
 
         This method should be called by the engine, not directly.
@@ -108,9 +109,7 @@ class BaseDetector(ABC):
             result.detector_version = self.version
 
             if not self.validate_result(result):
-                logger.warning(
-                    f"Detector {self.name} produced invalid result"
-                )
+                logger.warning(f"Detector {self.name} produced invalid result")
                 result.success = False
                 result.error = "Result validation failed"
 

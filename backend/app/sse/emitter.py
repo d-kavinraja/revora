@@ -19,10 +19,12 @@ class SSEEmitter:
         self._events: list[dict] = []
         self._channel = f"sse:review:{review_id}"
         self._redis = None
-        
+
         from app.core.config import settings
+
         if settings.REDIS_URL:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
     async def emit(
@@ -56,7 +58,7 @@ class SSEEmitter:
         )
 
         event_sse = event.to_sse()
-        
+
         # Local fallback tracking
         self._events.append(json.loads(event_sse))
         await self._queue.put(event)
@@ -75,7 +77,13 @@ class SSEEmitter:
         await self.emit(stage, "running", EventType.LOG, message)
 
     async def emit_metric(self, stage: str, metrics: dict) -> None:
-        await self.emit(stage, "running", EventType.METRIC, message=json.dumps(metrics), metrics=metrics)
+        await self.emit(
+            stage,
+            "running",
+            EventType.METRIC,
+            message=json.dumps(metrics),
+            metrics=metrics,
+        )
 
     async def emit_error(self, stage: str, error: str) -> None:
         await self.emit(stage, "failed", EventType.STAGE_FAILED, message=error)
@@ -87,23 +95,28 @@ class SSEEmitter:
                 historical = await self._redis.lrange(f"events:{self.review_id}", 0, -1)
                 for evt_str in historical:
                     yield f"data: {evt_str}\n\n"
-                    
+
                 pubsub = self._redis.pubsub()
                 await pubsub.subscribe(self._channel)
-                
+
                 while True:
-                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
+                    message = await pubsub.get_message(
+                        ignore_subscribe_messages=True, timeout=15.0
+                    )
                     if message:
-                        data = message['data']
+                        data = message["data"]
                         yield f"data: {data}\n\n"
                         # Check termination conditions
-                        if '"status": "completed"' in data and '"stage": "completed"' in data:
+                        if (
+                            '"status": "completed"' in data
+                            and '"stage": "completed"' in data
+                        ):
                             break
                         if '"status": "failed"' in data:
                             break
                     else:
                         yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
-                
+
                 await pubsub.unsubscribe(self._channel)
                 await pubsub.close()
                 return

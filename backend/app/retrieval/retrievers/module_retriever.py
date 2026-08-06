@@ -42,35 +42,44 @@ class ModuleRetriever(BaseRetriever):
         contexts = []
         for module_id in affected_modules:
             module_files = [
-                edge.target for edge in index.module_graph.edges
+                edge.target
+                for edge in index.module_graph.edges
                 if edge.source == module_id and edge.type == "contains"
             ]
 
             sibling_files = [
-                mf.replace("file:", "", 1) for mf in module_files
+                mf.replace("file:", "", 1)
+                for mf in module_files
                 if mf.replace("file:", "", 1) not in changed_files
             ]
 
             for sibling in sibling_files[:5]:
                 content = self._read_file(repo_path, sibling)
                 if content:
-                    contexts.append(RetrievedContext(
-                        file_path=sibling,
-                        content=content,
-                        relevance_score=0.6,
-                        source="module_graph",
-                        metadata={"module_id": module_id, "graph_type": "module"},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=sibling,
+                            content=content,
+                            relevance_score=0.6,
+                            source="module_graph",
+                            metadata={"module_id": module_id, "graph_type": "module"},
+                        )
+                    )
 
         return contexts
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 200) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 200
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

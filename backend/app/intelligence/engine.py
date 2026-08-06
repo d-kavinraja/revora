@@ -175,8 +175,16 @@ class IntelligenceEngine:
         )
 
         database = DatabaseInfo(
-            type=database_data.get("databases", [None])[0] if database_data.get("databases") else None,
-            orm=database_data.get("orms", [None])[0] if database_data.get("orms") else None,
+            type=(
+                database_data.get("databases", [None])[0]
+                if database_data.get("databases")
+                else None
+            ),
+            orm=(
+                database_data.get("orms", [None])[0]
+                if database_data.get("orms")
+                else None
+            ),
             indicators=database_data.get("indicators", []),
         )
 
@@ -208,8 +216,16 @@ class IntelligenceEngine:
         )
 
         ci = CIInfo(
-            provider=ci_data.get("providers", [None])[0] if ci_data.get("providers") else None,
-            config_file=ci_data.get("config_files", [None])[0] if ci_data.get("config_files") else None,
+            provider=(
+                ci_data.get("providers", [None])[0]
+                if ci_data.get("providers")
+                else None
+            ),
+            config_file=(
+                ci_data.get("config_files", [None])[0]
+                if ci_data.get("config_files")
+                else None
+            ),
         )
 
         return IntelligenceResult(

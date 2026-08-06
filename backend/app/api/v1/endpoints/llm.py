@@ -66,8 +66,11 @@ async def execute_llm(
 
     if not provider or not model:
         routes = await model_router.route(
-            db, current_user.id, data.feature,
-            data.preferred_provider, data.preferred_model,
+            db,
+            current_user.id,
+            data.feature,
+            data.preferred_provider,
+            data.preferred_model,
         )
         if not routes:
             raise HTTPException(
@@ -81,7 +84,9 @@ async def execute_llm(
         api_key_id = best_route.api_key_id
 
     start_time = time.time()
-    request_id = hashlib.sha256(f"{current_user.id}:{time.time()}".encode()).hexdigest()[:16]
+    request_id = hashlib.sha256(
+        f"{current_user.id}:{time.time()}".encode()
+    ).hexdigest()[:16]
 
     try:
         result = await retry_failover.execute(
@@ -102,8 +107,12 @@ async def execute_llm(
                     model=result.model,
                     input_tokens=result.input_tokens,
                     output_tokens=result.output_tokens,
-                    input_cost_usd=cost_estimator.estimate(result.provider, result.input_tokens, 0),
-                    output_cost_usd=cost_estimator.estimate(result.provider, 0, result.output_tokens),
+                    input_cost_usd=cost_estimator.estimate(
+                        result.provider, result.input_tokens, 0
+                    ),
+                    output_cost_usd=cost_estimator.estimate(
+                        result.provider, 0, result.output_tokens
+                    ),
                     feature=data.feature,
                     latency_ms=result.latency_ms,
                     api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
@@ -113,8 +122,11 @@ async def execute_llm(
 
             # Record budget spend (atomic)
             await cost_estimator.record_spend(
-                db, current_user.id, result.estimated_cost_usd,
-                result.provider, data.feature,
+                db,
+                current_user.id,
+                result.estimated_cost_usd,
+                result.provider,
+                data.feature,
             )
 
             # Log request for observability

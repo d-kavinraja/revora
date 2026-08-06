@@ -51,26 +51,33 @@ class ImportRetriever(BaseRetriever):
                 content = self._read_file(repo_path, neighbor_file)
                 if content:
                     score = max(0.1, 0.9 - (depth * 0.2))
-                    contexts.append(RetrievedContext(
-                        file_path=neighbor_file,
-                        content=content,
-                        relevance_score=score,
-                        source="import_graph",
-                        metadata={"graph_depth": depth, "graph_type": "import"},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=neighbor_file,
+                            content=content,
+                            relevance_score=score,
+                            source="import_graph",
+                            metadata={"graph_depth": depth, "graph_type": "import"},
+                        )
+                    )
 
                 if len(contexts) >= max_nodes:
                     return contexts
 
         return contexts
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 300) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 300
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

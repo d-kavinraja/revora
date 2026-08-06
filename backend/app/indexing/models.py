@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 @dataclass
 class GraphNode:
     """A node in a code graph."""
+
     id: str
     type: str  # function, class, module, file, endpoint, table, variable
     name: str
@@ -23,6 +24,7 @@ class GraphNode:
 @dataclass
 class GraphEdge:
     """An edge in a code graph."""
+
     source: str
     target: str
     type: str  # imports, calls, inherits, references, defines, exports, uses
@@ -36,13 +38,18 @@ class CodeGraph:
 
     Provides O(1) node lookup via internal index.
     """
+
     nodes: list[GraphNode] = field(default_factory=list)
     edges: list[GraphEdge] = field(default_factory=list)
 
     # Internal indexes for O(1) lookups
     _node_index: dict[str, GraphNode] = field(default_factory=dict, repr=False)
-    _edges_from_index: dict[str, list[GraphEdge]] = field(default_factory=dict, repr=False)
-    _edges_to_index: dict[str, list[GraphEdge]] = field(default_factory=dict, repr=False)
+    _edges_from_index: dict[str, list[GraphEdge]] = field(
+        default_factory=dict, repr=False
+    )
+    _edges_to_index: dict[str, list[GraphEdge]] = field(
+        default_factory=dict, repr=False
+    )
     _built: bool = field(default=False, repr=False)
 
     def _build_indexes(self) -> None:
@@ -157,6 +164,7 @@ class CodeGraph:
 @dataclass
 class RepositoryIndex:
     """Complete repository index with all code graphs."""
+
     file_graph: CodeGraph = field(default_factory=CodeGraph)
     import_graph: CodeGraph = field(default_factory=CodeGraph)
     call_graph: CodeGraph = field(default_factory=CodeGraph)

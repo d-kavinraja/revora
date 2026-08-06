@@ -4,22 +4,23 @@ from datetime import datetime
 
 # ── Execution Modes ──────────────────────────────────────────────
 # These string constants define how an execution context was resolved.
-CONFIG_SOURCE_REPO = "repo_config"      # MODE 1: repo has explicit provider/model/key
-CONFIG_SOURCE_ROUTING = "user_routing"   # MODE 2: user routing preferences
-CONFIG_SOURCE_NONE = "none"              # MODE 3: nothing configured
+CONFIG_SOURCE_REPO = "repo_config"  # MODE 1: repo has explicit provider/model/key
+CONFIG_SOURCE_ROUTING = "user_routing"  # MODE 2: user routing preferences
+CONFIG_SOURCE_NONE = "none"  # MODE 3: nothing configured
 
 
 @dataclass
 class ExecutionContext:
     """Immutable execution context for a single review.
-    
+
     Once resolved, this context is fixed for the entire review lifetime.
     Revora MUST NOT switch providers, models, or API keys during execution.
     """
+
     provider: str
     model: str
     api_key_id: str | None = None
-    source: str = CONFIG_SOURCE_REPO      # How this context was resolved
+    source: str = CONFIG_SOURCE_REPO  # How this context was resolved
     resolved_at: float = field(default_factory=time.time)
 
     @property
@@ -36,6 +37,7 @@ class ExecutionContext:
 @dataclass
 class ProviderConfig:
     """Lightweight provider descriptor — no longer carries fallback state."""
+
     name: str
     model: str
     priority: int = 0

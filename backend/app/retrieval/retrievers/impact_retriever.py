@@ -50,30 +50,37 @@ class ImpactRetriever(BaseRetriever):
 
                 content = self._read_file(repo_path, dep_file, max_lines=100)
                 if content:
-                    contexts.append(RetrievedContext(
-                        file_path=dep_file,
-                        content=content,
-                        relevance_score=0.5,
-                        source="impact",
-                        metadata={
-                            "impact_type": "dependent",
-                            "triggered_by": changed_file,
-                        },
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=dep_file,
+                            content=content,
+                            relevance_score=0.5,
+                            source="impact",
+                            metadata={
+                                "impact_type": "dependent",
+                                "triggered_by": changed_file,
+                            },
+                        )
+                    )
 
         logger.info(
             f"ImpactRetriever: {len(contexts)} dependents found for {len(changed_files)} changed files"
         )
 
-        return contexts[:config.max_related_files]
+        return contexts[: config.max_related_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 100) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 100
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

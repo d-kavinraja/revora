@@ -4,6 +4,7 @@ Revision ID: tk3n_us4g3_c0st
 Revises: pr0v1d3r_r3g1stry
 Create Date: 2026-07-16 12:00:00.000000
 """
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -50,10 +51,16 @@ def upgrade() -> None:
         sa.Column("latency_ms", sa.Float(), nullable=False),
         sa.Column("is_fallback", sa.Boolean(), server_default="false"),
         sa.Column("cached", sa.Boolean(), server_default="false"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
-    op.create_index("ix_token_usage_user_date", "llm_token_usage", ["user_id", "created_at"])
+    op.create_index(
+        "ix_token_usage_user_date", "llm_token_usage", ["user_id", "created_at"]
+    )
     op.create_index("ix_token_usage_provider", "llm_token_usage", ["provider"])
 
     # cost_budgets table
@@ -73,8 +80,12 @@ def upgrade() -> None:
         sa.Column("feature", sa.String(50), nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default="true"),
         sa.Column("reset_at", sa.String(30), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
 

@@ -30,7 +30,7 @@ class APIRetriever(BaseRetriever):
         for cf in changed_files:
             parts = cf.replace("\\", "/").split("/")
             for i in range(len(parts)):
-                changed_dirs.add("/".join(parts[:i+1]))
+                changed_dirs.add("/".join(parts[: i + 1]))
 
         for node in index.api_graph.nodes:
             if node.type != "endpoint":
@@ -40,8 +40,7 @@ class APIRetriever(BaseRetriever):
             endpoint_dir = os.path.dirname(endpoint_file).replace("\\", "/")
 
             is_related = any(
-                cd in endpoint_dir or endpoint_dir in cd
-                for cd in changed_dirs
+                cd in endpoint_dir or endpoint_dir in cd for cd in changed_dirs
             )
 
             if not is_related and endpoint_file not in changed_files:
@@ -49,27 +48,34 @@ class APIRetriever(BaseRetriever):
 
             content = self._read_file(repo_path, endpoint_file, max_lines=100)
             if content:
-                contexts.append(RetrievedContext(
-                    file_path=endpoint_file,
-                    content=content,
-                    relevance_score=0.75,
-                    source="api_endpoint",
-                    metadata={
-                        "endpoint": node.name,
-                        "method": node.metadata.get("method", ""),
-                        "path": node.metadata.get("path", ""),
-                    },
-                ))
+                contexts.append(
+                    RetrievedContext(
+                        file_path=endpoint_file,
+                        content=content,
+                        relevance_score=0.75,
+                        source="api_endpoint",
+                        metadata={
+                            "endpoint": node.name,
+                            "method": node.metadata.get("method", ""),
+                            "path": node.metadata.get("path", ""),
+                        },
+                    )
+                )
 
-        return contexts[:config.max_related_files]
+        return contexts[: config.max_related_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 100) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 100
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

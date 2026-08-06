@@ -5,7 +5,7 @@ from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 FASTAPI_PATTERNS = [
     r'@(?:app|router)\.(get|post|put|delete|patch|options|head)\s*\(\s*["\']([^"\']+)',
-    r'@(?:app|router)\.(get|post|put|delete|patch)\s*\(',
+    r"@(?:app|router)\.(get|post|put|delete|patch)\s*\(",
 ]
 
 FLASK_PATTERNS = [
@@ -23,8 +23,8 @@ DJANGO_URL_PATTERNS = [
 ]
 
 NEXTJS_API_PATTERNS = [
-    r'export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH)',
-    r'export\s+(?:const|let|var)\s+(GET|POST|PUT|DELETE|PATCH)',
+    r"export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH)",
+    r"export\s+(?:const|let|var)\s+(GET|POST|PUT|DELETE|PATCH)",
 ]
 
 
@@ -32,7 +32,9 @@ def build_api_graph(repo_path: str) -> CodeGraph:
     graph = CodeGraph()
 
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}]
+        dirs[:] = [
+            d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}
+        ]
         for f in files:
             fp = os.path.join(root, f)
             rel_path = os.path.relpath(fp, repo_path)
@@ -70,13 +72,17 @@ def build_api_graph(repo_path: str) -> CodeGraph:
 
             for method, path in endpoints:
                 endpoint_id = f"endpoint:{method}:{path}:{rel_path}"
-                graph.nodes.append(GraphNode(
-                    id=endpoint_id,
-                    type="endpoint",
-                    name=f"{method} {path}",
-                    file_path=rel_path,
-                    metadata={"method": method, "path": path},
-                ))
-                graph.edges.append(GraphEdge(source=file_id, target=endpoint_id, type="defines"))
+                graph.nodes.append(
+                    GraphNode(
+                        id=endpoint_id,
+                        type="endpoint",
+                        name=f"{method} {path}",
+                        file_path=rel_path,
+                        metadata={"method": method, "path": path},
+                    )
+                )
+                graph.edges.append(
+                    GraphEdge(source=file_id, target=endpoint_id, type="defines")
+                )
 
     return graph

@@ -87,9 +87,7 @@ async def resolve_provider_config(
 
     # 2. User routing preferences (MODE 2)
     try:
-        user_result = await db_session.execute(
-            select(User).where(User.id == user_id)
-        )
+        user_result = await db_session.execute(select(User).where(User.id == user_id))
         db_user = user_result.scalars().first()
         if db_user and db_user.settings:
             routing_prefs = db_user.settings.get("model_routing", {})
@@ -99,7 +97,9 @@ async def resolve_provider_config(
             if pref_provider and pref_model:
                 provider = pref_provider
                 model = pref_model
-                user_keys = await api_key_service.get_all_usable_keys(db_session, user_id)
+                user_keys = await api_key_service.get_all_usable_keys(
+                    db_session, user_id
+                )
                 if provider in user_keys:
                     api_key_id = str(user_keys[provider].id)
                     config_source = CONFIG_SOURCE_ROUTING
@@ -163,14 +163,18 @@ async def get_or_create_review_records(
 
     async with AsyncSessionLocal() as db:
         # Get installation
-        res = await db.execute(select(Installation).where(Installation.installation_id == installation_id))
+        res = await db.execute(
+            select(Installation).where(Installation.installation_id == installation_id)
+        )
         db_inst = res.scalars().first()
         if not db_inst:
             raise ValueError(f"Installation {installation_id} not found.")
         user_id = str(db_inst.user_id)
 
         # Get or create Repository
-        res = await db.execute(select(Repository).where(Repository.github_id == repo_github_id))
+        res = await db.execute(
+            select(Repository).where(Repository.github_id == repo_github_id)
+        )
         db_repo = res.scalars().first()
         if not db_repo:
             db_repo = Repository(
@@ -221,7 +225,9 @@ async def get_or_create_review_records(
                 db_pr.head_sha = head_sha
                 db_pr.additions = pull_request.get("additions", db_pr.additions)
                 db_pr.deletions = pull_request.get("deletions", db_pr.deletions)
-                db_pr.changed_files = pull_request.get("changed_files", db_pr.changed_files)
+                db_pr.changed_files = pull_request.get(
+                    "changed_files", db_pr.changed_files
+                )
                 await db.commit()
 
         db_review = None
@@ -235,14 +241,20 @@ async def get_or_create_review_records(
             if rid:
                 res = await db.execute(select(Review).where(Review.id == rid))
                 db_review = res.scalars().first()
-                if db_review and db_review.status != status and db_review.status not in _TERMINAL_REVIEW_STATUSES:
+                if (
+                    db_review
+                    and db_review.status != status
+                    and db_review.status not in _TERMINAL_REVIEW_STATUSES
+                ):
                     db_review.status = status
                     if status == "running":
                         db_review.started_at = datetime.now(UTC)
                     review_transitioned = True
                     await db.commit()
                     await db.refresh(db_review)
-                    logger.info(f"Updated lifecycle Review {db_review.id} to {status} for PR #{pr_number}")
+                    logger.info(
+                        f"Updated lifecycle Review {db_review.id} to {status} for PR #{pr_number}"
+                    )
                 elif db_review and db_review.status in _TERMINAL_REVIEW_STATUSES:
                     logger.warning(
                         f"Lifecycle Review {db_review.id} is already {db_review.status} "
@@ -250,10 +262,9 @@ async def get_or_create_review_records(
                     )
         if not db_review and find_existing_pending:
             res = await db.execute(
-                select(Review).where(
-                    Review.pr_id == db_pr.id,
-                    Review.status == "pending"
-                ).order_by(Review.created_at.desc())
+                select(Review)
+                .where(Review.pr_id == db_pr.id, Review.status == "pending")
+                .order_by(Review.created_at.desc())
             )
             db_review = res.scalars().first()
             if db_review:
@@ -264,7 +275,9 @@ async def get_or_create_review_records(
                     review_transitioned = True
                     await db.commit()
                     await db.refresh(db_review)
-                    logger.info(f"Updated pending Review {db_review.id} to {status} for PR #{pr_number}")
+                    logger.info(
+                        f"Updated pending Review {db_review.id} to {status} for PR #{pr_number}"
+                    )
 
         if not db_review and find_existing_pending:
             # No pending review for this PR. The dispatcher always pre-creates
@@ -296,7 +309,9 @@ async def get_or_create_review_records(
             review_transitioned = True
             await db.commit()
             await db.refresh(db_review)
-            logger.info(f"Created Review record {db_review.id} for PR #{pr_number} with status {status}")
+            logger.info(
+                f"Created Review record {db_review.id} for PR #{pr_number} with status {status}"
+            )
 
         # Track this run as a ReviewExecution (queued → running).
         try:
@@ -305,11 +320,14 @@ async def get_or_create_review_records(
                 create_execution,
                 mark_execution_running,
             )
+
             existing_exec_id = await db.scalar(
                 select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
             )
             if not existing_exec_id:
-                await create_execution(db, db_review.id, trigger="webhook", commit_sha=head_sha)
+                await create_execution(
+                    db, db_review.id, trigger="webhook", commit_sha=head_sha
+                )
             if status == "running" and review_transitioned:
                 await mark_execution_running(db, db_review.id)
             await db.commit()
@@ -319,11 +337,16 @@ async def get_or_create_review_records(
         # Resolve provider config and create immutable execution context (skip if already exists)
         try:
             from app.models.exec_context import ReviewExecutionContext
+
             existing_ctx = await db.execute(
-                select(ReviewExecutionContext).where(ReviewExecutionContext.review_id == db_review.id)
+                select(ReviewExecutionContext).where(
+                    ReviewExecutionContext.review_id == db_review.id
+                )
             )
             if existing_ctx.scalars().first():
-                logger.info(f"Execution context already exists for review {db_review.id} — skipping creation")
+                logger.info(
+                    f"Execution context already exists for review {db_review.id} — skipping creation"
+                )
             else:
                 provider, model, api_key_id, _source = await resolve_provider_config(
                     db, user_id=str(db_inst.user_id), db_repo=db_repo
@@ -343,9 +366,13 @@ async def get_or_create_review_records(
                     )
                     db.add(exec_ctx)
                     await db.commit()
-                    logger.info(f"Created execution context for review {db_review.id}: {provider}/{model}")
+                    logger.info(
+                        f"Created execution context for review {db_review.id}: {provider}/{model}"
+                    )
         except Exception as e:
-            logger.warning(f"Failed to create execution context for review {db_review.id}: {e}")
+            logger.warning(
+                f"Failed to create execution context for review {db_review.id}: {e}"
+            )
 
         return db_review, db_repo, db_pr, user_id
 
@@ -363,7 +390,9 @@ async def record_usage_stats(
 ):
     """Record token usage for analytics and usage dashboards."""
     if not settings.USAGE_ANALYTICS_ENABLED:
-        logger.debug("[usage] USAGE_ANALYTICS_ENABLED=False, skipping record_usage_stats")
+        logger.debug(
+            "[usage] USAGE_ANALYTICS_ENABLED=False, skipping record_usage_stats"
+        )
         return
     try:
         from app.services.cost_estimator import cost_estimator
@@ -376,7 +405,9 @@ async def record_usage_stats(
         parsed_user_id = None
         if user_id:
             try:
-                parsed_user_id = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+                parsed_user_id = (
+                    uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+                )
             except Exception:
                 pass
 
@@ -419,4 +450,3 @@ async def record_usage_stats(
                 )
     except Exception as ue:
         logger.error(f"Failed to record usage stats: {ue}", exc_info=True)
-

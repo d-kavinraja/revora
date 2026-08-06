@@ -26,8 +26,12 @@ class DBRetriever(BaseRetriever):
             return []
 
         changed_model_files = {
-            cf for cf in changed_files
-            if any(name in cf.lower() for name in ("model", "schema", "entity", "table", "migration"))
+            cf
+            for cf in changed_files
+            if any(
+                name in cf.lower()
+                for name in ("model", "schema", "entity", "table", "migration")
+            )
         }
 
         if not changed_model_files and not any(
@@ -53,26 +57,33 @@ class DBRetriever(BaseRetriever):
 
             content = self._read_file(repo_path, model_node.file_path, max_lines=150)
             if content:
-                contexts.append(RetrievedContext(
-                    file_path=model_node.file_path,
-                    content=content,
-                    relevance_score=0.85,
-                    source="db_schema",
-                    metadata={
-                        "model_name": model_node.name,
-                        "orm": model_node.metadata.get("orm", ""),
-                    },
-                ))
+                contexts.append(
+                    RetrievedContext(
+                        file_path=model_node.file_path,
+                        content=content,
+                        relevance_score=0.85,
+                        source="db_schema",
+                        metadata={
+                            "model_name": model_node.name,
+                            "orm": model_node.metadata.get("orm", ""),
+                        },
+                    )
+                )
 
-        return contexts[:config.max_related_files]
+        return contexts[: config.max_related_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 150) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 150
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

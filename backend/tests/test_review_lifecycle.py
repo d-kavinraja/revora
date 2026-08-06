@@ -68,7 +68,9 @@ async def test_rerun_rejected_while_review_active(test_db, mock_user):
     await test_db.refresh(running)
 
     with pytest.raises(ValueError):
-        await review_lifecycle_service._validate_and_get_pr_data(test_db, running, "rerun")
+        await review_lifecycle_service._validate_and_get_pr_data(
+            test_db, running, "rerun"
+        )
 
 
 @pytest.mark.asyncio
@@ -124,7 +126,9 @@ async def test_pr_active_guard_blocks_rerun_when_other_review_active(
     await test_db.refresh(terminal)
 
     with pytest.raises(ReviewLifecycleConflict):
-        await review_lifecycle_service._validate_and_get_pr_data(test_db, terminal, "rerun")
+        await review_lifecycle_service._validate_and_get_pr_data(
+            test_db, terminal, "rerun"
+        )
 
 
 @pytest.mark.asyncio

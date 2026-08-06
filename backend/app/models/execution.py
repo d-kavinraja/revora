@@ -26,7 +26,8 @@ class ReviewExecution(Base):
     __tablename__ = "review_executions"
     __table_args__ = (
         UniqueConstraint(
-            "review_id", "execution_number",
+            "review_id",
+            "execution_number",
             name="uq_review_executions_review_id_execution_number",
         ),
     )
@@ -40,10 +41,16 @@ class ReviewExecution(Base):
     execution_number: Mapped[int] = mapped_column(Integer, nullable=False)
     trigger: Mapped[str] = mapped_column(String(20), nullable=False, default="webhook")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    tokens: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE, nullable=True, default=dict)
+    tokens: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_TYPE, nullable=True, default=dict
+    )
     commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)

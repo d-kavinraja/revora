@@ -36,7 +36,12 @@ class ReviewJob(Base):
     base_sha = Column(String(40), nullable=True)
     delivery_id = Column(String(100), nullable=False, index=True)
     status = Column(
-        ENUM(JobStatus, name="job_status", create_type=False, values_callable=lambda obj: [e.value for e in obj]),
+        ENUM(
+            JobStatus,
+            name="job_status",
+            create_type=False,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         default=JobStatus.QUEUED,
         index=True,
@@ -44,7 +49,9 @@ class ReviewJob(Base):
     payload = Column(JSONB, nullable=True)
     result = Column(JSONB, nullable=True)
     attempt_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error_text = Column(Text, nullable=True)

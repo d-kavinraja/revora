@@ -16,7 +16,7 @@ class TestPipelineWiring:
     async def test_webhook_calls_enqueue(self):
         """Verify handle_pr_opened delegates to the job queue."""
         from app.github.webhooks import handle_pr_opened
-        
+
         # Mock the dependencies
         mock_payload = {
             "installation": {"id": 12345},
@@ -40,9 +40,13 @@ class TestPipelineWiring:
             },
         }
 
-        with patch("app.github.webhooks.AsyncSessionLocal") as mock_session_local, \
-             patch("app.queue.dispatcher.enqueue_review_job", new_callable=AsyncMock) as mock_enqueue:
-            
+        with (
+            patch("app.github.webhooks.AsyncSessionLocal") as mock_session_local,
+            patch(
+                "app.queue.dispatcher.enqueue_review_job", new_callable=AsyncMock
+            ) as mock_enqueue,
+        ):
+
             mock_db = MagicMock()
             mock_db.execute = AsyncMock(
                 return_value=MagicMock(
@@ -106,5 +110,6 @@ class TestSSRFIntegration:
     def test_config_has_self_hosted_flag(self):
         """Verify ALLOW_HTTP_SELF_HOSTED is in config."""
         from app.core.config import settings
+
         assert hasattr(settings, "ALLOW_HTTP_SELF_HOSTED")
         assert settings.ALLOW_HTTP_SELF_HOSTED is False  # Default

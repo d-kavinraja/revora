@@ -43,6 +43,7 @@ class TestMemoryCache:
         cache = MemoryCache(max_size=100, default_ttl=0)
         await cache.set("key1", "value1", ttl_seconds=0)
         import asyncio
+
         await asyncio.sleep(0.1)
         result = await cache.get("key1")
         assert result is None

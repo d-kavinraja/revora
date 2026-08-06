@@ -34,7 +34,7 @@ class RepositoryIndexer:
     async def build_index(
         self,
         repo_path: str,
-        walker: Optional['RepoWalker'] = None,
+        walker: Optional["RepoWalker"] = None,
     ) -> RepositoryIndex:
         """Build all code graphs for the repository.
 
@@ -53,6 +53,7 @@ class RepositoryIndexer:
         # Initialize walker if not provided
         if walker is None:
             from app.intelligence.repo_walker import RepoWalker
+
             walker = RepoWalker(repo_path)
             await walker.walk()
 
@@ -70,8 +71,13 @@ class RepositoryIndexer:
 
         # Assign results to index
         graph_names = [
-            "import_graph", "call_graph", "module_graph",
-            "api_graph", "db_graph", "config_graph", "test_graph",
+            "import_graph",
+            "call_graph",
+            "module_graph",
+            "api_graph",
+            "db_graph",
+            "config_graph",
+            "test_graph",
         ]
 
         for i, (name, result) in enumerate(zip(graph_names, results)):
@@ -81,8 +87,7 @@ class RepositoryIndexer:
             elif result is not None:
                 setattr(index, name, result)
                 logger.info(
-                    f"{name}: {len(result.nodes)} nodes, "
-                    f"{len(result.edges)} edges"
+                    f"{name}: {len(result.nodes)} nodes, " f"{len(result.edges)} edges"
                 )
 
         # Generate metadata

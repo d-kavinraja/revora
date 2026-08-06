@@ -36,8 +36,12 @@ def upgrade() -> None:
             index=True,
         ),
         sa.Column("execution_number", sa.Integer(), nullable=False),
-        sa.Column("trigger", sa.String(length=20), nullable=False, server_default="webhook"),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="queued"),
+        sa.Column(
+            "trigger", sa.String(length=20), nullable=False, server_default="webhook"
+        ),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="queued"
+        ),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("duration_ms", sa.BigInteger(), nullable=True),
@@ -45,15 +49,28 @@ def upgrade() -> None:
         sa.Column("provider", sa.String(length=100), nullable=True),
         sa.Column("tokens", JSONB(), nullable=True),
         sa.Column("commit_sha", sa.String(length=64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.UniqueConstraint(
-            "review_id", "execution_number",
+            "review_id",
+            "execution_number",
             name="uq_review_executions_review_id_execution_number",
         ),
     )
 
-    op.drop_constraint("fk_reviews_parent_review_id_reviews", "reviews", type_="foreignkey")
+    op.drop_constraint(
+        "fk_reviews_parent_review_id_reviews", "reviews", type_="foreignkey"
+    )
     op.drop_column("reviews", "parent_review_id")
 
 

@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +48,11 @@ async def check_provider_health(
 ):
     """Run an on-demand health check for a provider."""
     health = await health_monitor.get_or_create(db, provider)
-    return {"provider": provider, "status": health.status, "circuit_state": health.circuit_state}
+    return {
+        "provider": provider,
+        "status": health.status,
+        "circuit_state": health.circuit_state,
+    }
 
 
 @router.get("/failovers", response_model=list[FailoverLogRead])
@@ -70,4 +73,6 @@ async def get_circuit_breakers(
     user_keys = await api_key_service.get_all_for_user(db, current_user.id)
     user_providers = {k.provider.lower() for k in user_keys if k.provider}
     all_cb = await health_monitor.get_circuit_breakers(db)
-    return {prov: state for prov, state in all_cb.items() if prov.lower() in user_providers}
+    return {
+        prov: state for prov, state in all_cb.items() if prov.lower() in user_providers
+    }

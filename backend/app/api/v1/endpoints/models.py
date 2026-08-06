@@ -1,5 +1,4 @@
-﻿
-from fastapi import APIRouter, Depends
+﻿from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
@@ -27,7 +26,9 @@ async def list_models(
             continue
         try:
             raw_key = encryption_service.decrypt(key.encrypted_key)
-            models = await model_discovery_engine.get_available_models(prov_name, raw_key)
+            models = await model_discovery_engine.get_available_models(
+                prov_name, raw_key
+            )
             all_models[prov_name] = models
         except Exception:
             all_models[prov_name] = []

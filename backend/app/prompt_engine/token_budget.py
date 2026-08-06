@@ -99,10 +99,16 @@ class PromptTokenBudget:
     Enforces both per-section limits and total budget.
     """
 
-    def __init__(self, repo_size: RepositorySize = RepositorySize.MEDIUM, total_budget: int = 10000):
+    def __init__(
+        self,
+        repo_size: RepositorySize = RepositorySize.MEDIUM,
+        total_budget: int = 10000,
+    ):
         self.repo_size = repo_size
         self.total_budget = total_budget
-        self.allocations = SECTION_ALLOCATIONS.get(repo_size, SECTION_ALLOCATIONS[RepositorySize.MEDIUM])
+        self.allocations = SECTION_ALLOCATIONS.get(
+            repo_size, SECTION_ALLOCATIONS[RepositorySize.MEDIUM]
+        )
         self.used: dict[str, int] = {}
 
     def get_allocation(self, section_name: str) -> int:

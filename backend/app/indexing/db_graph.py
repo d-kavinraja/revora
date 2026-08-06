@@ -21,8 +21,8 @@ ORM_PATTERNS = {
         r'mongoose\.model\s*\(\s*["\'](\w+)["\']',
     ],
     "django": [
-        r'class\s+(\w+)\s*\(\s*(?:models\.Model)',
-        r'(?:models\.\w+Field)\s*\(',
+        r"class\s+(\w+)\s*\(\s*(?:models\.Model)",
+        r"(?:models\.\w+Field)\s*\(",
     ],
 }
 
@@ -31,7 +31,9 @@ def build_db_graph(repo_path: str) -> CodeGraph:
     graph = CodeGraph()
 
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}]
+        dirs[:] = [
+            d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}
+        ]
         for f in files:
             if not f.endswith((".py", ".ts", ".js")):
                 continue
@@ -53,13 +55,19 @@ def build_db_graph(repo_path: str) -> CodeGraph:
                         if groups and groups[0]:
                             model_name = groups[0]
                             model_id = f"model:{model_name}:{rel_path}"
-                            graph.nodes.append(GraphNode(
-                                id=model_id,
-                                type="table",
-                                name=model_name,
-                                file_path=rel_path,
-                                metadata={"orm": orm_name},
-                            ))
-                            graph.edges.append(GraphEdge(source=file_id, target=model_id, type="defines"))
+                            graph.nodes.append(
+                                GraphNode(
+                                    id=model_id,
+                                    type="table",
+                                    name=model_name,
+                                    file_path=rel_path,
+                                    metadata={"orm": orm_name},
+                                )
+                            )
+                            graph.edges.append(
+                                GraphEdge(
+                                    source=file_id, target=model_id, type="defines"
+                                )
+                            )
 
     return graph

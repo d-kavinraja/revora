@@ -37,10 +37,16 @@ def generate_metadata(repo_path: str, index: RepositoryIndex) -> dict[str, Any]:
         "import_edges": len(index.import_graph.edges),
         "call_nodes": len(index.call_graph.nodes),
         "call_edges": len(index.call_graph.edges),
-        "api_endpoints": len([n for n in index.api_graph.nodes if n.type == "endpoint"]),
+        "api_endpoints": len(
+            [n for n in index.api_graph.nodes if n.type == "endpoint"]
+        ),
         "db_models": len([n for n in index.db_graph.nodes if n.type == "table"]),
-        "config_files": len([n for n in index.config_graph.nodes if n.type == "config"]),
-        "test_files": len([n for n in index.test_graph.nodes if n.metadata.get("is_test")]),
+        "config_files": len(
+            [n for n in index.config_graph.nodes if n.type == "config"]
+        ),
+        "test_files": len(
+            [n for n in index.test_graph.nodes if n.metadata.get("is_test")]
+        ),
     }
 
     # Repository size estimation

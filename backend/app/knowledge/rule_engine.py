@@ -41,10 +41,12 @@ async def load_rules(repo_id: uuid.UUID) -> list[str]:
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(RepositoryRule.rule_text).where(
+                select(RepositoryRule.rule_text)
+                .where(
                     RepositoryRule.repo_id == repo_id,
                     RepositoryRule.is_active == True,
-                ).order_by(RepositoryRule.priority.desc())
+                )
+                .order_by(RepositoryRule.priority.desc())
             )
             rows = result.fetchall()
             for row in rows:

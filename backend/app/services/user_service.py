@@ -31,10 +31,11 @@ class UserService:
         update_data = obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_obj, field, value)
-        
+
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)
         return db_obj
+
 
 user_service = UserService()

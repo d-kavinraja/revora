@@ -25,7 +25,6 @@ FRAMEWORK_SIGNATURES: list[tuple[str, list[str], str | None]] = [
     ("Remix", ["@remix-run/react"], "package.json"),
     ("Vite", ["vite"], "package.json"),
     ("Webpack", ["webpack"], "package.json"),
-
     # Python
     ("FastAPI", ["fastapi"], "requirements.txt"),
     ("FastAPI", ["fastapi"], "pyproject.toml"),
@@ -36,23 +35,19 @@ FRAMEWORK_SIGNATURES: list[tuple[str, list[str], str | None]] = [
     ("Starlette", ["starlette"], "requirements.txt"),
     ("Celery", ["celery"], "requirements.txt"),
     ("Celery", ["celery"], "pyproject.toml"),
-
     # Go
     ("Gin", ["github.com/gin-gonic/gin"], "go.mod"),
     ("Echo", ["github.com/labstack/echo"], "go.mod"),
     ("Fiber", ["github.com/gofiber/fiber"], "go.mod"),
     ("Chi", ["github.com/go-chi/chi"], "go.mod"),
-
     # Java / Kotlin
     ("Spring Boot", ["org.springframework.boot"], "pom.xml"),
     ("Spring Boot", ["org.springframework.boot"], "build.gradle"),
     ("Micronaut", ["io.micronaut"], "build.gradle"),
-
     # Rust
     ("Actix Web", ["actix-web"], "Cargo.toml"),
     ("Axum", ["axum"], "Cargo.toml"),
     ("Rocket", ["rocket"], "Cargo.toml"),
-
     # Ruby
     ("Rails", ["rails"], "Gemfile"),
     ("Sinatra", ["sinatra"], "Gemfile"),
@@ -70,7 +65,7 @@ class FrameworkDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect frameworks using the RepoWalker cache.
 
         Args:
@@ -89,7 +84,8 @@ class FrameworkDetector(BaseDetector):
             if config_file:
                 # Check if config file exists via walker
                 config_files = [
-                    fp for fp in walker.file_paths
+                    fp
+                    for fp in walker.file_paths
                     if fp.endswith((config_file, "/" + config_file))
                 ]
 
@@ -99,21 +95,18 @@ class FrameworkDetector(BaseDetector):
                 # Read config file content
                 content = await walker.get_content(config_files[0])
                 if any(sig in content for sig in signatures):
-                    frameworks.append(
-                        FrameworkInfo(name=name, config_file=config_file)
-                    )
+                    frameworks.append(FrameworkInfo(name=name, config_file=config_file))
                     seen.add(name)
             else:
                 # Check for config file existence
                 for sig in signatures:
                     matching_files = [
-                        fp for fp in walker.file_paths
+                        fp
+                        for fp in walker.file_paths
                         if fp.endswith("/" + sig) or fp == sig
                     ]
                     if matching_files:
-                        frameworks.append(
-                            FrameworkInfo(name=name, config_file=sig)
-                        )
+                        frameworks.append(FrameworkInfo(name=name, config_file=sig))
                         seen.add(name)
                         break
 

@@ -220,9 +220,7 @@ class KnowledgeStore:
                 await db.commit()
 
         except Exception as e:
-            logger.error(
-                f"Failed to invalidate cache for repo {repo_id}: {e}"
-            )
+            logger.error(f"Failed to invalidate cache for repo {repo_id}: {e}")
 
 
 knowledge_store = KnowledgeStore()

@@ -30,7 +30,11 @@ class TruncationStrategy(BaseCompressionStrategy):
             content=truncated,
             relevance_score=context.relevance_score,
             source=context.source,
-            metadata={**context.metadata, "compressed": True, "compression_strategy": "truncation"},
+            metadata={
+                **context.metadata,
+                "compressed": True,
+                "compression_strategy": "truncation",
+            },
             compressed=True,
             original_tokens=current_tokens,
         )

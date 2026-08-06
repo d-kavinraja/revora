@@ -25,9 +25,13 @@ class GitHubAppAuth:
         private_key = self.private_key
 
         if not app_id:
-            raise ValueError("GITHUB_APP_ID is missing in server environment variables. Please add GITHUB_APP_ID to your Render Environment Variables.")
+            raise ValueError(
+                "GITHUB_APP_ID is missing in server environment variables. Please add GITHUB_APP_ID to your Render Environment Variables."
+            )
         if not private_key:
-            raise ValueError("GITHUB_APP_PRIVATE_KEY is missing in server environment variables. Please add GITHUB_APP_PRIVATE_KEY to your Render Environment Variables.")
+            raise ValueError(
+                "GITHUB_APP_PRIVATE_KEY is missing in server environment variables. Please add GITHUB_APP_PRIVATE_KEY to your Render Environment Variables."
+            )
 
         now = int(time.time())
         payload = {
@@ -68,7 +72,7 @@ class GitHubAppAuth:
                 return token
 
         app_jwt = self._create_app_jwt()
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"https://api.github.com/app/installations/{installation_id}/access_tokens",
@@ -87,5 +91,6 @@ class GitHubAppAuth:
 
         self._token_cache[installation_id] = (token, expires_at)
         return token
+
 
 github_app_auth = GitHubAppAuth()

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PromptMetricRecord:
     """A single prompt build metric record."""
+
     prompt_id: str
     review_type: str
     provider: str
@@ -70,7 +71,7 @@ class PromptObservability:
 
         self._records.append(record)
         if len(self._records) > self._max_records:
-            self._records = self._records[-self._max_records:]
+            self._records = self._records[-self._max_records :]
 
     async def get_metrics(self, prompt_id: str) -> dict | None:
         """Get metrics for a specific prompt."""

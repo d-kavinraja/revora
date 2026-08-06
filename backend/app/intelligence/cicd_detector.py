@@ -51,7 +51,7 @@ class CICDDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect CI/CD providers using the RepoWalker cache.
 
         Args:
@@ -61,6 +61,7 @@ class CICDDetector(BaseDetector):
             DetectorResult with CI/CD info.
         """
         import os as _os
+
         providers: list[str] = []
         config_files: list[str] = []
 
@@ -74,7 +75,8 @@ class CICDDetector(BaseDetector):
                 dir_prefix = normalized_dir + _os.sep
                 extensions = config.get("extensions", [".yml", ".yaml"])
                 workflow_files = [
-                    fp for fp in walker.file_paths
+                    fp
+                    for fp in walker.file_paths
                     if fp.startswith(dir_prefix)
                     and any(fp.endswith(ext) for ext in extensions)
                 ]
@@ -87,8 +89,10 @@ class CICDDetector(BaseDetector):
             if not found and "files" in config:
                 for ci_file in config["files"]:
                     matching_files = [
-                        fp for fp in walker.file_paths
-                        if fp.endswith(("/" + ci_file, _os.sep + ci_file)) or fp == ci_file
+                        fp
+                        for fp in walker.file_paths
+                        if fp.endswith(("/" + ci_file, _os.sep + ci_file))
+                        or fp == ci_file
                     ]
                     if matching_files:
                         providers.append(provider)

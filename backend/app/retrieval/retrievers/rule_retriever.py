@@ -32,10 +32,12 @@ class RuleRetriever(BaseRetriever):
 
         rules_content = "\n".join(f"- {rule}" for rule in rules)
 
-        return [RetrievedContext(
-            file_path=".review-rules",
-            content=rules_content,
-            relevance_score=0.7,
-            source="rule",
-            metadata={"rule_count": len(rules)},
-        )]
+        return [
+            RetrievedContext(
+                file_path=".review-rules",
+                content=rules_content,
+                relevance_score=0.7,
+                source="rule",
+                metadata={"rule_count": len(rules)},
+            )
+        ]

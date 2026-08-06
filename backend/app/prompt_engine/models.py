@@ -4,6 +4,7 @@ from enum import Enum
 
 class ReviewType(str, Enum):
     """Supported review types for prompt building."""
+
     PR_REVIEW = "pr_review"
     REPO_REVIEW = "repo_review"
     SECURITY_REVIEW = "security_review"
@@ -18,6 +19,7 @@ class ReviewType(str, Enum):
 
 class RepositorySize(str, Enum):
     """Repository size categories for strategy selection."""
+
     SMALL = "small"
     MEDIUM = "medium"
     LARGE = "large"
@@ -27,6 +29,7 @@ class RepositorySize(str, Enum):
 
 class PromptVersion(str, Enum):
     """Prompt version identifiers."""
+
     V1 = "1.0"
     V2 = "2.0"
     V3 = "3.0"
@@ -35,6 +38,7 @@ class PromptVersion(str, Enum):
 @dataclass
 class PromptSection:
     """A single section within a compiled prompt."""
+
     name: str
     content: str
     token_count: int = 0
@@ -47,6 +51,7 @@ class PromptSection:
 @dataclass
 class TokenMetadata:
     """Token usage metadata for a compiled prompt."""
+
     total_tokens: int = 0
     budget_limit: int = 10000
     budget_used: float = 0.0
@@ -58,6 +63,7 @@ class TokenMetadata:
 @dataclass
 class ProviderMetadata:
     """Provider and model metadata for a compiled prompt."""
+
     provider: str = ""
     model: str = ""
     context_window: int = 0
@@ -69,6 +75,7 @@ class ProviderMetadata:
 @dataclass
 class PromptExplainability:
     """User-facing explainability metadata. Does NOT expose system prompt or internal instructions."""
+
     prompt_version: str = ""
     tokens_used: int = 0
     context_size: int = 0
@@ -84,6 +91,7 @@ class PromptExplainability:
 @dataclass
 class PromptBuildRequest:
     """Input specification for the Prompt Builder Engine."""
+
     review_type: ReviewType = ReviewType.PR_REVIEW
     repo_id: str | None = None
     repo_path: str = "."
@@ -110,6 +118,7 @@ class PromptBuildRequest:
 @dataclass
 class CompiledPrompt:
     """Output of the Prompt Builder Engine. Backward-compatible with LLM Orchestrator."""
+
     version: str = "2.0"
     prompt_id: str = ""
     prompt_version: str = ""

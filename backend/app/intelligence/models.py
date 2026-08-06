@@ -45,7 +45,9 @@ class CIInfo:
 
 @dataclass
 class BuildInfo:
-    tools: list[str] = field(default_factory=list)  # webpack, vite, esbuild, gradle, maven
+    tools: list[str] = field(
+        default_factory=list
+    )  # webpack, vite, esbuild, gradle, maven
     dockerfile: bool = False
     docker_compose: bool = False
 
@@ -85,15 +87,71 @@ class IntelligenceResult:
 
     def to_dict(self) -> dict:
         return {
-            "languages": [{"name": l.name, "file_count": l.file_count, "percentage": l.percentage} for l in self.languages],
-            "frameworks": [{"name": f.name, "version": f.version, "config_file": f.config_file} for f in self.frameworks],
-            "architecture": {"pattern": self.architecture.pattern, "confidence": self.architecture.confidence, "indicators": self.architecture.indicators} if self.architecture else None,
-            "database": {"type": self.database.type, "orm": self.database.orm, "indicators": self.database.indicators} if self.database else None,
-            "package_manager": {"name": self.package_manager.name, "lock_file": self.package_manager.lock_file} if self.package_manager else None,
-            "testing": {"framework": self.testing.framework, "has_tests": self.testing.has_tests, "test_count": self.testing.test_count} if self.testing else None,
-            "build": {"tools": self.build.tools, "dockerfile": self.build.dockerfile, "docker_compose": self.build.docker_compose} if self.build else None,
-            "ci": {"provider": self.ci.provider, "config_file": self.ci.config_file} if self.ci else None,
-            "security": {"auth_patterns": self.security.auth_patterns, "has_cors": self.security.has_cors} if self.security else None,
+            "languages": [
+                {"name": l.name, "file_count": l.file_count, "percentage": l.percentage}
+                for l in self.languages
+            ],
+            "frameworks": [
+                {"name": f.name, "version": f.version, "config_file": f.config_file}
+                for f in self.frameworks
+            ],
+            "architecture": (
+                {
+                    "pattern": self.architecture.pattern,
+                    "confidence": self.architecture.confidence,
+                    "indicators": self.architecture.indicators,
+                }
+                if self.architecture
+                else None
+            ),
+            "database": (
+                {
+                    "type": self.database.type,
+                    "orm": self.database.orm,
+                    "indicators": self.database.indicators,
+                }
+                if self.database
+                else None
+            ),
+            "package_manager": (
+                {
+                    "name": self.package_manager.name,
+                    "lock_file": self.package_manager.lock_file,
+                }
+                if self.package_manager
+                else None
+            ),
+            "testing": (
+                {
+                    "framework": self.testing.framework,
+                    "has_tests": self.testing.has_tests,
+                    "test_count": self.testing.test_count,
+                }
+                if self.testing
+                else None
+            ),
+            "build": (
+                {
+                    "tools": self.build.tools,
+                    "dockerfile": self.build.dockerfile,
+                    "docker_compose": self.build.docker_compose,
+                }
+                if self.build
+                else None
+            ),
+            "ci": (
+                {"provider": self.ci.provider, "config_file": self.ci.config_file}
+                if self.ci
+                else None
+            ),
+            "security": (
+                {
+                    "auth_patterns": self.security.auth_patterns,
+                    "has_cors": self.security.has_cors,
+                }
+                if self.security
+                else None
+            ),
             "repo_type": self.repo_type,
             "cloud_provider": self.cloud_provider,
             "caching": self.caching,

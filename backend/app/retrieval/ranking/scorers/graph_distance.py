@@ -1,4 +1,3 @@
-
 from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer

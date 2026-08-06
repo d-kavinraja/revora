@@ -43,8 +43,18 @@ CONFIG_INDICATORS = {
 }
 
 CHECK_EXTENSIONS = {
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".json",
-    ".toml", ".yaml", ".yml", ".env", ".cfg", ".ini",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".json",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".env",
+    ".cfg",
+    ".ini",
 }
 
 
@@ -59,7 +69,7 @@ class DatabaseDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect databases using the RepoWalker cache.
 
         Args:

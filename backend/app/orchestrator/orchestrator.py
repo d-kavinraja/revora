@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 # ── Transient error classification ──────────────────────────────
 # These are errors where retrying the SAME provider/key/model may succeed.
-_TRANSIENT_ERRORS = {"timeout", "connection", "service_unavailable", "503", "500", "502", "504"}
+_TRANSIENT_ERRORS = {
+    "timeout",
+    "connection",
+    "service_unavailable",
+    "503",
+    "500",
+    "502",
+    "504",
+}
 
 
 def _is_transient_error(error_str: str) -> bool:
@@ -69,7 +77,9 @@ class LLMOrchestrator:
             raise RuntimeError("No provider configured for this review.")
 
         if not preferred_model:
-            raise RuntimeError(f"No model configured for provider '{preferred_provider}'.")
+            raise RuntimeError(
+                f"No model configured for provider '{preferred_provider}'."
+            )
 
         is_explicit = config_source == CONFIG_SOURCE_REPO
         try:
@@ -88,11 +98,15 @@ class LLMOrchestrator:
             try:
                 start = time.time()
                 if callback:
-                    await callback("validating_ai_configuration", "completed", metrics={
-                        "provider": preferred_provider,
-                        "model": preferred_model,
-                        "config_source": config_source,
-                    })
+                    await callback(
+                        "validating_ai_configuration",
+                        "completed",
+                        metrics={
+                            "provider": preferred_provider,
+                            "model": preferred_model,
+                            "config_source": config_source,
+                        },
+                    )
                     await callback("sending_request_to_llm", "running")
 
                 response_text, real_input_tokens, real_output_tokens = (
@@ -108,7 +122,9 @@ class LLMOrchestrator:
                 input_tokens = (
                     real_input_tokens
                     if real_input_tokens > 0
-                    else max(prompt.total_tokens, len(str(prompt.get_user_messages())) // 4)
+                    else max(
+                        prompt.total_tokens, len(str(prompt.get_user_messages())) // 4
+                    )
                 )
                 output_tokens = (
                     real_output_tokens
@@ -118,7 +134,11 @@ class LLMOrchestrator:
 
                 latency_ms = (time.time() - start) * 1000
                 if callback:
-                    await callback("sending_request_to_llm", "completed", metrics={"latency_ms": latency_ms})
+                    await callback(
+                        "sending_request_to_llm",
+                        "completed",
+                        metrics={"latency_ms": latency_ms},
+                    )
                     await callback("receiving_ai_response", "completed")
 
                 usage = UsageStats(
@@ -151,9 +171,7 @@ class LLMOrchestrator:
 
             except ValueError as e:
                 # No API key — fail immediately
-                raise RuntimeError(
-                    f"AI configuration error: {e}"
-                ) from e
+                raise RuntimeError(f"AI configuration error: {e}") from e
 
             except Exception as e:
                 last_error = e
@@ -164,8 +182,12 @@ class LLMOrchestrator:
                 )
 
                 # Only retry on transient errors (MODE 2 only)
-                if attempt < max_attempts - 1 and not is_explicit and _is_transient_error(error_str):
-                    backoff = min(2 ** attempt, 4)
+                if (
+                    attempt < max_attempts - 1
+                    and not is_explicit
+                    and _is_transient_error(error_str)
+                ):
+                    backoff = min(2**attempt, 4)
                     logger.info(
                         f"Transient error, retrying {preferred_provider} "
                         f"in {backoff}s (attempt {attempt + 1}/{max_attempts})..."
@@ -193,12 +215,3 @@ class LLMOrchestrator:
 
 
 llm_orchestrator = LLMOrchestrator()
-
-
-
-
-
-
-
-
-

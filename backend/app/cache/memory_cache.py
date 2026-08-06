@@ -61,7 +61,11 @@ class MemoryCache(BaseCache):
         if cached is not None:
             return cached
 
-        value = await compute_fn() if asyncio.iscoroutinefunction(compute_fn) else compute_fn()
+        value = (
+            await compute_fn()
+            if asyncio.iscoroutinefunction(compute_fn)
+            else compute_fn()
+        )
         await self.set(key, value, ttl_seconds)
         return value
 

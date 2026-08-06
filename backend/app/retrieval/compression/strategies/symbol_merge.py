@@ -31,7 +31,10 @@ class SymbolMergeStrategy(BaseCompressionStrategy):
         lines = content.split("\n")
 
         for sym_name, sym_line in symbols.items():
-            if sym_name in self._seen_symbols and self._seen_symbols[sym_name] != context.file_path:
+            if (
+                sym_name in self._seen_symbols
+                and self._seen_symbols[sym_name] != context.file_path
+            ):
                 for line_num in sym_line:
                     dedup_lines.add(line_num)
                 has_known_symbols = True
@@ -41,10 +44,7 @@ class SymbolMergeStrategy(BaseCompressionStrategy):
         if not has_known_symbols:
             return context
 
-        new_lines = [
-            line for i, line in enumerate(lines)
-            if i not in dedup_lines
-        ]
+        new_lines = [line for i, line in enumerate(lines) if i not in dedup_lines]
 
         if len(new_lines) < len(lines):
             return RetrievedContext(
@@ -52,7 +52,11 @@ class SymbolMergeStrategy(BaseCompressionStrategy):
                 content="\n".join(new_lines),
                 relevance_score=context.relevance_score,
                 source=context.source,
-                metadata={**context.metadata, "compressed": True, "compression_strategy": "symbol_merge"},
+                metadata={
+                    **context.metadata,
+                    "compressed": True,
+                    "compression_strategy": "symbol_merge",
+                },
                 compressed=True,
                 original_tokens=len(lines) // 4,
             )

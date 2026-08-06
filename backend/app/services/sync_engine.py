@@ -96,6 +96,7 @@ def _ensure_aware(dt: datetime | None) -> datetime | None:
 # sync_runs bookkeeping
 # ---------------------------------------------------------------------------
 
+
 async def record_sync_run(
     db,
     reason: str,
@@ -150,6 +151,7 @@ async def record_sync_run(
 # Repository-level pass
 # ---------------------------------------------------------------------------
 
+
 async def sync_repositories_once(
     reason: str,
     user_id: uuid.UUID | None = None,
@@ -188,7 +190,9 @@ async def sync_repositories_once(
             inst_ok = True
             inst_error: str | None = None
             try:
-                token = await github_app_auth.get_installation_token(inst.installation_id)
+                token = await github_app_auth.get_installation_token(
+                    inst.installation_id
+                )
                 auth_headers = {**headers, "Authorization": f"Bearer {token}"}
 
                 async with httpx.AsyncClient() as client:
@@ -231,7 +235,9 @@ async def sync_repositories_once(
                                 )
                                 db.add(db_repo)
                                 counts["repos_added"] += 1
-                                logger.info(f"[sync:{reason}] New repository: {db_repo.full_name}")
+                                logger.info(
+                                    f"[sync:{reason}] New repository: {db_repo.full_name}"
+                                )
                             else:
                                 changed = False
                                 for attr, key in (
@@ -242,7 +248,10 @@ async def sync_repositories_once(
                                     ("is_private", "private"),
                                 ):
                                     new_val = r.get(key)
-                                    if new_val is not None and getattr(db_repo, attr) != new_val:
+                                    if (
+                                        new_val is not None
+                                        and getattr(db_repo, attr) != new_val
+                                    ):
                                         setattr(db_repo, attr, new_val)
                                         changed = True
                                 gh_archived = bool(r.get("archived", False))
@@ -267,7 +276,10 @@ async def sync_repositories_once(
                         except Exception as e:
                             full_name = r.get("full_name") or str(gh_id)
                             counts["failures"][full_name] = f"{type(e).__name__}: {e}"
-                            logger.error(f"[sync:{reason}] Repo upsert failed for {full_name}: {e}", exc_info=True)
+                            logger.error(
+                                f"[sync:{reason}] Repo upsert failed for {full_name}: {e}",
+                                exc_info=True,
+                            )
 
                     # Mark removed — only when the fetched list is non-empty to
                     # avoid mass-removal on a transient API glitch.
@@ -292,14 +304,18 @@ async def sync_repositories_once(
 
                 # Permission refresh (best-effort — never fails the pass).
                 try:
-                    gh_inst = await github_app_auth.get_installation(inst.installation_id)
+                    gh_inst = await github_app_auth.get_installation(
+                        inst.installation_id
+                    )
                     if gh_inst is None:
                         # Installation vanished on GitHub (uninstall missed by
                         # webhooks) — unlink everything under it.
                         inst.permissions_ok = False
                         inst.suspended_at = now
                         orphan_res = await db.execute(
-                            select(Repository).where(Repository.installation_id == inst.id)
+                            select(Repository).where(
+                                Repository.installation_id == inst.id
+                            )
                         )
                         for orphan in orphan_res.scalars().all():
                             if orphan.removed_at is None:
@@ -321,7 +337,9 @@ async def sync_repositories_once(
                             if suspended
                             else None
                         )
-                        inst.permissions_ok = _has_required_permissions(inst.permissions, inst.suspended_at)
+                        inst.permissions_ok = _has_required_permissions(
+                            inst.permissions, inst.suspended_at
+                        )
                         if not inst.permissions_ok:
                             logger.warning(
                                 f"[sync:{reason}] Installation {inst.installation_id} is "
@@ -358,6 +376,7 @@ async def sync_repositories_once(
 # ---------------------------------------------------------------------------
 # PR-level pass
 # ---------------------------------------------------------------------------
+
 
 async def sync_prs_once(
     reason: str,
@@ -417,7 +436,9 @@ async def sync_prs_once(
                         PullRequest.status.in_(["open", "draft"])
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
         due_repos: list[tuple[Repository, Installation]] = []
@@ -498,7 +519,9 @@ async def _sync_repository_prs(
                 # Repo deleted/renamed on GitHub — repo pass will unlink it.
                 return 0, 0, 0
             if not res.is_success:
-                raise RuntimeError(f"PR list failed: {res.status_code} {res.text[:200]}")
+                raise RuntimeError(
+                    f"PR list failed: {res.status_code} {res.text[:200]}"
+                )
             batch = res.json()
             gh_open.extend(batch)
             if len(batch) < 100 or page >= 5:
@@ -525,7 +548,9 @@ async def _sync_repository_prs(
                 elif updated:
                     prs_updated += 1
             except Exception as e:
-                counts["failures"][f"{repo.full_name}#{pr_number}"] = f"{type(e).__name__}: {e}"
+                counts["failures"][
+                    f"{repo.full_name}#{pr_number}"
+                ] = f"{type(e).__name__}: {e}"
                 logger.error(
                     f"[sync] PR #{pr_number} of {repo.full_name} failed: {e}",
                     exc_info=True,
@@ -559,9 +584,13 @@ async def _sync_repository_prs(
                     db_pr.status = new_status
                     db.add(db_pr)
                     prs_updated += 1
-                    logger.info(f"[sync] PR #{db_pr.pr_number} of {repo.full_name} -> {new_status}")
+                    logger.info(
+                        f"[sync] PR #{db_pr.pr_number} of {repo.full_name} -> {new_status}"
+                    )
             except Exception as e:
-                counts["failures"][f"{repo.full_name}#{db_pr.pr_number}"] = f"{type(e).__name__}: {e}"
+                counts["failures"][
+                    f"{repo.full_name}#{db_pr.pr_number}"
+                ] = f"{type(e).__name__}: {e}"
                 logger.error(
                     f"[sync] Close-reconcile failed for {repo.full_name}#{db_pr.pr_number}: {e}",
                     exc_info=True,
@@ -647,16 +676,24 @@ async def _reconcile_single_pr(
 
     # --- Guards: skip work that is already processed (rule 2) ----------------
     if await _execution_exists_for_sha(db, db_pr.id, head_sha):
-        logger.info(f"[sync] PR #{pr_number} already reviewed at {head_sha[:12]} — skipped")
+        logger.info(
+            f"[sync] PR #{pr_number} already reviewed at {head_sha[:12]} — skipped"
+        )
         return "skipped", updated
 
     active = (
-        await db.execute(
-            select(Review.id)
-            .where(Review.pr_id == db_pr.id, Review.status.in_(_ACTIVE_REVIEW_STATUSES))
-            .limit(1)
+        (
+            await db.execute(
+                select(Review.id)
+                .where(
+                    Review.pr_id == db_pr.id, Review.status.in_(_ACTIVE_REVIEW_STATUSES)
+                )
+                .limit(1)
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if active is not None and webhook_action == "opened":
         logger.info(f"[sync] Active review exists for PR #{pr_number} — skipped")
         return "skipped", updated
@@ -732,6 +769,7 @@ async def _execution_exists_for_sha(db, pr_id: uuid.UUID, head_sha: str) -> bool
 # Orchestration
 # ---------------------------------------------------------------------------
 
+
 async def run_sync_pass(
     reason: str,
     user_id: uuid.UUID | None = None,
@@ -747,7 +785,9 @@ async def run_sync_pass(
     return await _run_sync_pass(reason, user_id)
 
 
-async def _run_sync_pass_locked(reason: str, user_id: uuid.UUID | None) -> dict[str, Any]:
+async def _run_sync_pass_locked(
+    reason: str, user_id: uuid.UUID | None
+) -> dict[str, Any]:
     """Hold a Postgres advisory lock for the whole pass so multiple API
     workers never run the same pass concurrently (rule 4).
 
@@ -757,7 +797,8 @@ async def _run_sync_pass_locked(reason: str, user_id: uuid.UUID | None) -> dict[
     async with AsyncSessionLocal() as lock_db:
         try:
             locked = await lock_db.scalar(
-                text("SELECT pg_try_advisory_lock(:key)"), {"key": _SYNC_ADVISORY_LOCK_KEY}
+                text("SELECT pg_try_advisory_lock(:key)"),
+                {"key": _SYNC_ADVISORY_LOCK_KEY},
             )
         except Exception:
             # Non-Postgres backend (tests) — run without the lock.
@@ -769,14 +810,17 @@ async def _run_sync_pass_locked(reason: str, user_id: uuid.UUID | None) -> dict[
             return await _run_sync_pass(reason, user_id)
         finally:
             await lock_db.execute(
-                text("SELECT pg_advisory_unlock(:key)"), {"key": _SYNC_ADVISORY_LOCK_KEY}
+                text("SELECT pg_advisory_unlock(:key)"),
+                {"key": _SYNC_ADVISORY_LOCK_KEY},
             )
 
 
 async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, Any]:
     run_id: uuid.UUID | None = None
     async with AsyncSessionLocal() as db:
-        run = await record_sync_run(db, reason, SYNC_STATUS_RUNNING, triggered_by=user_id)
+        run = await record_sync_run(
+            db, reason, SYNC_STATUS_RUNNING, triggered_by=user_id
+        )
         run_id = run.id
 
     try:
@@ -792,7 +836,9 @@ async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, An
         error = "; ".join(f"{k}: {v}" for k, v in list(failures.items())[:5]) or None
         async with AsyncSessionLocal() as db:
             await record_sync_run(
-                db, reason, status,
+                db,
+                reason,
+                status,
                 counts=counts,
                 error=error,
                 details=failures or None,
@@ -812,7 +858,9 @@ async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, An
         try:
             async with AsyncSessionLocal() as db:
                 await record_sync_run(
-                    db, reason, SYNC_STATUS_FAILED,
+                    db,
+                    reason,
+                    SYNC_STATUS_FAILED,
                     error=str(e),
                     triggered_by=user_id,
                     run_id=run_id,
@@ -825,6 +873,7 @@ async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, An
 # ---------------------------------------------------------------------------
 # Background loop
 # ---------------------------------------------------------------------------
+
 
 async def sync_loop() -> None:
     """Background tiered sync loop (replaces pr_state_sync_loop).

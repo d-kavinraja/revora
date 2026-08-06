@@ -47,8 +47,20 @@ async def create_api_key(
 ):
     """Add a new encrypted API key for the current user."""
     provider = key_in.provider.lower()
-    if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek", "grok",
-                        "openrouter", "azure_openai", "ollama", "cohere", "mistral", "nvidia"]:
+    if provider not in [
+        "openai",
+        "anthropic",
+        "gemini",
+        "groq",
+        "deepseek",
+        "grok",
+        "openrouter",
+        "azure_openai",
+        "ollama",
+        "cohere",
+        "mistral",
+        "nvidia",
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid LLM provider",
@@ -87,7 +99,10 @@ async def create_api_key(
     db_key = await api_key_service.create(db, current_user.id, key_in)
 
     from app.services.model_discovery import model_discovery_engine
-    background_tasks.add_task(model_discovery_engine.get_available_models, provider, key_in.api_key)
+
+    background_tasks.add_task(
+        model_discovery_engine.get_available_models, provider, key_in.api_key
+    )
 
     return ApiKeySchema.from_orm_with_mask(db_key, key_in.api_key)
 
@@ -110,8 +125,20 @@ async def update_api_key(
 
     if key_in.api_key:
         provider = db_key.provider.lower()
-        if provider not in ["openai", "anthropic", "gemini", "groq", "deepseek", "grok",
-                            "openrouter", "azure_openai", "ollama", "cohere", "mistral", "nvidia"]:
+        if provider not in [
+            "openai",
+            "anthropic",
+            "gemini",
+            "groq",
+            "deepseek",
+            "grok",
+            "openrouter",
+            "azure_openai",
+            "ollama",
+            "cohere",
+            "mistral",
+            "nvidia",
+        ]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid LLM provider",
@@ -159,7 +186,10 @@ async def update_api_key(
 
     if raw_key != "***":
         from app.services.model_discovery import model_discovery_engine
-        background_tasks.add_task(model_discovery_engine.get_available_models, db_key.provider, raw_key)
+
+        background_tasks.add_task(
+            model_discovery_engine.get_available_models, db_key.provider, raw_key
+        )
 
     return ApiKeySchema.from_orm_with_mask(db_key, raw_key)
 
@@ -205,7 +235,6 @@ async def delete_api_key(
         logger.error(f"Failed to clean up repo mappings for key {key_id_str}: {e}")
 
 
-
 @router.post("/{key_id}/test", response_model=dict[str, Any])
 async def test_api_key(
     key_id: uuid.UUID,
@@ -229,10 +258,17 @@ async def test_api_key(
         )
 
     litellm_provider_map = {
-        "gemini": "gemini", "openai": "openai", "anthropic": "anthropic",
-        "groq": "groq", "deepseek": "deepseek", "grok": "xai",
-        "openrouter": "openrouter", "azure_openai": "azure",
-        "ollama": "ollama", "cohere": "cohere", "mistral": "mistral",
+        "gemini": "gemini",
+        "openai": "openai",
+        "anthropic": "anthropic",
+        "groq": "groq",
+        "deepseek": "deepseek",
+        "grok": "xai",
+        "openrouter": "openrouter",
+        "azure_openai": "azure",
+        "ollama": "ollama",
+        "cohere": "cohere",
+        "mistral": "mistral",
         "nvidia": "nvidia_nim",
     }
 
@@ -246,10 +282,15 @@ async def test_api_key(
 
     try:
         from app.services.model_discovery import model_discovery_engine
-        models = await model_discovery_engine.get_available_models(db_key.provider, raw_key)
+
+        models = await model_discovery_engine.get_available_models(
+            db_key.provider, raw_key
+        )
 
         if not models:
-            raise ValueError("Provider returned an empty model list. The key may be invalid.")
+            raise ValueError(
+                "Provider returned an empty model list. The key may be invalid."
+            )
 
         db_key.is_valid = True
         db.add(db_key)
@@ -264,14 +305,30 @@ async def test_api_key(
 
     except Exception as e:
         err_str = str(e).lower()
-        any(k in err_str for k in [
-            "invalid_api_key", "invalid api key", "401", "403",
-            "permission", "unauthorized", "forbidden",
-        ])
-        is_busy = any(k in err_str for k in [
-            "429", "rate_limit", "rate limit", "quota",
-            "503", "service_unavailable", "temporarily unavailable",
-        ])
+        any(
+            k in err_str
+            for k in [
+                "invalid_api_key",
+                "invalid api key",
+                "401",
+                "403",
+                "permission",
+                "unauthorized",
+                "forbidden",
+            ]
+        )
+        is_busy = any(
+            k in err_str
+            for k in [
+                "429",
+                "rate_limit",
+                "rate limit",
+                "quota",
+                "503",
+                "service_unavailable",
+                "temporarily unavailable",
+            ]
+        )
 
         if is_busy:
             db_key.is_valid = True
@@ -286,7 +343,9 @@ async def test_api_key(
         db_key.is_valid = False
         db.add(db_key)
         await db.commit()
-        await api_key_service.record_health(db, db_key.id, "unhealthy", "auth_error", str(e))
+        await api_key_service.record_health(
+            db, db_key.id, "unhealthy", "auth_error", str(e)
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Connectivity test failed: {e}",
@@ -331,18 +390,31 @@ async def validate_all_keys(
         try:
             raw_key = encryption_service.decrypt(key.encrypted_key)
             from app.services.model_discovery import model_discovery_engine
-            models = await model_discovery_engine.get_available_models(key.provider, raw_key)
+
+            models = await model_discovery_engine.get_available_models(
+                key.provider, raw_key
+            )
             if models:
                 key.is_valid = True
                 await api_key_service.record_health(db, key.id, "healthy")
-                results[str(key.id)] = {"status": "success", "message": f"{len(models)} models accessible"}
+                results[str(key.id)] = {
+                    "status": "success",
+                    "message": f"{len(models)} models accessible",
+                }
             else:
                 key.is_valid = False
-                await api_key_service.record_health(db, key.id, "unhealthy", "empty_models", "No models returned")
-                results[str(key.id)] = {"status": "failed", "message": "No models returned"}
+                await api_key_service.record_health(
+                    db, key.id, "unhealthy", "empty_models", "No models returned"
+                )
+                results[str(key.id)] = {
+                    "status": "failed",
+                    "message": "No models returned",
+                }
         except Exception as e:
             key.is_valid = False
-            await api_key_service.record_health(db, key.id, "unhealthy", "error", str(e))
+            await api_key_service.record_health(
+                db, key.id, "unhealthy", "error", str(e)
+            )
             results[str(key.id)] = {"status": "failed", "message": str(e)}
 
         db.add(key)

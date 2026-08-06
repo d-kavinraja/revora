@@ -37,8 +37,15 @@ class ChangeFrequencyScorer(BaseScorer):
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "git", "-C", repo_path, "log", "--oneline", "--follow",
-                "--since=6 months", "--", file_path,
+                "git",
+                "-C",
+                repo_path,
+                "log",
+                "--oneline",
+                "--follow",
+                "--since=6 months",
+                "--",
+                file_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

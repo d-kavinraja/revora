@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from app.intelligence.repo_walker import RepoWalker
 
 
-
 class HealthEngine(BaseDetector):
     """Calculates repository health score."""
 
@@ -32,7 +31,7 @@ class HealthEngine(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Calculate repository health score.
 
         Args:
@@ -50,11 +49,19 @@ class HealthEngine(BaseDetector):
 
         # Framework score (0-1) - having frameworks is good
         framework_files = [
-            fp for fp in walker.file_paths
-            if any(fp.endswith(ext) for ext in [
-                "package.json", "requirements.txt", "pyproject.toml",
-                "go.mod", "Cargo.toml", "Gemfile",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                fp.endswith(ext)
+                for ext in [
+                    "package.json",
+                    "requirements.txt",
+                    "pyproject.toml",
+                    "go.mod",
+                    "Cargo.toml",
+                    "Gemfile",
+                ]
+            )
         ]
         scores["framework"] = min(1.0, len(framework_files) * 0.5)
 
@@ -68,31 +75,47 @@ class HealthEngine(BaseDetector):
 
         # Testing score (0-1)
         test_files = [
-            fp for fp in walker.file_paths
+            fp
+            for fp in walker.file_paths
             if "test" in fp.lower() or "spec" in fp.lower()
         ]
         test_configs = [
-            fp for fp in walker.file_paths
-            if any(fp.endswith(ext) for ext in [
-                "jest.config.js", "jest.config.ts",
-                "vitest.config.js", "vitest.config.ts",
-                "pytest.ini", "conftest.py",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                fp.endswith(ext)
+                for ext in [
+                    "jest.config.js",
+                    "jest.config.ts",
+                    "vitest.config.js",
+                    "vitest.config.ts",
+                    "pytest.ini",
+                    "conftest.py",
+                ]
+            )
         ]
         scores["testing"] = min(1.0, (len(test_files) * 0.1 + len(test_configs) * 0.3))
 
         # Security score (0-1)
         security_files = [
-            fp for fp in walker.file_paths
-            if any(name in fp.lower() for name in [
-                "security", "auth", "permission", "access",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                name in fp.lower()
+                for name in [
+                    "security",
+                    "auth",
+                    "permission",
+                    "access",
+                ]
+            )
         ]
         scores["security"] = min(1.0, len(security_files) * 0.3)
 
         # Documentation score (0-1)
         doc_files = [
-            fp for fp in walker.file_paths
+            fp
+            for fp in walker.file_paths
             if fp.endswith((".md", ".rst", ".txt", "README", "CONTRIBUTING", "LICENSE"))
         ]
         scores["documentation"] = min(1.0, len(doc_files) * 0.3)

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GraphBuildResult:
     """Result from a graph builder."""
+
     success: bool
     graph: CodeGraph | None = None
     error: str | None = None
@@ -61,7 +62,7 @@ class BaseGraphBuilder(ABC):
         ...
 
     @abstractmethod
-    async def build(self, walker: 'RepoWalker') -> CodeGraph:
+    async def build(self, walker: "RepoWalker") -> CodeGraph:
         """Build the code graph from repository files.
 
         Args:
@@ -85,7 +86,7 @@ class BaseGraphBuilder(ABC):
         """
         return True
 
-    async def safe_build(self, walker: 'RepoWalker') -> GraphBuildResult:
+    async def safe_build(self, walker: "RepoWalker") -> GraphBuildResult:
         """Wrapper around build() with timing and error handling.
 
         This method should be called by the indexer, not directly.

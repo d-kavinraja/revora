@@ -1,5 +1,4 @@
-﻿
-from sqlalchemy import select
+﻿from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.provider import ProviderRegistry
@@ -7,7 +6,9 @@ from app.models.provider import ProviderRegistry
 
 class ProviderRegistryService:
     async def get_all(self, db: AsyncSession) -> list[ProviderRegistry]:
-        result = await db.execute(select(ProviderRegistry).order_by(ProviderRegistry.priority))
+        result = await db.execute(
+            select(ProviderRegistry).order_by(ProviderRegistry.priority)
+        )
         return list(result.scalars().all())
 
     async def get_enabled(self, db: AsyncSession) -> list[ProviderRegistry]:
@@ -30,7 +31,9 @@ class ProviderRegistryService:
         )
         return result.scalars().first()
 
-    async def update(self, db: AsyncSession, slug: str, data: dict) -> ProviderRegistry | None:
+    async def update(
+        self, db: AsyncSession, slug: str, data: dict
+    ) -> ProviderRegistry | None:
         provider = await self.get_by_slug(db, slug)
         if not provider:
             return None
@@ -42,7 +45,9 @@ class ProviderRegistryService:
         await db.refresh(provider)
         return provider
 
-    async def toggle(self, db: AsyncSession, slug: str, enabled: bool) -> ProviderRegistry | None:
+    async def toggle(
+        self, db: AsyncSession, slug: str, enabled: bool
+    ) -> ProviderRegistry | None:
         provider = await self.get_by_slug(db, slug)
         if not provider:
             return None

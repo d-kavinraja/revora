@@ -70,8 +70,7 @@ async def get_dashboard_stats(
                 # Count completed reviews
                 completed_result = await db.execute(
                     select(func.count(Review.id)).where(
-                        Review.pr_id.in_(pr_ids),
-                        Review.status == "completed"
+                        Review.pr_id.in_(pr_ids), Review.status == "completed"
                     )
                 )
                 total_completed_reviews = completed_result.scalar() or 0
@@ -79,8 +78,7 @@ async def get_dashboard_stats(
                 # Count failed reviews
                 failed_result = await db.execute(
                     select(func.count(Review.id)).where(
-                        Review.pr_id.in_(pr_ids),
-                        Review.status == "failed"
+                        Review.pr_id.in_(pr_ids), Review.status == "failed"
                     )
                 )
                 total_failed_reviews = failed_result.scalar() or 0
@@ -89,16 +87,15 @@ async def get_dashboard_stats(
                 # Sum bug_count + security_count + performance_count from stats
                 reviews_result = await db.execute(
                     select(Review.stats).where(
-                        Review.pr_id.in_(pr_ids),
-                        Review.status == "completed"
+                        Review.pr_id.in_(pr_ids), Review.status == "completed"
                     )
                 )
                 for (stats_row,) in reviews_result.all():
                     if stats_row:
                         total_issues_caught += (
-                            (stats_row.get("bug_count") or 0) +
-                            (stats_row.get("security_count") or 0) +
-                            (stats_row.get("performance_count") or 0)
+                            (stats_row.get("bug_count") or 0)
+                            + (stats_row.get("security_count") or 0)
+                            + (stats_row.get("performance_count") or 0)
                         )
 
     return {

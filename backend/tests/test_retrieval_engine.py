@@ -54,7 +54,9 @@ class TestRetrievalEngine:
                 return sorted(contexts, key=lambda c: c.relevance_score, reverse=True)
 
         engine.set_ranking_engine(MockRanking())
-        config = RetrievalConfig(budget=10000, enable_ranking=True, enable_compression=False)
+        config = RetrievalConfig(
+            budget=10000, enable_ranking=True, enable_compression=False
+        )
         engine.configure(config)
 
         result = await engine.retrieve(
@@ -73,7 +75,9 @@ class TestRetrievalEngine:
                 pass
 
         engine.set_compression_engine(MockCompression())
-        config = RetrievalConfig(budget=10000, enable_compression=True, enable_ranking=False)
+        config = RetrievalConfig(
+            budget=10000, enable_compression=True, enable_ranking=False
+        )
         engine.configure(config)
 
         result = await engine.retrieve(
@@ -140,8 +144,10 @@ class TestRetrievalEngine:
         engine = RetrievalEngine()
         result = RetrievalResult()
         ctx = RetrievedContext(
-            file_path="test.py", content="x=1",
-            relevance_score=1.0, source="changed_file",
+            file_path="test.py",
+            content="x=1",
+            relevance_score=1.0,
+            source="changed_file",
         )
         engine._assign_to_result(result, ctx)
         assert len(result.changed_files) == 1
@@ -150,8 +156,10 @@ class TestRetrievalEngine:
         engine = RetrievalEngine()
         result = RetrievalResult()
         ctx = RetrievedContext(
-            file_path="test.py", content="x=1",
-            relevance_score=0.9, source="test_graph",
+            file_path="test.py",
+            content="x=1",
+            relevance_score=0.9,
+            source="test_graph",
         )
         engine._assign_to_result(result, ctx)
         assert len(result.test_files) == 1
@@ -160,8 +168,10 @@ class TestRetrievalEngine:
         engine = RetrievalEngine()
         result = RetrievalResult()
         ctx = RetrievedContext(
-            file_path="auth.py", content="x=1",
-            relevance_score=0.6, source="security",
+            file_path="auth.py",
+            content="x=1",
+            relevance_score=0.6,
+            source="security",
         )
         engine._assign_to_result(result, ctx)
         assert len(result.security_context) == 1
@@ -170,8 +180,10 @@ class TestRetrievalEngine:
         engine = RetrievalEngine()
         result = RetrievalResult()
         ctx = RetrievedContext(
-            file_path="routes.py", content="x=1",
-            relevance_score=0.7, source="api_endpoint",
+            file_path="routes.py",
+            content="x=1",
+            relevance_score=0.7,
+            source="api_endpoint",
         )
         engine._assign_to_result(result, ctx)
         assert len(result.api_endpoints) == 1
@@ -180,8 +192,10 @@ class TestRetrievalEngine:
         engine = RetrievalEngine()
         result = RetrievalResult()
         ctx = RetrievedContext(
-            file_path="models.py", content="x=1",
-            relevance_score=0.8, source="db_schema",
+            file_path="models.py",
+            content="x=1",
+            relevance_score=0.8,
+            source="db_schema",
         )
         engine._assign_to_result(result, ctx)
         assert len(result.db_schemas) == 1
@@ -196,12 +210,14 @@ class TestRetrievalEngine:
 
     async def test_retrieval_result_to_dict(self):
         result = RetrievalResult()
-        result.changed_files.append(RetrievedContext(
-            file_path="test.py",
-            content="hello world",
-            relevance_score=1.0,
-            source="changed_file",
-        ))
+        result.changed_files.append(
+            RetrievedContext(
+                file_path="test.py",
+                content="hello world",
+                relevance_score=1.0,
+                source="changed_file",
+            )
+        )
         result.total_tokens = 100
         result.budget_used = 0.5
 
@@ -228,6 +244,7 @@ class TestRetrievalEngine:
             @property
             def name(self):
                 return "test_retriever"
+
             async def retrieve(self, config, result):
                 return []
 

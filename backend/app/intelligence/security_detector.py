@@ -6,7 +6,6 @@ Uses the shared RepoWalker for efficient filesystem access.
 """
 
 
-
 from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence._async_util import run_async
 from app.intelligence.base_detector import BaseDetector, DetectorResult
@@ -41,7 +40,7 @@ class SecurityDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect security patterns using the RepoWalker cache.
 
         Args:
@@ -57,13 +56,29 @@ class SecurityDetector(BaseDetector):
 
         # Check config files for security patterns
         config_files = [
-            fp for fp in walker.file_paths
-            if any(fp.endswith(ext) for ext in [
-                ".py", ".js", ".ts", ".tsx", ".jsx",
-                ".go", ".java", ".rb", ".php",
-                ".yaml", ".yml", ".json", ".toml",
-                ".env", ".cfg", ".ini",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                fp.endswith(ext)
+                for ext in [
+                    ".py",
+                    ".js",
+                    ".ts",
+                    ".tsx",
+                    ".jsx",
+                    ".go",
+                    ".java",
+                    ".rb",
+                    ".php",
+                    ".yaml",
+                    ".yml",
+                    ".json",
+                    ".toml",
+                    ".env",
+                    ".cfg",
+                    ".ini",
+                ]
+            )
         ]
 
         files_checked = 0

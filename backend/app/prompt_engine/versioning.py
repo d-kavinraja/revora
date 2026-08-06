@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PromptVersionRecord:
     """Record of a prompt version."""
+
     version: str
     template_name: str
     prompt_hash: str
@@ -67,7 +68,9 @@ class PromptVersionManager:
         logger.info(f"Registered prompt version {version} for {template_name}")
         return prompt_hash
 
-    async def get_version(self, template_name: str, version: str) -> PromptVersionRecord | None:
+    async def get_version(
+        self, template_name: str, version: str
+    ) -> PromptVersionRecord | None:
         """Get a specific prompt version."""
         versions = self._versions.get(template_name, [])
         for v in versions:

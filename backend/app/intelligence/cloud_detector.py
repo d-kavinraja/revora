@@ -33,7 +33,7 @@ class CloudDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect cloud providers using the RepoWalker cache.
 
         Args:
@@ -46,13 +46,31 @@ class CloudDetector(BaseDetector):
 
         # Check config files for cloud indicators
         config_files = [
-            fp for fp in walker.file_paths
-            if any(fp.endswith(ext) for ext in [
-                ".py", ".js", ".ts", ".tsx", ".jsx",
-                ".go", ".java", ".rb", ".php",
-                ".yaml", ".yml", ".json", ".toml",
-                ".env", ".cfg", ".ini", ".tf", ".hcl",
-            ])
+            fp
+            for fp in walker.file_paths
+            if any(
+                fp.endswith(ext)
+                for ext in [
+                    ".py",
+                    ".js",
+                    ".ts",
+                    ".tsx",
+                    ".jsx",
+                    ".go",
+                    ".java",
+                    ".rb",
+                    ".php",
+                    ".yaml",
+                    ".yml",
+                    ".json",
+                    ".toml",
+                    ".env",
+                    ".cfg",
+                    ".ini",
+                    ".tf",
+                    ".hcl",
+                ]
+            )
         ]
 
         files_checked = 0

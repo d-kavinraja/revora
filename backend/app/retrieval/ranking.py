@@ -1,4 +1,3 @@
-
 from app.retrieval.models import RetrievedContext
 
 

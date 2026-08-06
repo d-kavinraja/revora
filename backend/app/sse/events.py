@@ -33,6 +33,7 @@ class PipelineEvent:
     def to_sse(self) -> str:
         import json
         import time
+
         data = {
             "type": self.type.value,
             "review_id": self.review_id,

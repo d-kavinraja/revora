@@ -39,10 +39,14 @@ class BaseSectionBuilder(ABC):
         """Priority for ordering (higher = included first when budget is tight)."""
 
     @abstractmethod
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         """Build the section content."""
 
-    async def safe_build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def safe_build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         """Build with error isolation. Returns None on failure instead of raising."""
         try:
             section = await self.build(request, context)
@@ -66,7 +70,9 @@ class SystemInstructionsBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 100
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         config = get_review_config(request.review_type)
         return PromptSection(
             name=self.name,
@@ -85,7 +91,9 @@ class RepositorySummaryBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 90
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.intelligence_data:
             return None
 
@@ -95,7 +103,10 @@ class RepositorySummaryBuilder(BaseSectionBuilder):
         if "languages" in data:
             langs = data["languages"]
             if isinstance(langs, list):
-                lang_names = [l.get("name", str(l)) if isinstance(l, dict) else str(l) for l in langs]
+                lang_names = [
+                    l.get("name", str(l)) if isinstance(l, dict) else str(l)
+                    for l in langs
+                ]
                 parts.append(f"**Languages**: {', '.join(lang_names)}")
             elif isinstance(langs, dict):
                 parts.append(f"**Languages**: {', '.join(langs.keys())}")
@@ -103,7 +114,10 @@ class RepositorySummaryBuilder(BaseSectionBuilder):
         if "frameworks" in data:
             fws = data["frameworks"]
             if isinstance(fws, list):
-                fw_names = [f.get("name", str(f)) if isinstance(f, dict) else str(f) for f in fws]
+                fw_names = [
+                    f.get("name", str(f)) if isinstance(f, dict) else str(f)
+                    for f in fws
+                ]
                 parts.append(f"**Frameworks**: {', '.join(fw_names)}")
 
         if "file_count" in data:
@@ -127,7 +141,9 @@ class ArchitectureSummaryBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 85
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.intelligence_data:
             return None
 
@@ -142,13 +158,19 @@ class ArchitectureSummaryBuilder(BaseSectionBuilder):
             if "description" in arch:
                 parts.append(f"**Description**: {arch['description']}")
             if arch.get("strengths"):
-                parts.append(f"**Strengths**: {', '.join(arch['strengths']) if isinstance(arch['strengths'], list) else arch['strengths']}")
+                parts.append(
+                    f"**Strengths**: {', '.join(arch['strengths']) if isinstance(arch['strengths'], list) else arch['strengths']}"
+                )
             if arch.get("weaknesses"):
-                parts.append(f"**Weaknesses**: {', '.join(arch['weaknesses']) if isinstance(arch['weaknesses'], list) else arch['weaknesses']}")
+                parts.append(
+                    f"**Weaknesses**: {', '.join(arch['weaknesses']) if isinstance(arch['weaknesses'], list) else arch['weaknesses']}"
+                )
         else:
             parts.append(str(arch))
 
-        content = "\n".join(parts) if parts else "No architecture information available."
+        content = (
+            "\n".join(parts) if parts else "No architecture information available."
+        )
         return PromptSection(name=self.name, content=content)
 
 
@@ -163,7 +185,9 @@ class RepositoryRulesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 80
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         all_rules = list(request.rules) if request.rules else []
 
         ranked = context.get("ranked_context")
@@ -190,7 +214,9 @@ class CodingConventionsBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 75
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.conventions:
             return None
         return PromptSection(name=self.name, content=request.conventions)
@@ -207,7 +233,9 @@ class OrganizationRulesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 70
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.organization_rules:
             return None
         rules_text = "\n".join(f"- {r}" for r in request.organization_rules)
@@ -225,19 +253,25 @@ class RelevantFilesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 60
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         ranked = context.get("ranked_context")
         if not ranked:
             return None
 
         files = []
         for ctx in ranked.rankable_contexts[:20]:
-            files.append(f"- `{ctx.file_path}` (relevance: {ctx.relevance_score:.2f}, source: {ctx.source})")
+            files.append(
+                f"- `{ctx.file_path}` (relevance: {ctx.relevance_score:.2f}, source: {ctx.source})"
+            )
 
         if not files:
             return None
 
-        content = "The following files are relevant to this review:\n\n" + "\n".join(files)
+        content = "The following files are relevant to this review:\n\n" + "\n".join(
+            files
+        )
         return PromptSection(name=self.name, content=content)
 
 
@@ -252,7 +286,9 @@ class RelevantCodeBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 55
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         ranked = context.get("ranked_context")
         if not ranked:
             return None
@@ -263,7 +299,9 @@ class RelevantCodeBuilder(BaseSectionBuilder):
                 truncated = ctx.content[:1500]
                 if len(ctx.content) > 1500:
                     truncated += "\n... (truncated)"
-                code_blocks.append(f"### {ctx.file_path}\n```{self._detect_language(ctx.file_path)}\n{truncated}\n```")
+                code_blocks.append(
+                    f"### {ctx.file_path}\n```{self._detect_language(ctx.file_path)}\n{truncated}\n```"
+                )
 
         if not code_blocks:
             return None
@@ -275,15 +313,30 @@ class RelevantCodeBuilder(BaseSectionBuilder):
         # Order matters: more specific extensions must come before less specific ones
         # e.g., .tsx before .ts, .jsx before .js, .hpp before .h
         ext_map = {
-            ".py": "python", ".java": "java", ".go": "go",
-            ".rs": "rust", ".rb": "ruby", ".php": "php", ".cs": "csharp",
-            ".cpp": "cpp", ".hpp": "cpp",
-            ".sql": "sql", ".sh": "bash", ".yaml": "yaml", ".yml": "yaml",
-            ".json": "json", ".xml": "xml", ".html": "html", ".css": "css",
+            ".py": "python",
+            ".java": "java",
+            ".go": "go",
+            ".rs": "rust",
+            ".rb": "ruby",
+            ".php": "php",
+            ".cs": "csharp",
+            ".cpp": "cpp",
+            ".hpp": "cpp",
+            ".sql": "sql",
+            ".sh": "bash",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+            ".json": "json",
+            ".xml": "xml",
+            ".html": "html",
+            ".css": "css",
             # .tsx/.jsx BEFORE .ts/.js to match correctly
-            ".tsx": "tsx", ".jsx": "jsx",
-            ".ts": "typescript", ".js": "javascript",
-            ".c": "c", ".h": "c",
+            ".tsx": "tsx",
+            ".jsx": "jsx",
+            ".ts": "typescript",
+            ".js": "javascript",
+            ".c": "c",
+            ".h": "c",
         }
         for ext, lang in ext_map.items():
             if file_path.endswith(ext):
@@ -302,7 +355,9 @@ class StaticAnalysisBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 50
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.static_analysis:
             return None
         return PromptSection(name=self.name, content=request.static_analysis)
@@ -324,7 +379,9 @@ class ReviewContextBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 95
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         parts = []
 
         if request.pr_number:
@@ -347,7 +404,6 @@ class ReviewContextBuilder(BaseSectionBuilder):
                 diff = diff[:50000] + "\n\n... (diff truncated, too large)"
             parts.append(f"**Code Diff**:\n```diff\n{diff}\n```")
 
-
         if not parts:
             return None
 
@@ -366,7 +422,9 @@ class IssueContextBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 40
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         if not request.issue_context:
             return None
         return PromptSection(name=self.name, content=request.issue_context)
@@ -383,7 +441,9 @@ class OutputFormatBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 30
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         config = get_review_config(request.review_type)
         return PromptSection(name=self.name, content=config["output_format"])
 
@@ -399,7 +459,9 @@ class TokenMetadataBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 5
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         token_meta = context.get("token_metadata")
         if not token_meta:
             token_meta = TokenMetadata(budget_limit=request.token_budget)
@@ -421,7 +483,9 @@ class ProviderMetadataBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 5
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
+    async def build(
+        self, request: PromptBuildRequest, context: dict
+    ) -> PromptSection | None:
         content = f"Provider: {request.provider}"
         if request.model:
             content += f"\nModel: {request.model}"
@@ -445,5 +509,3 @@ ALL_SECTION_BUILDERS = [
     TokenMetadataBuilder(),
     ProviderMetadataBuilder(),
 ]
-
-

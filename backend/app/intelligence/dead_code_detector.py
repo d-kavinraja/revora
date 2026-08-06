@@ -29,7 +29,7 @@ class DeadCodeDetector(BaseDetector):
     def version(self) -> str:
         return "1.0.0"
 
-    async def detect(self, walker: 'RepoWalker') -> DetectorResult:
+    async def detect(self, walker: "RepoWalker") -> DetectorResult:
         """Detect dead code using the RepoWalker cache.
 
         Args:
@@ -44,7 +44,8 @@ class DeadCodeDetector(BaseDetector):
 
         # Collect code files
         code_files = [
-            fp for fp in walker.file_paths
+            fp
+            for fp in walker.file_paths
             if any(fp.endswith(ext) for ext in CODE_EXTENSIONS)
         ]
 
@@ -65,37 +66,43 @@ class DeadCodeDetector(BaseDetector):
                 for match in re.finditer(r"def (\w+)\(", content):
                     name = match.group(1)
                     if name.startswith("_") and not name.startswith("__"):
-                        line_num = content[:match.start()].count("\n") + 1
+                        line_num = content[: match.start()].count("\n") + 1
                         if name not in all_definitions:
                             all_definitions[name] = []
-                        all_definitions[name].append({
-                            "file": fp,
-                            "line": line_num,
-                            "type": "function",
-                        })
+                        all_definitions[name].append(
+                            {
+                                "file": fp,
+                                "line": line_num,
+                                "type": "function",
+                            }
+                        )
 
                 # Find class definitions
                 for match in re.finditer(r"class (\w+)", content):
                     name = match.group(1)
-                    line_num = content[:match.start()].count("\n") + 1
+                    line_num = content[: match.start()].count("\n") + 1
                     if name not in all_definitions:
                         all_definitions[name] = []
-                    all_definitions[name].append({
-                        "file": fp,
-                        "line": line_num,
-                        "type": "class",
-                    })
+                    all_definitions[name].append(
+                        {
+                            "file": fp,
+                            "line": line_num,
+                            "type": "class",
+                        }
+                    )
 
                 # Find imports
                 for match in re.finditer(r"from \w+ import (\w+)", content):
                     name = match.group(1)
-                    line_num = content[:match.start()].count("\n") + 1
-                    unused_imports.append({
-                        "file": fp,
-                        "line": line_num,
-                        "name": name,
-                        "type": "import",
-                    })
+                    line_num = content[: match.start()].count("\n") + 1
+                    unused_imports.append(
+                        {
+                            "file": fp,
+                            "line": line_num,
+                            "name": name,
+                            "type": "import",
+                        }
+                    )
 
             # Collect all identifiers used in the file (rough estimate)
             identifiers = set(re.findall(r"\b([a-zA-Z_]\w+)\b", content))
@@ -107,12 +114,14 @@ class DeadCodeDetector(BaseDetector):
                 # Check if the name appears anywhere else
                 if name not in all_references or len(defs) == 1:
                     for defn in defs:
-                        unused_functions.append({
-                            "file": defn["file"],
-                            "line": defn["line"],
-                            "name": name,
-                            "type": defn["type"],
-                        })
+                        unused_functions.append(
+                            {
+                                "file": defn["file"],
+                                "line": defn["line"],
+                                "name": name,
+                                "type": defn["type"],
+                            }
+                        )
 
         return DetectorResult(
             success=True,

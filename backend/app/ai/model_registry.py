@@ -5,40 +5,46 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+
 class CanonicalModel(BaseModel):
     """
     Unified Source of Truth for an LLM Model across the entire platform.
     """
+
     provider: str
     provider_model_name: str
     canonical_model_name: str
     litellm_model_name: str
     model_name: str  # alias for canonical_model_name for backward compatibility
-    
+
     accessible: bool = True
     deprecated: bool = False
     preview: bool = False
     experimental: bool = False
     enterprise_only: bool = False
     region_supported: bool = True
-    
+
     context_window: int | None = None
     input_cost: float = 0.0
     output_cost: float = 0.0
-    
+
     supports_streaming: bool = True
     supports_function_calling: bool = False
     supports_vision: bool = False
     supports_reasoning: bool = False
-    
+
     status: str = "available"
-    validation_timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    validation_timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat()
+    )
+
 
 class CanonicalModelRegistry:
     """
     In-memory singleton registry to store and resolve models.
     Provides standard O(1) lookups by provider/canonical_name.
     """
+
     def __init__(self):
         # Nested dictionary mapping: dict[provider][canonical_model_name] -> CanonicalModel
         self._registry: dict[str, dict[str, CanonicalModel]] = {}
@@ -48,7 +54,7 @@ class CanonicalModelRegistry:
         provider = model.provider.lower()
         if provider not in self._registry:
             self._registry[provider] = {}
-        
+
         self._registry[provider][model.canonical_model_name] = model
 
     def resolve(self, provider: str, model_name: str) -> CanonicalModel | None:
@@ -59,27 +65,30 @@ class CanonicalModelRegistry:
         provider = provider.lower()
         if provider not in self._registry:
             return None
-        
+
         provider_models = self._registry[provider]
-        
+
         # 1. Exact match on canonical name
         if model_name in provider_models:
             return provider_models[model_name]
-            
+
         # 2. Match by litellm_model_name or provider_model_name
         for m in provider_models.values():
-            if m.litellm_model_name == model_name or m.provider_model_name == model_name:
+            if (
+                m.litellm_model_name == model_name
+                or m.provider_model_name == model_name
+            ):
                 return m
-                
+
         # 3. Handle prefix stripping explicitly (e.g. if the user assigned gemini/gemini-2.5-flash)
         stripped_name = model_name
         if stripped_name.startswith(f"{provider}/"):
-            stripped_name = stripped_name[len(f"{provider}/"):]
+            stripped_name = stripped_name[len(f"{provider}/") :]
             if stripped_name in provider_models:
                 return provider_models[stripped_name]
-                
+
         return None
-        
+
     def get_all_for_provider(self, provider: str) -> list[CanonicalModel]:
         """Return all models currently registered for a given provider."""
         provider = provider.lower()
@@ -94,18 +103,20 @@ class CanonicalModelRegistry:
     def discover_models(self):
         """Automatically discover and register models from LiteLLM's model cost dictionary."""
         import litellm
-        
+
         if not hasattr(litellm, "model_cost"):
             logger.warning("litellm.model_cost not found. Cannot auto-discover models.")
             return
-            
-        logger.info(f"Discovering models from litellm (found {len(litellm.model_cost)} entries)...")
+
+        logger.info(
+            f"Discovering models from litellm (found {len(litellm.model_cost)} entries)..."
+        )
         discovered_count = 0
-        
+
         for model_key, metadata in litellm.model_cost.items():
             if not isinstance(metadata, dict):
                 continue
-                
+
             provider = metadata.get("litellm_provider", "")
             if not provider:
                 if "/" in model_key:
@@ -119,12 +130,12 @@ class CanonicalModelRegistry:
                         provider = "anthropic"
                     else:
                         continue
-                        
+
             provider = provider.lower()
-            
+
             canonical_name = model_key
             canonical_name = canonical_name.removeprefix(f"{provider}/")
-                
+
             input_cost = metadata.get("input_cost_per_token", 0.0)
             output_cost = metadata.get("output_cost_per_token", 0.0)
             context_window = metadata.get("max_tokens", None)
@@ -133,7 +144,7 @@ class CanonicalModelRegistry:
                     context_window = int(context_window)
                 except (ValueError, TypeError):
                     context_window = None
-            
+
             c_model = CanonicalModel(
                 provider=provider,
                 provider_model_name=canonical_name,
@@ -144,12 +155,15 @@ class CanonicalModelRegistry:
                 input_cost=input_cost * 1000,
                 output_cost=output_cost * 1000,
                 status="available",
-                accessible=True
+                accessible=True,
             )
             self.register(c_model)
             discovered_count += 1
-            
-        logger.info(f"Successfully auto-discovered and registered {discovered_count} models.")
+
+        logger.info(
+            f"Successfully auto-discovered and registered {discovered_count} models."
+        )
+
 
 # Global Singleton
 canonical_registry = CanonicalModelRegistry()

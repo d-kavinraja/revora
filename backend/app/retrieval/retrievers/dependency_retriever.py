@@ -49,23 +49,30 @@ class DependencyRetriever(BaseRetriever):
 
                 content = self._read_file(repo_path, dep_file, max_lines=200)
                 if content:
-                    contexts.append(RetrievedContext(
-                        file_path=dep_file,
-                        content=content,
-                        relevance_score=0.7,
-                        source="dependency_graph",
-                        metadata={"graph_type": "dependency"},
-                    ))
+                    contexts.append(
+                        RetrievedContext(
+                            file_path=dep_file,
+                            content=content,
+                            relevance_score=0.7,
+                            source="dependency_graph",
+                            metadata={"graph_type": "dependency"},
+                        )
+                    )
 
-        return contexts[:config.max_related_files]
+        return contexts[: config.max_related_files]
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 200) -> str | None:
+    def _read_file(
+        self, repo_path: str, file_path: str, max_lines: int = 200
+    ) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
-                return "".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+                return (
+                    "".join(lines[:max_lines])
+                    + f"\n... [{len(lines) - max_lines} more lines]"
+                )
             return "".join(lines)
         except OSError:
             return None

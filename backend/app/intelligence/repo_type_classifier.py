@@ -24,9 +24,19 @@ def classify_repo_type(repo_path: str) -> str:
         return "monorepo"
 
     if "services" in top_level or "microservices" in top_level:
-        service_dir = os.path.join(repo_path, "services") if "services" in top_level else os.path.join(repo_path, "microservices")
+        service_dir = (
+            os.path.join(repo_path, "services")
+            if "services" in top_level
+            else os.path.join(repo_path, "microservices")
+        )
         if os.path.isdir(service_dir):
-            sub_count = len([d for d in os.listdir(service_dir) if os.path.isdir(os.path.join(service_dir, d))])
+            sub_count = len(
+                [
+                    d
+                    for d in os.listdir(service_dir)
+                    if os.path.isdir(os.path.join(service_dir, d))
+                ]
+            )
             if sub_count >= 2:
                 return "microservices"
 

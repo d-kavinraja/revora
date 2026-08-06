@@ -39,7 +39,9 @@ class PromptCache:
         self._cache.move_to_end(cache_key)
         return entry["prompt"]
 
-    async def set(self, cache_key: str, prompt: CompiledPrompt, ttl: int | None = None) -> None:
+    async def set(
+        self, cache_key: str, prompt: CompiledPrompt, ttl: int | None = None
+    ) -> None:
         """Cache a compiled prompt."""
         if ttl is None:
             ttl = self._default_ttl
@@ -87,7 +89,9 @@ def build_cache_key(
     token_budget: int,
 ) -> str:
     """Build a deterministic cache key from request parameters."""
-    content = f"{review_type}:{repo_id}:{diff_content}:{provider}:{model}:{token_budget}"
+    content = (
+        f"{review_type}:{repo_id}:{diff_content}:{provider}:{model}:{token_budget}"
+    )
     return hashlib.sha256(content.encode()).hexdigest()[:32]
 
 

@@ -33,10 +33,14 @@ class TestTokenBudgetEngine:
         assert total_allocated <= budget.total
 
     async def test_custom_allocation(self, budget_engine):
-        budget_engine.set_custom_allocation("16K", {
-            "changed_files": 5000, "related_context": 5000,
-            "output_buffer": 2000,
-        })
+        budget_engine.set_custom_allocation(
+            "16K",
+            {
+                "changed_files": 5000,
+                "related_context": 5000,
+                "output_buffer": 2000,
+            },
+        )
         budget = budget_engine.get_budget("16K")
         assert budget.allocations["changed_files"] == 5000
         assert budget.allocations["related_context"] == 5000

@@ -18,7 +18,7 @@ import pytest
 # We inject a mock before any app.* import triggers app.ai.llm -> litellm.
 _mock_litellm = MagicMock()
 _mock_litellm.completion = AsyncMock()
-sys.modules['litellm'] = _mock_litellm
+sys.modules["litellm"] = _mock_litellm
 
 # Also pre-load app.pipeline so patch.object() can resolve its attributes
 # ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ sys.modules['litellm'] = _mock_litellm
 # =============================================================================
 # Helper fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def sample_review_id():
@@ -52,6 +53,7 @@ def sample_diff():
 def sample_llm_response():
     # Lazy import to avoid app.orchestrator.__init__ -> litellm chain
     from app.orchestrator.models import LLMResponse
+
     return LLMResponse(
         content="## Summary\nLooks good.",
         provider="gemini",
@@ -66,6 +68,7 @@ def sample_llm_response():
 @pytest.fixture
 def sample_verification_result():
     from app.verification.models import VerificationResult, VerifiedFinding
+
     return VerificationResult(
         findings=[
             VerifiedFinding(
@@ -90,6 +93,7 @@ def sample_verification_result():
 @pytest.fixture
 def sample_review_summary():
     from app.github_review.models import GitHubReviewComment, GitHubReviewSummary
+
     return GitHubReviewSummary(
         body="## Review Summary\nLooks good overall.",
         event="COMMENT",
@@ -108,6 +112,7 @@ def sample_review_summary():
 @pytest.fixture
 def mock_compiled_prompt():
     from app.prompt_engine.models import CompiledPrompt
+
     prompt = CompiledPrompt(
         prompt_id="test_prompt_123",
         system_prompt="You are a code reviewer.",
@@ -122,6 +127,7 @@ def mock_compiled_prompt():
 # =============================================================================
 # Pipeline patching fixture
 # =============================================================================
+
 
 @pytest.fixture(autouse=True)
 def pipeline_mocks():
@@ -164,6 +170,7 @@ def pipeline_mocks():
 # Helper: configure pipeline mocks for success path
 # =============================================================================
 
+
 def configure_success_mocks(
     mocks,
     sample_diff,
@@ -195,7 +202,7 @@ def configure_success_mocks(
     index_mock.nodes = []
     index_mock.edges = []
     mocks["indexer"].build_index = AsyncMock(return_value=index_mock)
-    
+
     # Graph cache
     mocks["graph_cache"].get_index = AsyncMock(return_value=None)
     mocks["graph_cache"].set_index = AsyncMock(return_value=None)
@@ -204,9 +211,7 @@ def configure_success_mocks(
     mocks["knowledge"].load_or_generate_conventions = AsyncMock(
         return_value="PEP 8 style"
     )
-    mocks["knowledge"].load_rules = AsyncMock(
-        return_value=["No print statements"]
-    )
+    mocks["knowledge"].load_rules = AsyncMock(return_value=["No print statements"])
 
     # Retrieval result
     retrieval_result = MagicMock()
@@ -218,10 +223,12 @@ def configure_success_mocks(
 
     # LLM orchestrator
     mocks["llm"].complete = AsyncMock(return_value=sample_llm_response)
-    mocks["llm"].get_total_usage = MagicMock(return_value={
-        "total_prompts": 10,
-        "total_tokens": 5000,
-    })
+    mocks["llm"].get_total_usage = MagicMock(
+        return_value={
+            "total_prompts": 10,
+            "total_tokens": 5000,
+        }
+    )
 
     # Verification
     mocks["verification"].verify = AsyncMock(return_value=sample_verification_result)
@@ -266,6 +273,7 @@ def configure_success_mocks(
 # Tests
 # =============================================================================
 
+
 class TestPipelineFullExecution:
     """Full pipeline end-to-end tests."""
 
@@ -285,8 +293,11 @@ class TestPipelineFullExecution:
         from app.sse.events import EventType
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         pipeline = ReviewPipeline()
@@ -359,8 +370,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         pipeline = ReviewPipeline()
@@ -408,8 +422,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make clone fail
@@ -454,8 +471,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make intelligence fail
@@ -500,8 +520,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make indexing fail
@@ -545,8 +568,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make retrieval fail
@@ -594,8 +620,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make LLM fail
@@ -639,12 +668,17 @@ class TestPipelineFullExecution:
         from app.prompt_engine.builder import prompt_builder
 
         configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Patch the prompt builder to fail
-        with patch.object(prompt_builder, "compile", side_effect=Exception("Prompt build failed")):
+        with patch.object(
+            prompt_builder, "compile", side_effect=Exception("Prompt build failed")
+        ):
             pipeline = ReviewPipeline()
 
             result = await pipeline.execute(
@@ -681,8 +715,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make verification fail
@@ -725,8 +762,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make GitHub publish fail
@@ -769,8 +809,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         pipeline = ReviewPipeline()
@@ -813,8 +856,11 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
 
         mocks = configure_success_mocks(
-            pipeline_mocks, sample_diff, sample_llm_response,
-            sample_verification_result, sample_review_summary,
+            pipeline_mocks,
+            sample_diff,
+            sample_llm_response,
+            sample_verification_result,
+            sample_review_summary,
             mock_compiled_prompt,
         )
         # Make DB save fail
@@ -901,7 +947,9 @@ class TestPipelineIndividualStages:
         emitter = MagicMock()
         emitter.emit = AsyncMock()
 
-        result = await pipeline._stage_indexing(emitter, None, "test-owner", "test-repo", "abc1234")
+        result = await pipeline._stage_indexing(
+            emitter, None, "test-owner", "test-repo", "abc1234"
+        )
 
         assert result is None
 
@@ -921,9 +969,7 @@ class TestPipelineIndividualStages:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_stage_prompt_forwards_provider(
-        self, pipeline_mocks, sample_diff
-    ):
+    async def test_stage_prompt_forwards_provider(self, pipeline_mocks, sample_diff):
         """Prompt building stage forwards provider to prompt_builder.compile()."""
         from app.pipeline.orchestrator import ReviewPipeline
 
@@ -982,9 +1028,7 @@ class TestPipelineIndividualStages:
         assert "main.py" in changed_files_arg
 
     @pytest.mark.asyncio
-    async def test_stage_prompt_builds_valid_prompt(
-        self, pipeline_mocks, sample_diff
-    ):
+    async def test_stage_prompt_builds_valid_prompt(self, pipeline_mocks, sample_diff):
         """Prompt building stage produces a valid compiled prompt."""
         from app.pipeline.orchestrator import ReviewPipeline
 

@@ -376,4 +376,6 @@ Additional helpful context.""",
 
 def get_review_config(review_type: ReviewType) -> dict:
     """Get configuration for a specific review type."""
-    return REVIEW_TYPE_CONFIGS.get(review_type, REVIEW_TYPE_CONFIGS[ReviewType.PR_REVIEW])
+    return REVIEW_TYPE_CONFIGS.get(
+        review_type, REVIEW_TYPE_CONFIGS[ReviewType.PR_REVIEW]
+    )

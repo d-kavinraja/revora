@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ValidationResult:
     """Result of prompt validation."""
+
     valid: bool = True
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -31,7 +32,9 @@ PROVIDER_LIMITS = {
 class PromptValidator:
     """Validates prompts before they reach the LLM."""
 
-    async def validate(self, prompt: CompiledPrompt, request: PromptBuildRequest) -> ValidationResult:
+    async def validate(
+        self, prompt: CompiledPrompt, request: PromptBuildRequest
+    ) -> ValidationResult:
         """Validate prompt size, token count, sections, metadata, provider limits."""
         result = ValidationResult()
 

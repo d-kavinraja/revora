@@ -46,7 +46,9 @@ def _pr_dict(pr_number: int = 1, sha: str = SHA) -> dict:
     }
 
 
-def _payload(installation_id: int, repo_github_id: int, pr_number: int = 1, sha: str = SHA) -> dict:
+def _payload(
+    installation_id: int, repo_github_id: int, pr_number: int = 1, sha: str = SHA
+) -> dict:
     return {
         "installation": {"id": installation_id},
         "repository": {**_repo_dict(repo_github_id), "owner": {"login": "testowner"}},
@@ -64,9 +66,11 @@ def session_factory(test_engine):
         expire_on_commit=False,
         autoflush=False,
     )
-    with patch("app.github.shared.AsyncSessionLocal", factory), patch(
-        "app.queue.worker.AsyncSessionLocal", factory
-    ), patch("app.db.session.AsyncSessionLocal", factory):
+    with (
+        patch("app.github.shared.AsyncSessionLocal", factory),
+        patch("app.queue.worker.AsyncSessionLocal", factory),
+        patch("app.db.session.AsyncSessionLocal", factory),
+    ):
         yield factory
 
 
@@ -74,7 +78,15 @@ def session_factory(test_engine):
 async def clean_tables(session_factory):
     yield
     async with session_factory() as db:
-        for model in (ReviewExecution, Review, PullRequest, Repository, Installation, ReviewJob, User):
+        for model in (
+            ReviewExecution,
+            Review,
+            PullRequest,
+            Repository,
+            Installation,
+            ReviewJob,
+            User,
+        ):
             await db.execute(model.__table__.delete())
         await db.commit()
 
@@ -162,9 +174,14 @@ class TestGetOrCreateReviewRecords:
         seed = await _seed(session_factory)
 
         from app.github.shared import get_or_create_review_records
+
         db_review, _, db_pr, _ = await get_or_create_review_records(
-            12345, _repo_dict(seed["repo"].github_id), _pr_dict(),
-            "webhook-1", status="running", find_existing_pending=True,
+            12345,
+            _repo_dict(seed["repo"].github_id),
+            _pr_dict(),
+            "webhook-1",
+            status="running",
+            find_existing_pending=True,
         )
 
         assert db_pr.id == seed["pr"].id
@@ -175,9 +192,14 @@ class TestGetOrCreateReviewRecords:
         seed = await _seed(session_factory, review_status="pending")
 
         from app.github.shared import get_or_create_review_records
+
         db_review, _, _, _ = await get_or_create_review_records(
-            12345, _repo_dict(seed["repo"].github_id), _pr_dict(),
-            "webhook-1", status="running", find_existing_pending=True,
+            12345,
+            _repo_dict(seed["repo"].github_id),
+            _pr_dict(),
+            "webhook-1",
+            status="running",
+            find_existing_pending=True,
         )
 
         assert db_review.id == seed["review"].id
@@ -189,23 +211,35 @@ class TestGetOrCreateReviewRecords:
         seed = await _seed(session_factory, review_status="cancelled")
 
         from app.github.shared import get_or_create_review_records
+
         db_review, _, _, _ = await get_or_create_review_records(
-            12345, _repo_dict(seed["repo"].github_id), _pr_dict(),
-            "webhook-1", status="running", find_existing_pending=True,
+            12345,
+            _repo_dict(seed["repo"].github_id),
+            _pr_dict(),
+            "webhook-1",
+            status="running",
+            find_existing_pending=True,
         )
 
         assert db_review.id == seed["review"].id
         assert db_review.status == "cancelled"
         assert await _count_reviews(session_factory, seed["pr"].id) == 1
 
-    async def test_find_existing_pending_false_still_creates_new_row(self, session_factory):
+    async def test_find_existing_pending_false_still_creates_new_row(
+        self, session_factory
+    ):
         """Dispatcher path (opened/reopened) keeps creating fresh rows."""
         seed = await _seed(session_factory, review_status="completed")
 
         from app.github.shared import get_or_create_review_records
+
         db_review, _, _, _ = await get_or_create_review_records(
-            12345, _repo_dict(seed["repo"].github_id), _pr_dict(),
-            "webhook-1", status="pending", find_existing_pending=False,
+            12345,
+            _repo_dict(seed["repo"].github_id),
+            _pr_dict(),
+            "webhook-1",
+            status="pending",
+            find_existing_pending=False,
         )
 
         assert db_review.id != seed["review"].id
@@ -236,14 +270,26 @@ class TestWorkerStaleJobGuard:
             await db.commit()
 
         with (
-            patch("app.github.auth.github_app_auth.get_installation_token", AsyncMock(return_value="tok")),
+            patch(
+                "app.github.auth.github_app_auth.get_installation_token",
+                AsyncMock(return_value="tok"),
+            ),
             patch("app.github.webhooks.get_pr_diff", AsyncMock(return_value="diff")),
             patch("app.pipeline.orchestrator.review_pipeline", MagicMock()),
         ):
             from app.pipeline.orchestrator import review_pipeline
+
             result = await process_job(
-                (job_id, seed["repo"].id, 1, SHA, "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
-                 _payload(12345, 777), 0, datetime.now(UTC))
+                (
+                    job_id,
+                    seed["repo"].id,
+                    1,
+                    SHA,
+                    "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
+                    _payload(12345, 777),
+                    0,
+                    datetime.now(UTC),
+                )
             )
             review_pipeline.execute.assert_not_called()
 
@@ -270,14 +316,26 @@ class TestWorkerStaleJobGuard:
             await db.commit()
 
         with (
-            patch("app.github.auth.github_app_auth.get_installation_token", AsyncMock(return_value="tok")),
+            patch(
+                "app.github.auth.github_app_auth.get_installation_token",
+                AsyncMock(return_value="tok"),
+            ),
             patch("app.github.webhooks.get_pr_diff", AsyncMock(return_value="diff")),
             patch("app.pipeline.orchestrator.review_pipeline", MagicMock()),
         ):
             from app.pipeline.orchestrator import review_pipeline
+
             result = await process_job(
-                (job_id, seed["repo"].id, 1, SHA, "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
-                 _payload(12345, 777), 0, datetime.now(UTC))
+                (
+                    job_id,
+                    seed["repo"].id,
+                    1,
+                    SHA,
+                    "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
+                    _payload(12345, 777),
+                    0,
+                    datetime.now(UTC),
+                )
             )
             review_pipeline.execute.assert_not_called()
 
