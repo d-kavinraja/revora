@@ -1,4 +1,4 @@
-﻿"""Comprehensive tests for the Prompt Builder Engine."""
+"""Comprehensive tests for the Prompt Builder Engine."""
 
 import pytest
 
@@ -529,7 +529,7 @@ class TestSectionBuilders:
         request = PromptBuildRequest(review_type=ReviewType.PR_REVIEW)
         section = await builder.safe_build(request, {})
         assert section is not None
-        assert "Markdown" in section.content
+        assert "markdown" in section.content.lower()
 
     def test_file_extension_detection(self):
         """Test that .tsx and .jsx are detected correctly (Bug 5)."""

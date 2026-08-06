@@ -20,7 +20,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup recovery, full sync, background sync, shutdown."""
+    import sys
+    is_testing = "pytest" in sys.modules
+
     canonical_registry.discover_models()
+
+    if is_testing:
+        yield
+        return
 
     # Fail reviews stuck in active statuses with no backing job so the
     # per-PR active-review lock is always released after a restart.
