@@ -321,12 +321,16 @@ async def get_or_create_review_records(
                 mark_execution_running,
             )
 
+            provider, model, api_key_id, _source = await resolve_provider_config(
+                db, user_id=str(db_inst.user_id), db_repo=db_repo
+            )
+
             existing_exec_id = await db.scalar(
                 select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
             )
             if not existing_exec_id:
                 await create_execution(
-                    db, db_review.id, trigger="webhook", commit_sha=head_sha
+                    db, db_review.id, trigger="webhook", commit_sha=head_sha, provider=provider, model=model
                 )
             if status == "running" and review_transitioned:
                 await mark_execution_running(db, db_review.id)
@@ -348,9 +352,6 @@ async def get_or_create_review_records(
                     f"Execution context already exists for review {db_review.id} — skipping creation"
                 )
             else:
-                provider, model, api_key_id, _source = await resolve_provider_config(
-                    db, user_id=str(db_inst.user_id), db_repo=db_repo
-                )
                 if provider and model:
                     exec_ctx = ReviewExecutionContext(
                         review_id=db_review.id,

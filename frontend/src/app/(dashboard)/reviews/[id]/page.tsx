@@ -169,7 +169,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   if (!review) return null;
 
   const pr = review.pull_request;
-  const reviewProvider = ((review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
+  const reviewProvider = ((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
 
   const providerMeta: Record<string, { label: string; gradient: string }> = {
     gemini: { label: 'Gemini AI Review', gradient: 'from-blue-500 to-brand' },
@@ -271,35 +271,17 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       <ReviewActions review={review} onAction={(_, action) => handleLifecycleAction(action)} isActioning={actioningReview !== null} actioningAction={actioningReview} />
 
       {/* Review Status States */}
-      {review.status === 'running' && (
-        <div className="rounded-xl border border-info/20 bg-info/5 p-8 mb-5 text-center relative">
-          <button 
-            onClick={() => cancelMutation.mutate()} 
-            disabled={cancelMutation.isPending}
-            className="absolute top-4 right-4 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error border border-error/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-          >
-            {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
-          </button>
-          <div className="w-12 h-12 mx-auto mb-4 relative">
-            <div className="w-12 h-12 rounded-full border-2 border-info/20" />
-            <div className="absolute inset-0 flex items-center justify-center text-info">
-              <LoaderIcon size={24} className="text-info" animate />
+      {(review.status === 'running' || review.status === 'pending') && (
+        <div className={`rounded-xl border ${review.status === 'running' ? 'border-info/20 bg-info/5' : 'border-warning/25 bg-warning/5'} p-6 md:p-8 mb-5 text-center relative overflow-hidden`}>
+          {review.status === 'pending' && (
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-warning/10 overflow-hidden">
+              <motion.div
+                className="h-full w-1/3 bg-gradient-to-r from-transparent via-amber-400 to-transparent"
+                animate={{ x: ['-100%', '400%'] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
+              />
             </div>
-          </div>
-          <p className="text-info font-semibold text-lg">AI Review In Progress</p>
-          <p className="text-muted-foreground text-sm mt-1">AI is analyzing your code... This page will update automatically.</p>
-        </div>
-      )}
-
-      {review.status === 'pending' && (
-        <div className="rounded-xl border border-warning/25 bg-warning/5 p-6 mb-5 text-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-warning/10 overflow-hidden">
-            <motion.div
-              className="h-full w-1/3 bg-gradient-to-r from-transparent via-amber-400 to-transparent"
-              animate={{ x: ['-100%', '400%'] }}
-              transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
-            />
-          </div>
+          )}
           <button 
             onClick={() => cancelMutation.mutate()} 
             disabled={cancelMutation.isPending}
@@ -307,15 +289,47 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           >
             {cancelMutation.isPending ? 'Stopping...' : 'Stop Review'}
           </button>
-          <motion.div
-            className="w-10 h-10 mx-auto mb-3 flex items-center justify-center text-warning"
-            animate={{ opacity: [0.55, 1, 0.55], scale: [0.92, 1, 0.92] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Hourglass size={26} strokeWidth={1.75} />
-          </motion.div>
-          <p className="text-warning font-semibold text-lg">Review Queued</p>
-          <p className="text-muted-foreground text-sm mt-1">Waiting for an available worker&hellip;</p>
+          
+          <div className="flex justify-center items-center gap-3 mb-4">
+            {review.status === 'running' ? (
+              <div className="w-10 h-10 relative">
+                <div className="w-10 h-10 rounded-full border-2 border-info/20" />
+                <div className="absolute inset-0 flex items-center justify-center text-info">
+                  <LoaderIcon size={20} className="text-info" animate />
+                </div>
+              </div>
+            ) : (
+              <motion.div
+                className="w-10 h-10 flex items-center justify-center text-warning"
+                animate={{ opacity: [0.55, 1, 0.55], scale: [0.92, 1, 0.92] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <Hourglass size={26} strokeWidth={1.75} />
+              </motion.div>
+            )}
+          </div>
+          
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider bg-surface-2 px-2 py-0.5 rounded-md border border-border">
+                Execution #{(review as any).current_execution?.execution_number || '?'}
+              </span>
+              <span className={`text-[11px] font-semibold flex items-center gap-1 uppercase tracking-wider ${review.status === 'running' ? 'text-info' : 'text-warning'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${review.status === 'running' ? 'bg-info animate-pulse' : 'bg-warning'}`} />
+                {review.status}
+              </span>
+            </div>
+            <p className="text-foreground font-bold text-lg mt-1 flex items-center gap-2">
+              <ProviderIcon slug={reviewProvider} size={16} />
+              {(review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider || 'AI'} 
+              <span className="text-muted-foreground font-normal text-sm ml-1">&middot; {(review as any).current_execution?.model || (review.stats as Record<string, string>)?.model || 'Unknown Model'}</span>
+            </p>
+            <p className="text-muted-foreground text-sm mt-2 max-w-lg mx-auto">
+              {review.summary 
+                ? "Currently generating a new review. Showing the previous completed review while execution continues." 
+                : "AI is analyzing your code... This page will update automatically when the review is ready."}
+            </p>
+          </div>
         </div>
       )}
 
@@ -329,8 +343,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <span className="text-sm font-semibold text-error">AI Review Failed</span>
               {review.stats && (review.stats as Record<string, string>).provider && (
                 <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
-                  <ProviderIcon slug={(review.stats as Record<string, string>).provider} size={12} />
-                  {(review.stats as Record<string, string>).provider} &middot; {(review.stats as Record<string, string>).model}
+                  <ProviderIcon slug={reviewProvider} size={12} />
+                  {((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider)} &middot; {((review as any).current_execution?.model || (review.stats as Record<string, string>)?.model)}
                 </span>
               )}
             </div>
@@ -360,7 +374,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* AI Review Markdown Output */}
-      {review.status === 'completed' && review.summary ? (
+      {review.summary ? (
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
             <div className="shrink-0 flex items-center justify-center">
@@ -369,7 +383,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             <div>
               <span className="text-sm font-semibold text-foreground">{meta.label}</span>
               <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
-                {(review.stats as Record<string, string>)?.provider} &middot; {(review.stats as Record<string, string>)?.model}
+                {((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider)} &middot; {((review as any).current_execution?.model || (review.stats as Record<string, string>)?.model)}
               </span>
             </div>
           </div>
@@ -446,7 +460,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 >
                   <StatusBadge status={h.status} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-mono text-muted-foreground">PR #{h.pull_request.pr_number} · {h.pull_request.title}</span>
+                    <span className="text-xs font-mono text-muted-foreground">PR #{h.pull_request?.pr_number} · {h.pull_request?.title}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">{formatDateTimeWithRelative(h.created_at)}</span>
                 </Link>

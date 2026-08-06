@@ -285,6 +285,9 @@ async def get_review(
         except Exception:
             gh_state = "unknown"
 
+    from app.services.review_execution_service import get_latest_execution
+    current_execution = await get_latest_execution(db, review.id)
+
     return {
         "id": str(review.id),
         "status": review.status,
@@ -314,6 +317,16 @@ async def get_review(
             else None
         ),
         "repository": repo_info,
+        "current_execution": (
+            {
+                "execution_number": current_execution.execution_number,
+                "status": current_execution.status,
+                "provider": current_execution.provider,
+                "model": current_execution.model,
+            }
+            if current_execution
+            else None
+        ),
     }
 
 

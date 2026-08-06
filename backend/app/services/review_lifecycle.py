@@ -322,9 +322,10 @@ class ReviewLifecycleService:
 
         # Reuse the SAME review row — never insert another one.
         review.status = "queued"
+        # We purposely DO NOT clear review.summary or review.stats here so that the
+        # frontend can continue displaying the last successful review while running.
         review.started_at = None
         review.completed_at = None
-        review.summary = None
         review.error_message = None
         db.add(review)
         await db.commit()
@@ -334,7 +335,7 @@ class ReviewLifecycleService:
         from app.services.review_execution_service import create_execution
 
         execution = await create_execution(
-            db, review.id, trigger=action, commit_sha=pr.head_sha
+            db, review.id, trigger=action, commit_sha=pr.head_sha, provider=provider, model=model
         )
         await db.commit()
 
@@ -447,8 +448,10 @@ class ReviewLifecycleService:
         """
         from app.models.execution import ReviewExecution
 
+        from sqlalchemy.orm import joinedload
         reviews_result = await db.execute(
             select(Review)
+            .options(joinedload(Review.pull_request))
             .where(Review.pr_id == pr_id)
             .order_by(Review.created_at.desc())
         )
@@ -469,6 +472,10 @@ class ReviewLifecycleService:
                     "error_message": r.error_message,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "github_check_run_id": r.github_check_run_id,
+                    "pull_request": {
+                        "pr_number": r.pull_request.pr_number if r.pull_request else None,
+                        "title": r.pull_request.title if r.pull_request else None,
+                    }
                 }
             )
 

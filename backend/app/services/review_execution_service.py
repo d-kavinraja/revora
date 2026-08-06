@@ -22,6 +22,8 @@ async def create_execution(
     review_id,
     trigger: str,
     commit_sha: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> ReviewExecution:
     """Create a new execution for a review with the next execution number."""
     next_number = await db.scalar(
@@ -35,6 +37,8 @@ async def create_execution(
         trigger=trigger,
         status="queued",
         commit_sha=commit_sha,
+        provider=provider,
+        model=model,
     )
     db.add(execution)
     await db.flush()
