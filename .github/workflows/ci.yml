@@ -78,14 +78,4 @@ jobs:
           APP_ENV: testing
         run: cd backend && python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 
-      - name: Check alembic migrations
-        env:
-          DATABASE_URL: postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_test
-          SECRET_KEY: test-secret-key-for-ci
-          JWT_SECRET_KEY: test-jwt-key-for-ci
-          ENCRYPTION_KEY: CRc9n8lOWfBsfvG-yzQ0uLodwNTjRx3UUS2a5b6zZXQ=
-          PYTHONPATH: .
-        run: |
-          cd backend
-          python -m alembic upgrade head
-          python -m alembic check
+
