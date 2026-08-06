@@ -54,3 +54,24 @@ class ReviewExecution(Base):
         JSON_TYPE, nullable=True, default=dict
     )
     commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    
+    # Review Metadata
+    summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    stats: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_TYPE, nullable=True, default=dict
+    )
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    
+    # Execution Snapshot Context
+    prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    configuration_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_TYPE, nullable=True, default=dict
+    )
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    repository_full_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    base_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    head_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+

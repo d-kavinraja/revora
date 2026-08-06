@@ -22,6 +22,15 @@ async def create_execution(
     review_id,
     trigger: str,
     commit_sha: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    prompt_version: str | None = None,
+    configuration_snapshot: dict[str, Any] | None = None,
+    api_key_id=None,
+    repository_full_name: str | None = None,
+    base_branch: str | None = None,
+    head_branch: str | None = None,
+    pr_number: int | None = None,
 ) -> ReviewExecution:
     """Create a new execution for a review with the next execution number."""
     next_number = await db.scalar(
@@ -35,6 +44,15 @@ async def create_execution(
         trigger=trigger,
         status="queued",
         commit_sha=commit_sha,
+        provider=provider,
+        model=model,
+        prompt_version=prompt_version,
+        configuration_snapshot=configuration_snapshot,
+        api_key_id=api_key_id,
+        repository_full_name=repository_full_name,
+        base_branch=base_branch,
+        head_branch=head_branch,
+        pr_number=pr_number,
     )
     db.add(execution)
     await db.flush()
@@ -51,6 +69,19 @@ async def get_latest_execution(
     result = await db.execute(
         select(ReviewExecution)
         .where(ReviewExecution.review_id == review_id)
+        .order_by(ReviewExecution.execution_number.desc())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def get_latest_completed_execution(
+    db: AsyncSession,
+    review_id,
+) -> ReviewExecution | None:
+    result = await db.execute(
+        select(ReviewExecution)
+        .where(ReviewExecution.review_id == review_id, ReviewExecution.status == "completed")
         .order_by(ReviewExecution.execution_number.desc())
         .limit(1)
     )
@@ -76,6 +107,9 @@ async def mark_execution_final(
     model: str | None = None,
     provider: str | None = None,
     tokens: dict[str, Any] | None = None,
+    summary: str | None = None,
+    stats: dict[str, Any] | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Mark the latest execution of a review as completed/failed/cancelled."""
     execution = await get_latest_execution(db, review_id)
@@ -92,6 +126,12 @@ async def mark_execution_final(
         execution.provider = provider
     if tokens:
         execution.tokens = tokens
+    if summary is not None:
+        execution.summary = summary
+    if stats is not None:
+        execution.stats = stats
+    if error_message is not None:
+        execution.error_message = error_message
     if execution.started_at is None:
         execution.started_at = now
     db.add(execution)

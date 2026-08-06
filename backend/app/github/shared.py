@@ -321,12 +321,27 @@ async def get_or_create_review_records(
                 mark_execution_running,
             )
 
+            provider, model, api_key_id, _source = await resolve_provider_config(
+                db, user_id=str(db_inst.user_id), db_repo=db_repo
+            )
+
             existing_exec_id = await db.scalar(
                 select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
             )
             if not existing_exec_id:
                 await create_execution(
-                    db, db_review.id, trigger="webhook", commit_sha=head_sha
+                    db, 
+                    db_review.id, 
+                    trigger="webhook", 
+                    commit_sha=head_sha, 
+                    provider=provider, 
+                    model=model,
+                    api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
+                    repository_full_name=db_repo.full_name,
+                    base_branch=pull_request["base"]["ref"],
+                    head_branch=pull_request["head"]["ref"],
+                    pr_number=pr_number,
+                    configuration_snapshot=db_repo.settings or {},
                 )
             if status == "running" and review_transitioned:
                 await mark_execution_running(db, db_review.id)
@@ -334,45 +349,7 @@ async def get_or_create_review_records(
         except Exception as e:
             logger.warning(f"Failed to sync review execution for {db_review.id}: {e}")
 
-        # Resolve provider config and create immutable execution context (skip if already exists)
-        try:
-            from app.models.exec_context import ReviewExecutionContext
 
-            existing_ctx = await db.execute(
-                select(ReviewExecutionContext).where(
-                    ReviewExecutionContext.review_id == db_review.id
-                )
-            )
-            if existing_ctx.scalars().first():
-                logger.info(
-                    f"Execution context already exists for review {db_review.id} — skipping creation"
-                )
-            else:
-                provider, model, api_key_id, _source = await resolve_provider_config(
-                    db, user_id=str(db_inst.user_id), db_repo=db_repo
-                )
-                if provider and model:
-                    exec_ctx = ReviewExecutionContext(
-                        review_id=db_review.id,
-                        repository_full_name=db_repo.full_name,
-                        provider=provider,
-                        api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
-                        model=model,
-                        commit_sha=head_sha,
-                        base_branch=pull_request["base"]["ref"],
-                        head_branch=pull_request["head"]["ref"],
-                        pr_number=pr_number,
-                        configuration_snapshot=db_repo.settings or {},
-                    )
-                    db.add(exec_ctx)
-                    await db.commit()
-                    logger.info(
-                        f"Created execution context for review {db_review.id}: {provider}/{model}"
-                    )
-        except Exception as e:
-            logger.warning(
-                f"Failed to create execution context for review {db_review.id}: {e}"
-            )
 
         return db_review, db_repo, db_pr, user_id
 

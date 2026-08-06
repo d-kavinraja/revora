@@ -16,17 +16,12 @@ class Review(Base):
         ForeignKey("pull_requests.id", ondelete="CASCADE"), index=True, nullable=False
     )
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)
-    summary: Mapped[str | None] = mapped_column(String, nullable=True)
-    stats: Mapped[dict[str, Any]] = mapped_column(
-        JSON_TYPE, default=dict, server_default="{}"
-    )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
     github_check_run_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # The single top-level GitHub comment holding this review's summary.
     # Reused (edited) on reruns so the PR never accumulates duplicate Revora comments.

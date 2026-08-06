@@ -15,7 +15,7 @@ export const apiClient = axios.create({
 /** Ping the backend health endpoint. Returns true if server is alive, false if sleeping/unreachable. */
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(12000) });
     return res.ok;
   } catch {
     return false;
