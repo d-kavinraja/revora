@@ -140,12 +140,12 @@ async def test_delete_api_key(client: TestClient, test_db: AsyncSession, mock_us
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
+@patch("app.services.model_discovery.model_discovery_engine.get_available_models")
 async def test_test_api_key_valid(
-    mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user
+    mock_get_models, client: TestClient, test_db: AsyncSession, mock_user
 ):
-    # Setup mock: to_thread returns a list of models (key is valid)
-    mock_to_thread.return_value = ["gpt-4o", "gpt-4o-mini"]
+    # Setup mock: get_available_models returns a list of models (key is valid)
+    mock_get_models.return_value = [{"id": "gpt-4o"}]
 
     encrypted = encryption_service.encrypt("sk-valid-key-1234567890")
     key = ApiKey(
@@ -169,12 +169,12 @@ async def test_test_api_key_valid(
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.api_keys.asyncio.to_thread")
+@patch("app.services.model_discovery.model_discovery_engine.get_available_models")
 async def test_test_api_key_invalid(
-    mock_to_thread, client: TestClient, test_db: AsyncSession, mock_user
+    mock_get_models, client: TestClient, test_db: AsyncSession, mock_user
 ):
-    # Setup mock: to_thread raises an auth error (key is invalid)
-    mock_to_thread.side_effect = Exception(
+    # Setup mock: get_available_models raises an auth error (key is invalid)
+    mock_get_models.side_effect = Exception(
         "Invalid API Key credentials — 401 unauthorized"
     )
 
