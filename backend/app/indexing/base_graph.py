@@ -1,4 +1,5 @@
 # ruff: noqa: F821
+from typing import TYPE_CHECKING
 """Base graph builder interface for code graph indexing.
 
 All graph builders must implement this interface to ensure

@@ -1,4 +1,5 @@
 # ruff: noqa: F821
+from typing import TYPE_CHECKING
 """Dead code detection engine.
 
 Detects potentially unused functions, classes, and imports.

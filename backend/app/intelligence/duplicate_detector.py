@@ -1,4 +1,5 @@
 # ruff: noqa: F821
+from typing import TYPE_CHECKING
 """Duplicate code detection engine.
 
 Detects potential copy-paste code using content hashing.

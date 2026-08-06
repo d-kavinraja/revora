@@ -1,4 +1,5 @@
 # ruff: noqa: F821
+from typing import TYPE_CHECKING
 """Repository health scoring engine.
 
 Calculates an overall health score for the repository based on
