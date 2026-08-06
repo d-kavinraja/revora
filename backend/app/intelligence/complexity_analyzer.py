@@ -5,11 +5,9 @@ Uses deterministic analysis without LLM calls.
 """
 
 import re
-from typing import Dict, List
 
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR
-
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 # Complexity-increasing keywords by language
 COMPLEXITY_KEYWORDS = {
@@ -46,7 +44,7 @@ class ComplexityAnalyzer(BaseDetector):
         Returns:
             DetectorResult with complexity metrics.
         """
-        file_complexities: List[Dict] = []
+        file_complexities: list[dict] = []
         total_complexity = 0
         files_analyzed = 0
 

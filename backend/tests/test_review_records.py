@@ -7,17 +7,17 @@ lifecycle, and process_job must bail out on cancelled jobs.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
-from app.queue.models import ReviewJob, JobStatus
+from app.queue.models import JobStatus, ReviewJob
 
 SHA = "8ddf79c83ed93072212689717dfb332bba385071"
 FULL_NAME = "testowner/test-repo"
@@ -79,7 +79,7 @@ async def clean_tables(session_factory):
         await db.commit()
 
 
-async def _seed(session_factory, review_status: str = None) -> dict:
+async def _seed(session_factory, review_status: str | None = None) -> dict:
     """Seed user/installation/repo/pr (and optionally one review row)."""
     async with session_factory() as db:
         user = User(
@@ -243,7 +243,7 @@ class TestWorkerStaleJobGuard:
             from app.pipeline.orchestrator import review_pipeline
             result = await process_job(
                 (job_id, seed["repo"].id, 1, SHA, "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
-                 _payload(12345, 777), 0, datetime.now(timezone.utc))
+                 _payload(12345, 777), 0, datetime.now(UTC))
             )
             review_pipeline.execute.assert_not_called()
 
@@ -277,7 +277,7 @@ class TestWorkerStaleJobGuard:
             from app.pipeline.orchestrator import review_pipeline
             result = await process_job(
                 (job_id, seed["repo"].id, 1, SHA, "193741d0-8d5e-11f1-82fe-0dd0b19f3e9f",
-                 _payload(12345, 777), 0, datetime.now(timezone.utc))
+                 _payload(12345, 777), 0, datetime.now(UTC))
             )
             review_pipeline.execute.assert_not_called()
 

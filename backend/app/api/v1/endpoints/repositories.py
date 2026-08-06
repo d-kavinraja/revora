@@ -1,21 +1,21 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Any, Dict, Optional
 import uuid
+from datetime import UTC, datetime
+from typing import Any
+
 import httpx
-from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.models.user import User
-from app.models.github import Installation, Repository, PullRequest
-from app.models.review import Review
-from app.models.audit import AuditLog
-from app.models.sync_run import SyncRun
 from app.github.auth import github_app_auth
+from app.models.github import Installation, PullRequest, Repository
+from app.models.review import Review
+from app.models.sync_run import SyncRun
+from app.models.user import User
 from app.services.api_key_service import api_key_service
 from app.services.repository_service import repository_service
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("", response_model=List[Dict[str, Any]])
+@router.get("", response_model=list[dict[str, Any]])
 async def list_repositories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -303,7 +303,7 @@ async def sync_repository(
                                     status="completed",
                                     summary=body,
                                     started_at=db_pr.created_at,
-                                    completed_at=datetime.now(timezone.utc),
+                                    completed_at=datetime.now(UTC),
                                     stats={
                                         "provider": "imported",
                                         "model": reviewer_login,
@@ -361,7 +361,7 @@ async def sync_repository(
                             triggered_reviews += 1
 
             # Update last synced time
-            repo.last_synced_at = datetime.now(timezone.utc)
+            repo.last_synced_at = datetime.now(UTC)
             db.add(repo)
             await db.commit()
 
@@ -381,29 +381,30 @@ async def sync_repository(
 
 
 class RepoConfigUpdate(BaseModel):
-    assigned_provider: Optional[str] = None
-    assigned_model: Optional[str] = None
-    assigned_key_id: Optional[str] = None
-    reviews_enabled: Optional[bool] = None
+    assigned_provider: str | None = None
+    assigned_model: str | None = None
+    assigned_key_id: str | None = None
+    reviews_enabled: bool | None = None
 
 
 # PROVIDER_MODELS is now dynamically queried via ModelDiscoveryEngine.
 
 
-@router.get("/available-models", response_model=Dict[str, List[Dict[str, Any]]])
+@router.get("/available-models", response_model=dict[str, list[dict[str, Any]]])
 async def get_available_models(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Return live LLM models available from the user's actual API keys by querying each provider endpoint."""
-    from app.services.model_discovery import model_discovery_engine
-    from app.core.security import encryption_service
     import logging as _logging
+
+    from app.core.security import encryption_service
+    from app.services.model_discovery import model_discovery_engine
     logger = _logging.getLogger(__name__)
 
     api_keys_list = await api_key_service.get_all_for_user(db, current_user.id)
     # Build a dict of provider -> decrypted api key (valid keys only)
-    provider_keys: Dict[str, str] = {}
+    provider_keys: dict[str, str] = {}
     for key_obj in api_keys_list:
         if key_obj.is_valid:
             try:
@@ -411,7 +412,7 @@ async def get_available_models(
             except Exception:
                 pass
 
-    available: Dict[str, List[Dict[str, Any]]] = {}
+    available: dict[str, list[dict[str, Any]]] = {}
 
     for provider, raw_key in provider_keys.items():
         try:
@@ -426,7 +427,7 @@ async def get_available_models(
     return available
 
 
-@router.patch("/{repo_id}/config", response_model=Dict[str, Any])
+@router.patch("/{repo_id}/config", response_model=dict[str, Any])
 async def update_repository_config(
     repo_id: str,
     config: RepoConfigUpdate,
@@ -477,8 +478,8 @@ async def update_repository_config(
 
     # Validate model if assigned_model and assigned_key_id are provided
     if config.assigned_provider and config.assigned_model and config.assigned_key_id:
-        from app.services.model_discovery import model_discovery_engine
         from app.core.security import encryption_service
+        from app.services.model_discovery import model_discovery_engine
         
         # Get the API key to validate access
         db_key = await api_key_service.get_by_id(db, uuid.UUID(config.assigned_key_id))
@@ -562,7 +563,7 @@ async def refresh_installation(
         raise HTTPException(status_code=500, detail=f"Failed to refresh installation: {e}")
 
 
-@router.get("/sync-runs", response_model=List[Dict[str, Any]])
+@router.get("/sync-runs", response_model=list[dict[str, Any]])
 async def list_sync_runs(
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),

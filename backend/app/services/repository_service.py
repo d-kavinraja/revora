@@ -13,15 +13,14 @@ the GitHub App re-links the same repository row and resumes monitoring.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 
-from app.models.github import Installation, Repository
 from app.models.audit import AuditLog
+from app.models.github import Installation, Repository
 from app.models.sync_run import SYNC_REASON_MANUAL
-from app.github.auth import github_app_auth
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +32,9 @@ class RepositoryService:
         self,
         db,
         user_id: UUID,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
         """Fetch all repositories from GitHub App installations and sync to local DB.
 
         Delegates to the sync engine (manual reason) so the behavior — and the
@@ -91,7 +90,7 @@ class RepositoryService:
         db,
         repo_id: UUID,
         user_id: UUID,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get detailed status for a repository including GitHub state."""
         inst_result = await db.execute(
             select(Installation).where(Installation.user_id == user_id)

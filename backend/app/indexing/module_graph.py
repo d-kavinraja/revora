@@ -1,12 +1,11 @@
 import os
-from typing import Dict
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 
 def build_module_graph(repo_path: str) -> CodeGraph:
     graph = CodeGraph()
-    module_map: Dict[str, str] = {}
+    module_map: dict[str, str] = {}
 
     for root, dirs, files in os.walk(repo_path):
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}]

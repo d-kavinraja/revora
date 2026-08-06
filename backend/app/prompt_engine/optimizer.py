@@ -4,9 +4,8 @@ Deduplicates, trims, and fits sections within the configured token budget.
 """
 
 import logging
-from typing import Dict, Optional
 
-from app.prompt_engine.models import PromptSection, PromptBuildRequest, TokenMetadata
+from app.prompt_engine.models import PromptSection
 from app.prompt_engine.token_budget import PromptTokenBudget, estimate_tokens
 
 logger = logging.getLogger(__name__)
@@ -17,9 +16,9 @@ class PromptOptimizer:
 
     async def optimize(
         self,
-        sections: Dict[str, PromptSection],
+        sections: dict[str, PromptSection],
         budget_manager: PromptTokenBudget,
-    ) -> Dict[str, PromptSection]:
+    ) -> dict[str, PromptSection]:
         """Optimize sections to fit within token budget.
 
         Strategy:

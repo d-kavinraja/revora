@@ -1,18 +1,18 @@
-import time
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class BaseCache(ABC):
     @abstractmethod
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         ...
 
     @abstractmethod
-    async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         ...
 
     @abstractmethod
@@ -29,7 +29,7 @@ class BaseCache(ABC):
 
     @abstractmethod
     async def get_or_compute(
-        self, key: str, compute_fn, ttl_seconds: Optional[int] = None
+        self, key: str, compute_fn, ttl_seconds: int | None = None
     ) -> Any:
         ...
 

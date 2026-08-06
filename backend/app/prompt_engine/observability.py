@@ -4,9 +4,8 @@ Tracks prompt generation time, size, tokens, compression ratio, cache hits/misse
 cost estimates, provider, and model.
 """
 
-import time
 import logging
-from typing import Optional, Dict, List
+import time
 from dataclasses import dataclass, field
 
 from app.prompt_engine.models import CompiledPrompt, PromptBuildRequest
@@ -37,7 +36,7 @@ class PromptObservability:
     """Tracks prompt build metrics for observability."""
 
     def __init__(self, max_records: int = 1000):
-        self._records: List[PromptMetricRecord] = []
+        self._records: list[PromptMetricRecord] = []
         self._max_records = max_records
 
     async def record_build(
@@ -73,7 +72,7 @@ class PromptObservability:
         if len(self._records) > self._max_records:
             self._records = self._records[-self._max_records:]
 
-    async def get_metrics(self, prompt_id: str) -> Optional[dict]:
+    async def get_metrics(self, prompt_id: str) -> dict | None:
         """Get metrics for a specific prompt."""
         for record in reversed(self._records):
             if record.prompt_id == prompt_id:
@@ -96,8 +95,8 @@ class PromptObservability:
 
     async def get_aggregate_metrics(
         self,
-        review_type: Optional[str] = None,
-        provider: Optional[str] = None,
+        review_type: str | None = None,
+        provider: str | None = None,
     ) -> dict:
         """Get aggregate metrics, optionally filtered."""
         filtered = self._records

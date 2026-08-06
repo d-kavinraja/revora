@@ -1,9 +1,8 @@
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
-from app.retrieval.retrievers.base_retriever import BaseRetriever
 from app.knowledge.rule_engine import load_rules
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
+from app.retrieval.retrievers.base_retriever import BaseRetriever
 
 logger = logging.getLogger(__name__)
 

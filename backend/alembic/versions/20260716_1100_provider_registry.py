@@ -4,9 +4,10 @@ Revision ID: pr0v1d3r_r3g1stry
 Revises: pr0mpt_bu1ld3r
 Create Date: 2026-07-16 11:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
+
+from alembic import op
 
 revision = "pr0v1d3r_r3g1stry"
 down_revision = "pr0mpt_bu1ld3r"

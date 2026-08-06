@@ -1,8 +1,7 @@
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.models import RetrievedContext
 from app.retrieval.token_budget_engine import token_budget_engine
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ class SummarizeStrategy(BaseCompressionStrategy):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         content = context.content
         current_tokens = token_budget_engine.estimate_tokens(content)
 
@@ -46,7 +45,7 @@ class SummarizeStrategy(BaseCompressionStrategy):
         first_line = lines[0] if lines else ""
         summary_lines: list[str] = []
 
-        if first_line.startswith("#") or first_line.startswith("//") or first_line.startswith("/*"):
+        if first_line.startswith(("#", "//", "/*")):
             summary_lines.append(first_line)
 
         for i, line in enumerate(lines):
@@ -86,8 +85,9 @@ class SummarizeStrategy(BaseCompressionStrategy):
         max_tokens: int,
     ) -> RetrievedContext:
         try:
-            from app.ai.llm import llm_service
             import uuid
+
+            from app.ai.llm import llm_service
 
             prompt = (
                 f"Summarize the following code file ({context.file_path}) "

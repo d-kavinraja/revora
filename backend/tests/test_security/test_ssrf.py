@@ -1,8 +1,10 @@
 """Tests for SSRF URL validation."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from app.security.url_validator import validate_provider_url, SSRFValidationError
+
+from app.security.url_validator import SSRFValidationError, validate_provider_url
 
 
 class TestSSRFValidation:

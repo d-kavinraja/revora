@@ -6,7 +6,6 @@ Uses priority weights based on context source type.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +89,7 @@ class ContextRanker:
                     current_tokens += remaining
                 break
 
-        sources_used = list(set(ctx.source for ctx in selected))
+        sources_used = list({ctx.source for ctx in selected})
 
         return RankedContext(
             rankable_contexts=selected,

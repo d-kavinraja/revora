@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional, Any
+from typing import Any
 
 from app.cache.base_cache import BaseCache
 from app.cache.memory_cache import memory_cache
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class RedisCache(BaseCache):
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: str | None = None):
         self._redis_url = redis_url
         self._client = None
         self._available = False
@@ -38,7 +38,7 @@ class RedisCache(BaseCache):
             self._available = False
             return False
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         if not await self._ensure_client():
             return await memory_cache.get(key)
         try:
@@ -50,7 +50,7 @@ class RedisCache(BaseCache):
             logger.debug(f"Redis get failed: {e}")
             return await memory_cache.get(key)
 
-    async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         await memory_cache.set(key, value, ttl_seconds)
         if not await self._ensure_client():
             return
@@ -107,7 +107,7 @@ class RedisCache(BaseCache):
             logger.debug(f"Redis clear failed: {e}")
 
     async def get_or_compute(
-        self, key: str, compute_fn, ttl_seconds: Optional[int] = None
+        self, key: str, compute_fn, ttl_seconds: int | None = None
     ) -> Any:
         cached = await self.get(key)
         if cached is not None:

@@ -6,10 +6,10 @@ and in the full pipeline context.
 """
 
 import sys
-import pytest
 import uuid
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
-from dataclasses import dataclass
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Pre-load mock modules to satisfy import dependencies
@@ -21,7 +21,6 @@ _mock_litellm.completion = AsyncMock()
 sys.modules['litellm'] = _mock_litellm
 
 # Also pre-load app.pipeline so patch.object() can resolve its attributes
-import app.pipeline.orchestrator as _orch_mod  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
@@ -90,7 +89,7 @@ def sample_verification_result():
 
 @pytest.fixture
 def sample_review_summary():
-    from app.github_review.models import GitHubReviewSummary, GitHubReviewComment
+    from app.github_review.models import GitHubReviewComment, GitHubReviewSummary
     return GitHubReviewSummary(
         body="## Review Summary\nLooks good overall.",
         event="COMMENT",
@@ -282,8 +281,8 @@ class TestPipelineFullExecution:
         mock_compiled_prompt,
     ):
         """Happy path: all stages complete successfully."""
-        from app.sse.events import EventType
         from app.pipeline.orchestrator import ReviewPipeline
+        from app.sse.events import EventType
 
         mocks = configure_success_mocks(
             pipeline_mocks, sample_diff, sample_llm_response,
@@ -639,7 +638,7 @@ class TestPipelineFullExecution:
         from app.pipeline.orchestrator import ReviewPipeline
         from app.prompt_engine.builder import prompt_builder
 
-        mocks = configure_success_mocks(
+        configure_success_mocks(
             pipeline_mocks, sample_diff, sample_llm_response,
             sample_verification_result, sample_review_summary,
             mock_compiled_prompt,

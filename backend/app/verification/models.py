@@ -1,12 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class VerifiedFinding:
     id: str
     file_path: str
-    line_number: Optional[int]
+    line_number: int | None
     issue_type: str  # bug, security, performance, style, improvement
     severity: str  # critical, high, medium, low
     description: str
@@ -16,7 +15,7 @@ class VerifiedFinding:
     is_verified: bool = False
     checks_passed: list[str] = field(default_factory=list)
     checks_failed: list[str] = field(default_factory=list)
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
 
 
 @dataclass

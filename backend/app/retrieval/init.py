@@ -1,21 +1,21 @@
 import logging
 
+from app.retrieval.compression.engine import compression_engine
 from app.retrieval.engine import retrieval_engine
 from app.retrieval.ranking.engine import ranking_engine
-from app.retrieval.compression.engine import compression_engine
-from app.retrieval.retrievers.changed_file_retriever import ChangedFileRetriever
-from app.retrieval.retrievers.import_retriever import ImportRetriever
-from app.retrieval.retrievers.call_graph_retriever import CallGraphRetriever
-from app.retrieval.retrievers.module_retriever import ModuleRetriever
 from app.retrieval.retrievers.api_retriever import APIRetriever
+from app.retrieval.retrievers.call_graph_retriever import CallGraphRetriever
+from app.retrieval.retrievers.changed_file_retriever import ChangedFileRetriever
 from app.retrieval.retrievers.db_retriever import DBRetriever
-from app.retrieval.retrievers.security_retriever import SecurityRetriever
-from app.retrieval.retrievers.impact_retriever import ImpactRetriever
-from app.retrieval.retrievers.documentation_retriever import DocumentationRetriever
-from app.retrieval.retrievers.test_retriever import TestRetriever
-from app.retrieval.retrievers.rule_retriever import RuleRetriever
-from app.retrieval.retrievers.historical_retriever import HistoricalRetriever
 from app.retrieval.retrievers.dependency_retriever import DependencyRetriever
+from app.retrieval.retrievers.documentation_retriever import DocumentationRetriever
+from app.retrieval.retrievers.historical_retriever import HistoricalRetriever
+from app.retrieval.retrievers.impact_retriever import ImpactRetriever
+from app.retrieval.retrievers.import_retriever import ImportRetriever
+from app.retrieval.retrievers.module_retriever import ModuleRetriever
+from app.retrieval.retrievers.rule_retriever import RuleRetriever
+from app.retrieval.retrievers.security_retriever import SecurityRetriever
+from app.retrieval.retrievers.test_retriever import TestRetriever
 
 logger = logging.getLogger(__name__)
 

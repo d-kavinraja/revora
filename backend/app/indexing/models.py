@@ -5,7 +5,6 @@ import graphs, call graphs, module graphs, API graphs, etc.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -17,7 +16,7 @@ class GraphNode:
     file_path: str
     line_start: int = 0
     line_end: int = 0
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     metadata: dict = field(default_factory=dict)
 
 
@@ -37,13 +36,13 @@ class CodeGraph:
 
     Provides O(1) node lookup via internal index.
     """
-    nodes: List[GraphNode] = field(default_factory=list)
-    edges: List[GraphEdge] = field(default_factory=list)
+    nodes: list[GraphNode] = field(default_factory=list)
+    edges: list[GraphEdge] = field(default_factory=list)
 
     # Internal indexes for O(1) lookups
-    _node_index: Dict[str, GraphNode] = field(default_factory=dict, repr=False)
-    _edges_from_index: Dict[str, List[GraphEdge]] = field(default_factory=dict, repr=False)
-    _edges_to_index: Dict[str, List[GraphEdge]] = field(default_factory=dict, repr=False)
+    _node_index: dict[str, GraphNode] = field(default_factory=dict, repr=False)
+    _edges_from_index: dict[str, list[GraphEdge]] = field(default_factory=dict, repr=False)
+    _edges_to_index: dict[str, list[GraphEdge]] = field(default_factory=dict, repr=False)
     _built: bool = field(default=False, repr=False)
 
     def _build_indexes(self) -> None:
@@ -66,7 +65,7 @@ class CodeGraph:
 
         self._built = True
 
-    def get_node(self, node_id: str) -> Optional[GraphNode]:
+    def get_node(self, node_id: str) -> GraphNode | None:
         """Get a node by ID in O(1) time.
 
         Args:
@@ -78,7 +77,7 @@ class CodeGraph:
         self._build_indexes()
         return self._node_index.get(node_id)
 
-    def get_edges_from(self, node_id: str) -> List[GraphEdge]:
+    def get_edges_from(self, node_id: str) -> list[GraphEdge]:
         """Get all edges from a node in O(1) time.
 
         Args:
@@ -90,7 +89,7 @@ class CodeGraph:
         self._build_indexes()
         return self._edges_from_index.get(node_id, [])
 
-    def get_edges_to(self, node_id: str) -> List[GraphEdge]:
+    def get_edges_to(self, node_id: str) -> list[GraphEdge]:
         """Get all edges to a node in O(1) time.
 
         Args:

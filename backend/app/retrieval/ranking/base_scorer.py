@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext
 from app.indexing.models import RepositoryIndex
+from app.retrieval.models import RetrievedContext
 
 
 class BaseScorer(ABC):
@@ -20,16 +19,16 @@ class BaseScorer(ABC):
     async def score(
         self,
         context: RetrievedContext,
-        index: Optional[RepositoryIndex] = None,
+        index: RepositoryIndex | None = None,
     ) -> float:
         ...
 
     async def safe_score(
         self,
         context: RetrievedContext,
-        index: Optional[RepositoryIndex] = None,
+        index: RepositoryIndex | None = None,
     ) -> float:
         try:
             return await self.score(context, index)
-        except Exception as e:
+        except Exception:
             return 0.5

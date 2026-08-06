@@ -4,12 +4,10 @@ Detects package managers and analyzes dependencies.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import Optional
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import PackageManagerInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import PackageManagerInfo
 
 PACKAGE_MANAGERS = {
     "npm": {"lock": "package-lock.json", "config": "package.json"},
@@ -51,15 +49,15 @@ class DependencyAnalyzer(BaseDetector):
             DetectorResult with package manager info.
         """
         import os as _os
-        detected_pm: Optional[str] = None
-        lock_file: Optional[str] = None
+        detected_pm: str | None = None
+        lock_file: str | None = None
 
         # First pass: check lock files only (lock files are more specific)
         for pm_name, pm_info in PACKAGE_MANAGERS.items():
             if pm_info["lock"]:
                 lock_files = [
                     fp for fp in walker.file_paths
-                    if fp.endswith("/" + pm_info["lock"]) or fp.endswith(_os.sep + pm_info["lock"]) or fp == pm_info["lock"]
+                    if fp.endswith(("/" + pm_info["lock"], _os.sep + pm_info["lock"])) or fp == pm_info["lock"]
                 ]
                 if lock_files:
                     detected_pm = pm_name
@@ -72,7 +70,7 @@ class DependencyAnalyzer(BaseDetector):
                 if pm_info["config"]:
                     config_files = [
                         fp for fp in walker.file_paths
-                        if fp.endswith("/" + pm_info["config"]) or fp.endswith(_os.sep + pm_info["config"]) or fp == pm_info["config"]
+                        if fp.endswith(("/" + pm_info["config"], _os.sep + pm_info["config"])) or fp == pm_info["config"]
                     ]
                     if config_files:
                         detected_pm = pm_name
@@ -90,7 +88,7 @@ class DependencyAnalyzer(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_package_manager(repo_path: str) -> Optional[PackageManagerInfo]:
+def detect_package_manager(repo_path: str) -> PackageManagerInfo | None:
     """Detect package manager in a repository (legacy interface)."""
     from app.intelligence.repo_walker import RepoWalker
 

@@ -1,7 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
+
 from app.main import app
-from app.middleware.correlation import CorrelationIdMiddleware, get_correlation_id
 
 client = TestClient(app)
 

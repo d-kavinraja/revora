@@ -1,14 +1,12 @@
-import uuid
-import time
 import asyncio
 import logging
-from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+import time
+import uuid
 
-from app.services.cost_estimator import cost_estimator
-from app.services.api_key_service import api_key_service
 from app.ai.llm import llm_service
 from app.orchestrator.models import LLMResponse
+from app.services.api_key_service import api_key_service
+from app.services.cost_estimator import cost_estimator
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ class RetryFailoverService:
         provider: str,
         model: str,
         messages: list,
-        api_key_id: Optional[str] = None,
+        api_key_id: str | None = None,
         max_retries: int = 1,
     ) -> LLMResponse:
         """Execute exactly one LLM call with the given provider/model/key.
@@ -52,7 +50,7 @@ class RetryFailoverService:
         Returns:
             LLMResponse with content and usage stats.
         """
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(max_retries + 1):
             try:

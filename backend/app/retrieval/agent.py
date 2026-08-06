@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ class AgenticRetrievalEngine:
     def __init__(self):
         self.max_steps = 5
         
-    async def investigate(self, diff_content: str, index: Any, repo_id: str) -> Dict[str, Any]:
+    async def investigate(self, diff_content: str, index: Any, repo_id: str) -> dict[str, Any]:
         """Runs the LangGraph agent over the diff."""
         logger.info(f"Running LangGraph agentic retrieval for repo {repo_id}")
         

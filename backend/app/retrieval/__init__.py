@@ -1,10 +1,10 @@
-from app.retrieval.engine import retrieval_engine, RetrievalEngine
-from app.retrieval.models import RetrievalResult, RetrievedContext, RetrievalConfig
+from app.retrieval.engine import RetrievalEngine, retrieval_engine
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 
 __all__ = [
-    "retrieval_engine",
+    "RetrievalConfig",
     "RetrievalEngine",
     "RetrievalResult",
     "RetrievedContext",
-    "RetrievalConfig",
+    "retrieval_engine",
 ]

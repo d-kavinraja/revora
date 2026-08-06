@@ -4,25 +4,24 @@ Analyzes a repository to extract structural intelligence without using LLM.
 All analysis is deterministic and runs before any LLM invocation.
 """
 
-import time
-import logging
 import asyncio
-from typing import Optional, List
+import logging
+import time
 
-from app.intelligence.models import IntelligenceResult
-from app.intelligence.repo_walker import RepoWalker
-from app.intelligence.base_detector import BaseDetector, DetectorResult
-from app.intelligence.language_detector import LanguageDetector
-from app.intelligence.framework_detector import FrameworkDetector
 from app.intelligence.architecture_detector import ArchitectureDetector
-from app.intelligence.database_detector import DatabaseDetector
-from app.intelligence.dependency_analyzer import DependencyAnalyzer
-from app.intelligence.testing_detector import TestingDetector
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.intelligence.build_detector import BuildDetector
 from app.intelligence.cicd_detector import CICDDetector
-from app.intelligence.security_detector import SecurityDetector
 from app.intelligence.cloud_detector import CloudDetector
+from app.intelligence.database_detector import DatabaseDetector
+from app.intelligence.dependency_analyzer import DependencyAnalyzer
+from app.intelligence.framework_detector import FrameworkDetector
+from app.intelligence.language_detector import LanguageDetector
+from app.intelligence.models import IntelligenceResult
 from app.intelligence.queue_detector import QueueDetector
+from app.intelligence.repo_walker import RepoWalker
+from app.intelligence.security_detector import SecurityDetector
+from app.intelligence.testing_detector import TestingDetector
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class IntelligenceEngine:
     """
 
     def __init__(self):
-        self._detectors: List[BaseDetector] = [
+        self._detectors: list[BaseDetector] = [
             LanguageDetector(),
             FrameworkDetector(),
             ArchitectureDetector(),
@@ -61,7 +60,7 @@ class IntelligenceEngine:
     async def analyze(
         self,
         repo_path: str,
-        walker: Optional[RepoWalker] = None,
+        walker: RepoWalker | None = None,
     ) -> IntelligenceResult:
         """Run all detectors on the repository.
 
@@ -98,7 +97,7 @@ class IntelligenceEngine:
     async def _run_detectors_parallel(
         self,
         walker: RepoWalker,
-    ) -> List[DetectorResult]:
+    ) -> list[DetectorResult]:
         """Run all detectors in parallel with error isolation.
 
         Each detector runs independently. A failure in one detector
@@ -132,7 +131,7 @@ class IntelligenceEngine:
 
         return final_results
 
-    def _build_result(self, results: List[DetectorResult]) -> IntelligenceResult:
+    def _build_result(self, results: list[DetectorResult]) -> IntelligenceResult:
         """Build IntelligenceResult from detector results.
 
         Args:
@@ -161,7 +160,13 @@ class IntelligenceEngine:
         queue_data = data_map.get("queue_detector", {})
 
         # Build architecture info
-        from app.intelligence.models import ArchitectureInfo, DatabaseInfo, TestingInfo, BuildInfo, SecurityInfo
+        from app.intelligence.models import (
+            ArchitectureInfo,
+            BuildInfo,
+            DatabaseInfo,
+            SecurityInfo,
+            TestingInfo,
+        )
 
         architecture = ArchitectureInfo(
             pattern=architecture_data.get("pattern", "standard"),
@@ -195,7 +200,7 @@ class IntelligenceEngine:
             has_https_redirect=security_data.get("has_https_redirect", False),
         )
 
-        from app.intelligence.models import PackageManagerInfo, CIInfo
+        from app.intelligence.models import CIInfo, PackageManagerInfo
 
         package_manager = PackageManagerInfo(
             name=package_data.get("name", ""),

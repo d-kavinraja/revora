@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from app.retrieval.models import RetrievedContext
 
@@ -15,15 +14,15 @@ class BaseCompressionStrategy(ABC):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         ...
 
     async def safe_compress(
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         try:
             return await self.compress(context, max_tokens)
-        except Exception as e:
+        except Exception:
             return context

@@ -4,17 +4,16 @@ Calculates an overall health score for the repository based on
 multiple factors: testing, documentation, structure, etc.
 """
 
-from typing import Dict
 
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import (
-    HEALTH_WEIGHT_LANGUAGE,
-    HEALTH_WEIGHT_FRAMEWORK,
     HEALTH_WEIGHT_ARCHITECTURE,
-    HEALTH_WEIGHT_TESTING,
-    HEALTH_WEIGHT_SECURITY,
     HEALTH_WEIGHT_DOCUMENTATION,
+    HEALTH_WEIGHT_FRAMEWORK,
+    HEALTH_WEIGHT_LANGUAGE,
+    HEALTH_WEIGHT_SECURITY,
+    HEALTH_WEIGHT_TESTING,
 )
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 
 class HealthEngine(BaseDetector):
@@ -37,7 +36,7 @@ class HealthEngine(BaseDetector):
         Returns:
             DetectorResult with health score and breakdown.
         """
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
 
         # Language diversity score (0-1)
         languages = walker.get_language_distribution()
@@ -89,10 +88,7 @@ class HealthEngine(BaseDetector):
         # Documentation score (0-1)
         doc_files = [
             fp for fp in walker.file_paths
-            if fp.endswith((".md", ".rst", ".txt"))
-            or fp.endswith("README")
-            or fp.endswith("CONTRIBUTING")
-            or fp.endswith("LICENSE")
+            if fp.endswith((".md", ".rst", ".txt", "README", "CONTRIBUTING", "LICENSE"))
         ]
         scores["documentation"] = min(1.0, len(doc_files) * 0.3)
 
@@ -129,7 +125,7 @@ class HealthEngine(BaseDetector):
             confidence=0.7,
         )
 
-    def _get_recommendations(self, scores: Dict[str, float]) -> list:
+    def _get_recommendations(self, scores: dict[str, float]) -> list:
         """Generate recommendations based on scores."""
         recommendations = []
 

@@ -7,13 +7,13 @@ the UI can show "Last synchronized X ago".
 
 import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
 
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, JSON_TYPE
+from app.db.base import JSON_TYPE, Base
 
 # Sync reasons — recorded on every sync_runs row.
 SYNC_REASON_STARTUP = "startup"
@@ -41,15 +41,15 @@ class SyncRun(Base):
     __tablename__ = "sync_runs"
 
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
-    triggered_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+    triggered_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
-    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     repo_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     repos_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -61,4 +61,4 @@ class SyncRun(Base):
     jobs_enqueued: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Per-repo failure map: {"full_name": "error message"} (partial failures).
-    details: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON_TYPE, nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE, nullable=True)

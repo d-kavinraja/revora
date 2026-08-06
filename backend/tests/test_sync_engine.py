@@ -9,17 +9,17 @@ isolation, tiered due computation, and sync_runs audit recording.
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import select
 
-from app.services import sync_engine
-from app.models.github import Installation, Repository, PullRequest
-from app.models.review import Review
 from app.models.execution import ReviewExecution
+from app.models.github import Installation, PullRequest, Repository
+from app.models.review import Review
 from app.models.sync_run import SyncRun
+from app.services import sync_engine
 
 
 def _gh_pr(number, sha, state="open", title="Test PR", merged=False):
@@ -255,7 +255,7 @@ async def test_repo_pass_preserves_reviews_enabled(test_db, mock_user, monkeypat
 async def test_repo_pass_readds_previously_removed(test_db, mock_user, monkeypatch):
     inst, repo = await _install_repo(
         test_db, mock_user, gid=1001, full_name="test-org/repo-a",
-        removed_at=datetime.now(timezone.utc), reviews_enabled=False,
+        removed_at=datetime.now(UTC), reviews_enabled=False,
     )
     client = _FakeClient({
         "/installation/repositories": _FakeResponse(200, {"repositories": [_gh_repo(1001, "test-org/repo-a")]}),
@@ -447,7 +447,7 @@ async def test_pr_pass_gated_when_permissions_missing(test_db, mock_user, monkey
 async def test_pr_pass_skips_removed_and_disabled_repos(test_db, mock_user, monkeypatch):
     inst1, repo_active = await _install_repo(test_db, mock_user, gid=1001, full_name="test-org/repo-a")
     inst2, repo_removed = await _install_repo(test_db, mock_user, gid=1002, full_name="test-org/repo-b",
-                                              removed_at=datetime.now(timezone.utc))
+                                              removed_at=datetime.now(UTC))
     inst3, repo_disabled = await _install_repo(test_db, mock_user, gid=1003, full_name="test-org/repo-c",
                                                reviews_enabled=False)
     client = _FakeClient({
@@ -492,7 +492,7 @@ async def test_pr_pass_tier_skips_recent_repo_in_background(test_db, mock_user, 
     """Background pass: recently synced repo with no open PRs is not due."""
     inst, repo = await _install_repo(
         test_db, mock_user, gid=1001, full_name="test-org/repo-a",
-        last_synced_at=datetime.now(timezone.utc),
+        last_synced_at=datetime.now(UTC),
     )
     client = _FakeClient({})
     enqueue = AsyncMock()

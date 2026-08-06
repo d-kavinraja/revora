@@ -1,20 +1,22 @@
-import jwt
 import time
+from datetime import UTC, datetime, timedelta
+
 import httpx
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple, Dict
+import jwt
+
 from app.core.config import settings
+
 
 class GitHubAppAuth:
     def __init__(self):
-        self._token_cache: Dict[int, Tuple[str, datetime]] = {}
+        self._token_cache: dict[int, tuple[str, datetime]] = {}
 
     @property
-    def app_id(self) -> Optional[str]:
+    def app_id(self) -> str | None:
         return settings.GITHUB_APP_ID
 
     @property
-    def private_key(self) -> Optional[str]:
+    def private_key(self) -> str | None:
         return settings.GITHUB_APP_PRIVATE_KEY
 
     def _create_app_jwt(self) -> str:
@@ -38,7 +40,7 @@ class GitHubAppAuth:
             key = key.replace("\\n", "\n")
         return jwt.encode(payload, key, algorithm="RS256")
 
-    async def get_installation(self, installation_id: int) -> Optional[Dict]:
+    async def get_installation(self, installation_id: int) -> dict | None:
         """Fetch installation metadata (permissions, suspension) from GitHub.
 
         Returns None when the installation no longer exists (404).
@@ -62,7 +64,7 @@ class GitHubAppAuth:
         # Check cache
         if installation_id in self._token_cache:
             token, expires_at = self._token_cache[installation_id]
-            if expires_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+            if expires_at > datetime.now(UTC) + timedelta(minutes=5):
                 return token
 
         app_jwt = self._create_app_jwt()

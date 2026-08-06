@@ -7,24 +7,23 @@ Review lifecycle rules (one review row per PR lifecycle):
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.db.session import AsyncSessionLocal
-from app.queue.models import ReviewJob, JobStatus
+from app.queue.models import JobStatus, ReviewJob
 
 logger = logging.getLogger(__name__)
 
 
 async def enqueue_review_job(
     session,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     delivery_id: str,
     webhook_action: str = "opened",
-) -> Optional[ReviewJob]:
+) -> ReviewJob | None:
     """Enqueue a review job with idempotency and lifecycle-aware review handling.
 
     Uses INSERT ... ON CONFLICT DO NOTHING to deduplicate on
@@ -52,8 +51,9 @@ async def enqueue_review_job(
     # Resolve repo_id from github_id
     repo_id = None
     if repo_github_id:
-        from app.models.github import Repository
         from sqlalchemy import select as sel
+
+        from app.models.github import Repository
         repo_result = await session.execute(
             sel(Repository.id).where(Repository.github_id == repo_github_id)
         )
@@ -138,7 +138,7 @@ async def enqueue_review_job(
         return None
 
 
-async def _supersede_inflight(session, db_pr, payload: Dict[str, Any], new_sha: str) -> None:
+async def _supersede_inflight(session, db_pr, payload: dict[str, Any], new_sha: str) -> None:
     """Cancel in-flight jobs and executions for a PR before a new commit run.
 
     The Review row itself is untouched here — it is reset by
@@ -159,7 +159,7 @@ async def _supersede_inflight(session, db_pr, payload: Dict[str, Any], new_sha: 
         await cancel_active_executions(session, rev.id)
 
 
-async def _reuse_latest_review_for_pr(session, db_pr, payload: Dict[str, Any], installation_id: int, head_sha: str) -> None:
+async def _reuse_latest_review_for_pr(session, db_pr, payload: dict[str, Any], installation_id: int, head_sha: str) -> None:
     """Reuse the latest Review row for a PR (synchronize event).
 
     Resets the row to 'pending', clears stale content, and creates a new
@@ -194,7 +194,7 @@ async def _reuse_latest_review_for_pr(session, db_pr, payload: Dict[str, Any], i
 
 async def supersede_jobs(
     session,
-    repository: Dict[str, Any],
+    repository: dict[str, Any],
     pr_number: int,
     new_sha: str,
 ) -> int:
@@ -215,8 +215,9 @@ async def supersede_jobs(
     repo_github_id = repository.get("id")
 
     # Find the repo_id from github_id
-    from app.models.github import Repository
     from sqlalchemy import select as sel
+
+    from app.models.github import Repository
 
     repo_result = await session.execute(
         sel(Repository).where(Repository.github_id == repo_github_id)
@@ -286,12 +287,12 @@ async def get_pending_jobs(session, limit: int = 1) -> list[ReviewJob]:
 
 async def enqueue_lifecycle_job(
     session,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     delivery_id: str,
-    repo_id: Optional[UUID] = None,
-    pr_number: Optional[int] = None,
-    head_sha: Optional[str] = None,
-) -> Optional[ReviewJob]:
+    repo_id: UUID | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+) -> ReviewJob | None:
     """Enqueue a lifecycle job (rerun, retry, restart).
 
     Unlike regular webhook jobs, lifecycle jobs may have explicit repo_id/pr_number/sha.
@@ -308,7 +309,7 @@ async def enqueue_lifecycle_job(
         The created ReviewJob, or None if duplicate.
     """
     pull_request = payload.get("pull_request", {})
-    installation = payload.get("installation", {})
+    payload.get("installation", {})
 
     target_head_sha = head_sha or pull_request.get("head", {}).get("sha", "")
     target_pr_number = pr_number or pull_request.get("number", 0)

@@ -1,8 +1,7 @@
 import logging
-from typing import Optional
 
-from app.retrieval.token_budget_engine import token_budget_engine, TokenBudget
 from app.retrieval.models import RetrievalResult
+from app.retrieval.token_budget_engine import TokenBudget
 
 logger = logging.getLogger(__name__)
 

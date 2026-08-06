@@ -119,7 +119,7 @@ async def readiness():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         from fastapi.responses import JSONResponse
 
         return JSONResponse(

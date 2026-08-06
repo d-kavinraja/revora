@@ -1,7 +1,5 @@
 import os
 import re
-from collections import Counter
-from typing import Dict, List
 
 
 def detect_conventions(repo_path: str) -> str:
@@ -129,7 +127,7 @@ def _detect_import_style(repo_path: str) -> str:
                     has_third = False
                     for line in fh:
                         stripped = line.strip()
-                        if stripped.startswith("import ") or stripped.startswith("from "):
+                        if stripped.startswith(("import ", "from ")):
                             in_imports = True
                             if stripped.startswith(("import os", "import sys", "import json", "from os", "from sys")):
                                 has_stdlib = True

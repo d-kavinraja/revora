@@ -6,11 +6,10 @@ Uses the shared RepoWalker for efficient filesystem access.
 """
 
 import json
-from typing import List, Set
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import ArchitectureInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+from app.intelligence.models import ArchitectureInfo
 
 
 class ArchitectureDetector(BaseDetector):
@@ -33,11 +32,11 @@ class ArchitectureDetector(BaseDetector):
         Returns:
             DetectorResult with architecture info and repo type.
         """
-        indicators: List[str] = []
+        indicators: list[str] = []
         scores = {}
 
         # Collect all directory names from file paths
-        all_dirs: Set[str] = set()
+        all_dirs: set[str] = set()
         for fp in walker.file_paths:
             parts = fp.replace("\\", "/").split("/")
             for part in parts[:-1]:  # Skip filename

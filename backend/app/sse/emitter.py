@@ -1,8 +1,8 @@
-import time
+import asyncio
 import json
 import logging
-import asyncio
-from typing import AsyncGenerator, Optional, Callable, Awaitable
+import time
+from collections.abc import AsyncGenerator
 
 from app.sse.events import EventType, PipelineEvent
 
@@ -31,8 +31,8 @@ class SSEEmitter:
         status: str,
         event_type: EventType = EventType.STAGE_START,
         message: str = "",
-        metrics: Optional[dict] = None,
-        progress: Optional[float] = None,
+        metrics: dict | None = None,
+        progress: float | None = None,
     ) -> None:
         now = time.time()
         duration_ms = None
@@ -123,7 +123,7 @@ class SSEEmitter:
                     break
                 if event.status == "failed":
                     break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
 
     def get_events(self) -> list[dict]:

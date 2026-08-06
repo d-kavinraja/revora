@@ -4,26 +4,26 @@ Implements parallel execution of bug, security, and performance analysis
 agents, with a coordinator that synthesizes the results.
 """
 
-import uuid
 import logging
-from typing import Dict, Any
+import uuid
+from typing import Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
-from app.ai.state import ReviewState
+from app.ai.llm import llm_service
 from app.ai.prompts import (
     BUG_FINDER_PROMPT,
-    SECURITY_PROMPT,
-    PERFORMANCE_PROMPT,
     COORDINATOR_PROMPT,
+    PERFORMANCE_PROMPT,
+    SECURITY_PROMPT,
 )
-from app.ai.llm import llm_service
+from app.ai.state import ReviewState
 
 logger = logging.getLogger(__name__)
 
 
-async def bug_agent(state: ReviewState) -> Dict[str, Any]:
+async def bug_agent(state: ReviewState) -> dict[str, Any]:
     """Analyze code changes for bugs and logic errors."""
     try:
         prompt = BUG_FINDER_PROMPT.format(
@@ -40,10 +40,10 @@ async def bug_agent(state: ReviewState) -> Dict[str, Any]:
         return {"bug_analysis": [result or "Bug analysis unavailable"]}
     except Exception as e:
         logger.error(f"Bug agent failed: {e}")
-        return {"bug_analysis": [f"Bug analysis unavailable: {str(e)}"]}
+        return {"bug_analysis": [f"Bug analysis unavailable: {e!s}"]}
 
 
-async def security_agent(state: ReviewState) -> Dict[str, Any]:
+async def security_agent(state: ReviewState) -> dict[str, Any]:
     """Analyze code changes for security vulnerabilities."""
     try:
         prompt = SECURITY_PROMPT.format(
@@ -60,10 +60,10 @@ async def security_agent(state: ReviewState) -> Dict[str, Any]:
         return {"security_analysis": [result or "Security analysis unavailable"]}
     except Exception as e:
         logger.error(f"Security agent failed: {e}")
-        return {"security_analysis": [f"Security analysis unavailable: {str(e)}"]}
+        return {"security_analysis": [f"Security analysis unavailable: {e!s}"]}
 
 
-async def performance_agent(state: ReviewState) -> Dict[str, Any]:
+async def performance_agent(state: ReviewState) -> dict[str, Any]:
     """Analyze code changes for performance issues."""
     try:
         prompt = PERFORMANCE_PROMPT.format(
@@ -80,10 +80,10 @@ async def performance_agent(state: ReviewState) -> Dict[str, Any]:
         return {"performance_analysis": [result or "Performance analysis unavailable"]}
     except Exception as e:
         logger.error(f"Performance agent failed: {e}")
-        return {"performance_analysis": [f"Performance analysis unavailable: {str(e)}"]}
+        return {"performance_analysis": [f"Performance analysis unavailable: {e!s}"]}
 
 
-async def coordinator_agent(state: ReviewState) -> Dict[str, Any]:
+async def coordinator_agent(state: ReviewState) -> dict[str, Any]:
     """Synthesize results from all specialist agents into a final review."""
     try:
         bug_analysis = state.get("bug_analysis", [])
@@ -106,7 +106,7 @@ async def coordinator_agent(state: ReviewState) -> Dict[str, Any]:
         return {"final_review_markdown": result or "Review generation failed"}
     except Exception as e:
         logger.error(f"Coordinator agent failed: {e}")
-        return {"final_review_markdown": f"Review generation failed: {str(e)}"}
+        return {"final_review_markdown": f"Review generation failed: {e!s}"}
 
 
 def _fan_out(state: ReviewState):

@@ -1,14 +1,12 @@
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievalResult
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.compression.budget_allocator import budget_allocator
 from app.retrieval.compression.strategies.dedup import DedupStrategy
-from app.retrieval.compression.strategies.truncation import TruncationStrategy
 from app.retrieval.compression.strategies.import_prune import ImportPruneStrategy
 from app.retrieval.compression.strategies.symbol_merge import SymbolMergeStrategy
-from app.retrieval.compression.budget_allocator import budget_allocator
-from app.retrieval.token_budget_engine import token_budget_engine
+from app.retrieval.compression.strategies.truncation import TruncationStrategy
+from app.retrieval.models import RetrievalResult
 
 logger = logging.getLogger(__name__)
 

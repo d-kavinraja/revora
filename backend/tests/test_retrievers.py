@@ -1,10 +1,8 @@
-import pytest
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 from app.retrieval.retrievers.base_retriever import BaseRetriever
-from app.retrieval.retrievers.rule_retriever import RuleRetriever
-from app.retrieval.retrievers.historical_retriever import HistoricalRetriever
 from app.retrieval.retrievers.documentation_retriever import DocumentationRetriever
-from app.indexing.models import RepositoryIndex, CodeGraph, GraphNode, GraphEdge
+from app.retrieval.retrievers.historical_retriever import HistoricalRetriever
+from app.retrieval.retrievers.rule_retriever import RuleRetriever
 
 
 class TestBaseRetriever:
@@ -100,8 +98,8 @@ class TestRetrieverEdgeCases:
         assert contexts == []
 
     async def test_large_number_of_retrievers_error_isolation(self):
-        from app.retrieval.retrievers.import_retriever import ImportRetriever
         from app.retrieval.retrievers.call_graph_retriever import CallGraphRetriever
+        from app.retrieval.retrievers.import_retriever import ImportRetriever
         from app.retrieval.retrievers.module_retriever import ModuleRetriever
 
         retrievers = [ImportRetriever(), CallGraphRetriever(), ModuleRetriever()]

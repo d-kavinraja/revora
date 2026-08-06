@@ -4,8 +4,8 @@ Merges the functionality of prompt_guard.py and sanitizer.py into a single
 unified module. Handles both prompt injection detection and secret redaction.
 """
 
-import re
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 

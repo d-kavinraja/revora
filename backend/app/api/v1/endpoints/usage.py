@@ -1,5 +1,5 @@
-from typing import List, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,12 +7,16 @@ from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.services.token_manager import token_manager
-from app.services.cost_estimator import cost_estimator
 from app.schemas.usage import (
-    UsageSummary, UsageRecordRead,
-    CostBudgetCreate, CostBudgetUpdate, CostBudgetRead, DailyCost,
+    CostBudgetCreate,
+    CostBudgetRead,
+    CostBudgetUpdate,
+    DailyCost,
+    UsageRecordRead,
+    UsageSummary,
 )
+from app.services.cost_estimator import cost_estimator
+from app.services.token_manager import token_manager
 
 router = APIRouter()
 
@@ -29,10 +33,10 @@ async def require_usage_enabled():
         )
 
 
-def _parse_period(period: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None):
+def _parse_period(period: str, start_date: datetime | None = None, end_date: datetime | None = None):
     if period == "custom" and start_date and end_date:
         return start_date, end_date
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if period == "today":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
@@ -47,12 +51,12 @@ def _parse_period(period: str, start_date: Optional[datetime] = None, end_date: 
 @router.get("/summary", response_model=UsageSummary)
 async def get_usage_summary(
     period: str = Query("month", pattern="^(today|week|month|custom)$"),
-    provider: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    model: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    api_key_id: str | None = None,
+    model: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -78,15 +82,15 @@ async def get_usage_summary(
     )
 
 
-@router.get("/trend", response_model=List[DailyCost])
+@router.get("/trend", response_model=list[DailyCost])
 async def get_usage_trend(
     days: int = Query(30, ge=1, le=365),
-    provider: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    model: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    api_key_id: str | None = None,
+    model: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -96,7 +100,7 @@ async def get_usage_trend(
         days = max(1, min(delta + 1, 365))
         now = end_date
     else:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = now
 
@@ -131,12 +135,12 @@ async def get_usage_trend(
 @router.get("/breakdown")
 async def get_usage_breakdown(
     period: str = Query("month", pattern="^(today|week|month|custom)$"),
-    provider: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    model: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    api_key_id: str | None = None,
+    model: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -147,16 +151,16 @@ async def get_usage_breakdown(
     )
 
 
-@router.get("/records", response_model=List[UsageRecordRead])
+@router.get("/records", response_model=list[UsageRecordRead])
 async def get_usage_records(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    provider: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    model: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    api_key_id: str | None = None,
+    model: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -170,7 +174,7 @@ async def get_usage_records(
 
 
 # Budget endpoints
-@router.get("/budgets", response_model=List[CostBudgetRead])
+@router.get("/budgets", response_model=list[CostBudgetRead])
 async def list_budgets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -215,5 +219,4 @@ async def delete_budget(
     deleted = await cost_estimator.delete_budget(db, uuid.UUID(budget_id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Budget not found")
-    return None
 

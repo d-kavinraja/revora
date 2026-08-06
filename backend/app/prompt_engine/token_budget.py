@@ -5,7 +5,7 @@ and review type. Extends the retrieval engine's budget system.
 """
 
 import logging
-from typing import Dict, Optional
+
 from app.prompt_engine.models import RepositorySize, TokenMetadata
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ class PromptTokenBudget:
         self.repo_size = repo_size
         self.total_budget = total_budget
         self.allocations = SECTION_ALLOCATIONS.get(repo_size, SECTION_ALLOCATIONS[RepositorySize.MEDIUM])
-        self.used: Dict[str, int] = {}
+        self.used: dict[str, int] = {}
 
     def get_allocation(self, section_name: str) -> int:
         """Get the token allocation for a section."""

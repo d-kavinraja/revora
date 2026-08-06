@@ -4,10 +4,9 @@ All shared constants (skip directories, file patterns, limits) are defined here
 to avoid duplication across modules.
 """
 
-from typing import FrozenSet
 
 # Directories to skip during filesystem traversal
-SKIP_DIRS: FrozenSet[str] = frozenset({
+SKIP_DIRS: frozenset[str] = frozenset({
     ".git",
     ".hg",
     ".svn",
@@ -46,7 +45,7 @@ SKIP_DIRS: FrozenSet[str] = frozenset({
 })
 
 # File extensions to skip (binary, compiled, etc.)
-SKIP_EXTENSIONS: FrozenSet[str] = frozenset({
+SKIP_EXTENSIONS: frozenset[str] = frozenset({
     ".pyc",
     ".pyo",
     ".pyd",

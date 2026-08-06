@@ -1,15 +1,15 @@
-import pytest
 import asyncio
-from typing import AsyncGenerator
-from fastapi import FastAPI
+from collections.abc import AsyncGenerator
+
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
+from app.core.deps import get_current_user
 from app.db.base import Base
 from app.db.session import get_db
-from app.core.deps import get_current_user
+from app.main import app
 from app.models.user import User
 
 # Use an in-memory SQLite database for testing
@@ -30,11 +30,12 @@ async def test_engine():
     )
     
     # Enable SQLite WAL and now() function for tests
-    from sqlalchemy import event
     import datetime
+
+    from sqlalchemy import event
     @event.listens_for(engine.sync_engine, "connect")
     def configure_sqlite_connection(dbapi_connection, connection_record):
-        dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+        dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.UTC).isoformat())
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

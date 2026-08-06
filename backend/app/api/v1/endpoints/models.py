@@ -1,21 +1,20 @@
-﻿from typing import Optional
-from fastapi import APIRouter, Depends, Query
+﻿
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
+from app.core.security import encryption_service
 from app.db.session import get_db
 from app.models.user import User
-from app.services.provider_registry import provider_registry_service
-from app.services.model_discovery import model_discovery_engine
 from app.services.api_key_service import api_key_service
-from app.core.security import encryption_service
+from app.services.model_discovery import model_discovery_engine
 
 router = APIRouter()
 
 
 @router.get("")
 async def list_models(
-    provider: Optional[str] = None,
+    provider: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

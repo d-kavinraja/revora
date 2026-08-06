@@ -1,19 +1,19 @@
-﻿from typing import Optional
-from datetime import datetime, timezone, timedelta
+﻿from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.services.token_manager import token_manager
 from app.services.cost_estimator import cost_estimator
+from app.services.token_manager import token_manager
 
 router = APIRouter()
 
 
 def _parse_period(period: str):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if period == "today":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
@@ -28,8 +28,8 @@ def _parse_period(period: str):
 @router.get("")
 async def get_cost(
     period: str = Query("month", pattern="^(today|week|month)$"),
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
+    provider: str | None = None,
+    model: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

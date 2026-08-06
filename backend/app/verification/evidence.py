@@ -1,6 +1,7 @@
 import os
+from typing import Any
+
 import aiofiles
-from typing import Dict, Any, Optional
 
 MAX_FILE_READ_BYTES = 1024 * 1024  # 1MB limit
 
@@ -17,7 +18,7 @@ class EvidenceEngine:
                 return os.path.relpath(os.path.join(root, basename), repo_path)
         return file_path
 
-    async def generate(self, finding: Dict[str, Any], repo_path: str) -> Optional[Dict[str, Any]]:
+    async def generate(self, finding: dict[str, Any], repo_path: str) -> dict[str, Any] | None:
         file_path = finding.get("file_path", "")
         line_number = finding.get("line_number")
         

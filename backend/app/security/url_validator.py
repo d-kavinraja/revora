@@ -5,9 +5,9 @@ after DNS resolution. This prevents Server-Side Request Forgery attacks
 via BYOK provider endpoints.
 """
 
-import socket
 import ipaddress
 import logging
+import socket
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 class SSRFValidationError(Exception):
     """Raised when a URL fails SSRF validation."""
-    pass
 
 
 # RFC 1918 + link-local + loopback ranges

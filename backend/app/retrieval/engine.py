@@ -1,20 +1,18 @@
-import time
+import asyncio
 import hashlib
 import logging
-import asyncio
-from typing import List, Optional
+import time
 
-from app.retrieval.models import RetrievalResult, RetrievedContext, RetrievalConfig
-from app.retrieval.fallback import retrieval_fallback, RetrievalFallback
-from app.cache.memory_cache import memory_cache
 from app.cache.redis_cache import redis_cache
 from app.indexing.models import RepositoryIndex
+from app.retrieval.fallback import retrieval_fallback
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 
 logger = logging.getLogger(__name__)
 
 
 class RetrievalEngine:
-    def __init__(self, config: Optional[RetrievalConfig] = None):
+    def __init__(self, config: RetrievalConfig | None = None):
         self._config = config or RetrievalConfig()
         self._retrievers: list = []
         self._ranking_engine = None
@@ -38,10 +36,10 @@ class RetrievalEngine:
 
     async def retrieve(
         self,
-        changed_files: List[str],
+        changed_files: list[str],
         repo_path: str,
-        index: Optional[RepositoryIndex] = None,
-        diff_content: Optional[str] = None,
+        index: RepositoryIndex | None = None,
+        diff_content: str | None = None,
     ) -> RetrievalResult:
         start = time.time()
         retrieval_fallback.reset()
@@ -129,17 +127,14 @@ class RetrievalEngine:
         if retrieval_fallback.should_use_graph():
             retrieval_fallback.escalate()
 
-        if retrieval_fallback.should_use_knowledge_base():
-            self._fallback_to_basic(result)
-            retrieval_fallback.escalate()
-        elif retrieval_fallback.should_use_static_analysis():
+        if retrieval_fallback.should_use_knowledge_base() or retrieval_fallback.should_use_static_analysis():
             self._fallback_to_basic(result)
             retrieval_fallback.escalate()
 
     def _fallback_to_basic(self, result: RetrievalResult) -> None:
         from app.retrieval.file_retriever import (
-            get_related_files_from_imports,
             get_related_files_from_calls,
+            get_related_files_from_imports,
             get_test_files,
             read_file_content,
         )
@@ -228,11 +223,11 @@ class RetrievalEngine:
         result.total_tokens = total
         result.budget_used = round(total / max(result.budget_limit, 1), 2)
 
-    def _build_cache_key(self, repo_path: str, changed_files: list[str], diff_content: Optional[str] = None) -> str:
+    def _build_cache_key(self, repo_path: str, changed_files: list[str], diff_content: str | None = None) -> str:
         raw = f"{repo_path}:{sorted(changed_files)}:{diff_content or ''}:{self._config.budget}"
         return f"retrieval:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
-    async def _try_cache(self, key: str) -> Optional[RetrievalResult]:
+    async def _try_cache(self, key: str) -> RetrievalResult | None:
         cached = await redis_cache.get(key)
         if cached is not None:
             if isinstance(cached, dict):

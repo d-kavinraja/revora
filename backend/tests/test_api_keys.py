@@ -1,12 +1,14 @@
-import pytest
 import uuid
-from unittest.mock import AsyncMock, patch
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from unittest.mock import patch
 
-from app.models.api_key import ApiKey
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.security import encryption_service
+from app.models.api_key import ApiKey
+
 
 @pytest.mark.asyncio
 async def test_create_api_key(client: TestClient, test_db: AsyncSession):

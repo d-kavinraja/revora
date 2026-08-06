@@ -1,4 +1,3 @@
-import pytest
 from app.retrieval.fallback import RetrievalFallback, retrieval_fallback
 
 

@@ -4,26 +4,28 @@ Orchestrates prompt construction from context retrieval results through
 section building, ranking, compression, optimization, validation, and caching.
 """
 
-import time
-import logging
 import hashlib
+import logging
+import time
 import uuid
-from typing import Dict, Optional
 
-from app.prompt_engine.models import (
-    CompiledPrompt, PromptSection, PromptBuildRequest,
-    ReviewType, RepositorySize, TokenMetadata, ProviderMetadata,
-    PromptExplainability,
-)
-from app.prompt_engine.section_builders import ALL_SECTION_BUILDERS
-from app.prompt_engine.context_ranker import ContextRanker
-from app.prompt_engine.token_budget import PromptTokenBudget, estimate_tokens
-from app.prompt_engine.optimizer import PromptOptimizer
-from app.prompt_engine.compressor import PromptCompressor
-from app.prompt_engine.validator import PromptValidator
 from app.prompt_engine.cache import PromptCache, build_cache_key
-from app.prompt_engine.versioning import PromptVersionManager
+from app.prompt_engine.compressor import PromptCompressor
+from app.prompt_engine.context_ranker import ContextRanker
+from app.prompt_engine.models import (
+    CompiledPrompt,
+    PromptBuildRequest,
+    PromptExplainability,
+    PromptSection,
+    ProviderMetadata,
+    ReviewType,
+)
 from app.prompt_engine.observability import PromptObservability
+from app.prompt_engine.optimizer import PromptOptimizer
+from app.prompt_engine.section_builders import ALL_SECTION_BUILDERS
+from app.prompt_engine.token_budget import PromptTokenBudget, estimate_tokens
+from app.prompt_engine.validator import PromptValidator
+from app.prompt_engine.versioning import PromptVersionManager
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +228,7 @@ class PromptBuilder:
         unique = uuid.uuid4().hex[:8]
         return f"prompt_{timestamp}_{unique}"
 
-    def _calculate_compression_ratio(self, sections: Dict[str, PromptSection]) -> float:
+    def _calculate_compression_ratio(self, sections: dict[str, PromptSection]) -> float:
         """Calculate the compression ratio from section metadata.
 
         Returns 0.0 when no sections are compressed, 1.0 when all are compressed.
@@ -239,7 +241,7 @@ class PromptBuilder:
 
     def _build_explainability(
         self,
-        sections: Dict[str, PromptSection],
+        sections: dict[str, PromptSection],
         request: PromptBuildRequest,
         total_tokens: int,
         files_count: int,

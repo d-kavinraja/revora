@@ -3,13 +3,12 @@
 Supports prompt versioning, A/B testing, rollback, and comparison.
 """
 
-import time
-import logging
 import hashlib
-from typing import Optional, Dict, List
+import logging
+import time
 from dataclasses import dataclass, field
 
-from app.prompt_engine.models import CompiledPrompt, PromptVersion
+from app.prompt_engine.models import CompiledPrompt
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +30,8 @@ class PromptVersionManager:
     """Manages prompt versions for A/B testing and rollback."""
 
     def __init__(self):
-        self._versions: Dict[str, List[PromptVersionRecord]] = {}
-        self._active: Dict[str, str] = {}
+        self._versions: dict[str, list[PromptVersionRecord]] = {}
+        self._active: dict[str, str] = {}
 
     async def register_version(
         self,
@@ -68,7 +67,7 @@ class PromptVersionManager:
         logger.info(f"Registered prompt version {version} for {template_name}")
         return prompt_hash
 
-    async def get_version(self, template_name: str, version: str) -> Optional[PromptVersionRecord]:
+    async def get_version(self, template_name: str, version: str) -> PromptVersionRecord | None:
         """Get a specific prompt version."""
         versions = self._versions.get(template_name, [])
         for v in versions:
@@ -76,11 +75,11 @@ class PromptVersionManager:
                 return v
         return None
 
-    async def list_versions(self, template_name: str) -> List[PromptVersionRecord]:
+    async def list_versions(self, template_name: str) -> list[PromptVersionRecord]:
         """List all versions for a template."""
         return self._versions.get(template_name, [])
 
-    async def get_active_version(self, template_name: str) -> Optional[str]:
+    async def get_active_version(self, template_name: str) -> str | None:
         """Get the active version for a template."""
         return self._active.get(template_name)
 

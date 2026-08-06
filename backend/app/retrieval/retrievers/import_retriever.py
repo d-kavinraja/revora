@@ -1,11 +1,10 @@
-import os
 import logging
-from typing import Optional
+import os
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
-from app.retrieval.retrievers.base_retriever import BaseRetriever
-from app.retrieval.graph_traversal import graph_traversal
 from app.indexing.models import RepositoryIndex
+from app.retrieval.graph_traversal import graph_traversal
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
+from app.retrieval.retrievers.base_retriever import BaseRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class ImportRetriever(BaseRetriever):
         config: RetrievalConfig,
         result: RetrievalResult,
     ) -> list[RetrievedContext]:
-        index: Optional[RepositoryIndex] = getattr(result, "_index", None)
+        index: RepositoryIndex | None = getattr(result, "_index", None)
         repo_path = getattr(result, "_repo_path", ".")
         changed_files = getattr(result, "_changed_file_paths", [])
 
@@ -65,7 +64,7 @@ class ImportRetriever(BaseRetriever):
 
         return contexts
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 300) -> Optional[str]:
+    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 300) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:

@@ -4,13 +4,11 @@ Loads and manages review rules from the database with sensible defaults.
 Rules can be customized per repository.
 """
 
-import uuid
 import logging
-from typing import List
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.knowledge import RepositoryRule
@@ -29,7 +27,7 @@ DEFAULT_RULES = [
 ]
 
 
-async def load_rules(repo_id: uuid.UUID) -> List[str]:
+async def load_rules(repo_id: uuid.UUID) -> list[str]:
     """Load review rules from database with defaults.
 
     Args:
@@ -87,7 +85,7 @@ async def add_rule(
                     "rt": rule_type,
                     "text": rule_text,
                     "p": priority,
-                    "now": datetime.now(timezone.utc),
+                    "now": datetime.now(UTC),
                 },
             )
             await db.commit()

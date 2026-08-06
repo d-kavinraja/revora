@@ -4,13 +4,11 @@ Detects database types and ORMs by analyzing file content.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List, Optional, Set
 
+from app.core.constants import MAX_FILE_READ_CHARS, MAX_FILES_PER_DETECTOR
 from app.intelligence._async_util import run_async
-from app.intelligence.models import DatabaseInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-from app.core.constants import MAX_FILES_PER_DETECTOR, MAX_FILE_READ_CHARS
-
+from app.intelligence.models import DatabaseInfo
 
 DB_SIGNATURES = {
     "postgresql": ["postgresql", "postgres", "psycopg", "asyncpg", "pg"],
@@ -69,9 +67,9 @@ class DatabaseDetector(BaseDetector):
         Returns:
             DetectorResult with database info.
         """
-        indicators: List[str] = []
-        db_type: Optional[str] = None
-        orm: Optional[str] = None
+        indicators: list[str] = []
+        db_type: str | None = None
+        orm: str | None = None
 
         # Collect files to check
         files_to_check = []
@@ -138,7 +136,7 @@ class DatabaseDetector(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_database(repo_path: str) -> Optional[DatabaseInfo]:
+def detect_database(repo_path: str) -> DatabaseInfo | None:
     """Detect databases in a repository (legacy interface)."""
     from app.intelligence.repo_walker import RepoWalker
 

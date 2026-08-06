@@ -1,28 +1,34 @@
 ﻿"""Comprehensive tests for the Prompt Builder Engine."""
 
+
 import pytest
-import time
-from unittest.mock import MagicMock, AsyncMock
 
-from app.prompt_engine.models import (
-    ReviewType, RepositorySize, PromptVersion,
-    CompiledPrompt, PromptSection, PromptBuildRequest,
-    TokenMetadata, ProviderMetadata, PromptExplainability,
-)
-from app.prompt_engine.builder import PromptBuilder, prompt_builder
-from app.prompt_engine.context_ranker import ContextRanker, RankedContext
-from app.prompt_engine.token_budget import (
-    PromptTokenBudget, detect_repository_size, get_budget_for_size, estimate_tokens
-)
-from app.prompt_engine.optimizer import PromptOptimizer
-from app.prompt_engine.compressor import PromptCompressor
-from app.prompt_engine.validator import PromptValidator, ValidationResult
+from app.prompt_engine.builder import PromptBuilder
 from app.prompt_engine.cache import PromptCache, build_cache_key
-from app.prompt_engine.versioning import PromptVersionManager
+from app.prompt_engine.compressor import PromptCompressor
+from app.prompt_engine.context_ranker import ContextRanker
+from app.prompt_engine.models import (
+    CompiledPrompt,
+    PromptBuildRequest,
+    PromptExplainability,
+    PromptSection,
+    ProviderMetadata,
+    RepositorySize,
+    ReviewType,
+    TokenMetadata,
+)
 from app.prompt_engine.observability import PromptObservability
-from app.prompt_engine.review_types import get_review_config, REVIEW_TYPE_CONFIGS
+from app.prompt_engine.optimizer import PromptOptimizer
+from app.prompt_engine.review_types import get_review_config
 from app.prompt_engine.section_builders import ALL_SECTION_BUILDERS
-
+from app.prompt_engine.token_budget import (
+    PromptTokenBudget,
+    detect_repository_size,
+    estimate_tokens,
+    get_budget_for_size,
+)
+from app.prompt_engine.validator import PromptValidator
+from app.prompt_engine.versioning import PromptVersionManager
 
 # ============================================================
 # Model Tests
@@ -564,8 +570,8 @@ class TestPromptBuilder:
             conventions="PEP 8",
             rules=["Rule 1"],
         )
-        assert "system_instructions" in [s for s in prompt.sections.keys()] or prompt.system_prompt
-        assert "output_format" in [s for s in prompt.sections.keys()]
+        assert "system_instructions" in [s for s in prompt.sections] or prompt.system_prompt
+        assert "output_format" in [s for s in prompt.sections]
 
     @pytest.mark.asyncio
     async def test_compile_backward_compat_messages(self):

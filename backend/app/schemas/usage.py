@@ -1,6 +1,6 @@
 ﻿import uuid
-from typing import Optional, List
 from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -8,11 +8,11 @@ class ApiKeyHealthRead(BaseModel):
     id: uuid.UUID
     key_id: uuid.UUID
     status: str
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
-    latency_ms: Optional[float] = None
+    error_type: str | None = None
+    error_message: str | None = None
+    latency_ms: float | None = None
     checked_at: datetime
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -62,13 +62,13 @@ class UsageRecordRead(BaseModel):
 class CostBudgetCreate(BaseModel):
     budget_type: str = Field(..., pattern="^(daily|monthly)$")
     limit_usd: float = Field(..., gt=0)
-    provider: Optional[str] = None
-    feature: Optional[str] = None
+    provider: str | None = None
+    feature: str | None = None
 
 
 class CostBudgetUpdate(BaseModel):
-    limit_usd: Optional[float] = Field(None, gt=0)
-    is_active: Optional[bool] = None
+    limit_usd: float | None = Field(None, gt=0)
+    is_active: bool | None = None
 
 
 class CostBudgetRead(BaseModel):
@@ -77,10 +77,10 @@ class CostBudgetRead(BaseModel):
     budget_type: str
     limit_usd: float
     spent_usd: float
-    provider: Optional[str] = None
-    feature: Optional[str] = None
+    provider: str | None = None
+    feature: str | None = None
     is_active: bool
-    reset_at: Optional[str] = None
-    created_at: Optional[datetime] = None
+    reset_at: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

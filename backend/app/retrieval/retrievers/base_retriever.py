@@ -1,9 +1,8 @@
-import time
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 
 logger = logging.getLogger(__name__)
 

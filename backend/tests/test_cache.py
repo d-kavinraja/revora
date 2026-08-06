@@ -1,6 +1,6 @@
 import pytest
-from app.cache.memory_cache import MemoryCache, memory_cache
-from app.cache.base_cache import BaseCache
+
+from app.cache.memory_cache import MemoryCache
 
 
 @pytest.fixture

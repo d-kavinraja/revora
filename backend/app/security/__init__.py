@@ -1,2 +1,3 @@
-from app.security.sanitizer import sanitize_content, redact_secrets
-__all__ = ["sanitize_content", "redact_secrets"]
+from app.security.sanitizer import redact_secrets, sanitize_content
+
+__all__ = ["redact_secrets", "sanitize_content"]

@@ -5,11 +5,9 @@ Uses deterministic pattern matching without LLM calls.
 """
 
 import re
-from typing import List, Dict
 
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR
-
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 # Secret patterns: (name, regex pattern, severity)
 SECRET_PATTERNS = [
@@ -74,7 +72,7 @@ class SecretDetector(BaseDetector):
         Returns:
             DetectorResult with detected secrets.
         """
-        findings: List[Dict] = []
+        findings: list[dict] = []
         files_scanned = 0
 
         # Collect files to scan

@@ -1,11 +1,9 @@
-﻿import os
-import asyncio
+﻿import asyncio
 import logging
-from typing import Optional
 
+from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
-from app.indexing.models import RepositoryIndex
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class ChangeFrequencyScorer(BaseScorer):
     async def score(
         self,
         context: RetrievedContext,
-        index: Optional[RepositoryIndex] = None,
+        index: RepositoryIndex | None = None,
     ) -> float:
         repo_path = getattr(context, "_repo_path", None)
         if not repo_path:

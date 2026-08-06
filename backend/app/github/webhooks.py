@@ -1,33 +1,19 @@
-import hmac
 import hashlib
-import asyncio
-import httpx
-import uuid
-from datetime import datetime, timezone
-from typing import Dict, Any
-from sqlalchemy import select
+import hmac
+from datetime import UTC, datetime
+from typing import Any
 
-import hmac
-import hashlib
-import asyncio
 import httpx
-import uuid
-from datetime import datetime, timezone
-from typing import Dict, Any
 from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
-from app.models.github import Installation, Repository, PullRequest
-from app.models.review import Review
+from app.models.github import Installation, PullRequest, Repository
 from app.models.user import User
-from app.github.auth import github_app_auth
-from app.github.client import github_client
-from app.github.shared import resolve_provider_config, get_or_create_review_records, record_usage_stats
 from app.services.github_service import github_service
 from app.services.sync_engine import _has_required_permissions
 
 
-async def handle_installation_created(payload: Dict[str, Any], delivery_id: str):
+async def handle_installation_created(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation.created event...")
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
@@ -122,7 +108,7 @@ async def handle_installation_created(payload: Dict[str, Any], delivery_id: str)
         await db.commit()
 
 
-async def handle_installation_deleted(payload: Dict[str, Any], delivery_id: str):
+async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation.deleted event...")
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
@@ -138,13 +124,13 @@ async def handle_installation_deleted(payload: Dict[str, Any], delivery_id: str)
                 # marker hides the repo from the active list.
                 r.reviews_enabled = False
                 if r.removed_at is None:
-                    r.removed_at = datetime.now(timezone.utc)
+                    r.removed_at = datetime.now(UTC)
                 db.add(r)
                 print(f"Marked repository {r.full_name} as removed due to app uninstallation.")
 
             # Keep the installation row for history attribution; mark it
             # suspended so the sync engine stops trying to fetch it.
-            db_inst.suspended_at = datetime.now(timezone.utc)
+            db_inst.suspended_at = datetime.now(UTC)
             db_inst.permissions_ok = False
             db.add(db_inst)
             await db.commit()
@@ -154,7 +140,7 @@ async def handle_installation_deleted(payload: Dict[str, Any], delivery_id: str)
             )
 
 
-async def handle_installation_repositories(payload: Dict[str, Any], delivery_id: str):
+async def handle_installation_repositories(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation_repositories event...")
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
@@ -202,14 +188,14 @@ async def handle_installation_repositories(payload: Dict[str, Any], delivery_id:
                 # hides the repo from the active list.
                 db_repo.reviews_enabled = False
                 if db_repo.removed_at is None:
-                    db_repo.removed_at = datetime.now(timezone.utc)
+                    db_repo.removed_at = datetime.now(UTC)
                 db.add(db_repo)
                 print(f"Marked repository {r.get('full_name')} as removed via webhook.")
 
         await db.commit()
 
 
-async def handle_installation_permissions(payload: Dict[str, Any], delivery_id: str):
+async def handle_installation_permissions(payload: dict[str, Any], delivery_id: str):
     """Handle installation.new_permissions_accepted.
 
     Updates the stored permission set and re-evaluates the review gate. If
@@ -238,7 +224,7 @@ async def handle_installation_permissions(payload: Dict[str, Any], delivery_id: 
         )
 
 
-async def handle_installation_suspend(payload: Dict[str, Any], delivery_id: str, suspended: bool):
+async def handle_installation_suspend(payload: dict[str, Any], delivery_id: str, suspended: bool):
     """Handle installation.suspend / installation.unsuspend."""
     print(f"[{delivery_id}] Handling installation.{'suspend' if suspended else 'unsuspend'} event...")
     installation_payload = payload.get("installation", {})
@@ -251,7 +237,7 @@ async def handle_installation_suspend(payload: Dict[str, Any], delivery_id: str,
             print(f"Installation {inst_id} not found in DB.")
             return
         if suspended:
-            db_inst.suspended_at = datetime.now(timezone.utc)
+            db_inst.suspended_at = datetime.now(UTC)
         else:
             db_inst.suspended_at = None
         db_inst.permissions_ok = _has_required_permissions(db_inst.permissions, db_inst.suspended_at)
@@ -272,7 +258,7 @@ async def get_pr_diff(owner: str, repo: str, pr_number: int, token: str) -> str:
         return res.text
 
 
-async def handle_pr_opened(payload: Dict[str, Any], delivery_id: str, action: str = "opened"):
+async def handle_pr_opened(payload: dict[str, Any], delivery_id: str, action: str = "opened"):
     from app.queue.dispatcher import enqueue_review_job
     async with AsyncSessionLocal() as db:
         repository = payload.get("repository", {})
@@ -324,7 +310,7 @@ async def handle_pr_opened(payload: Dict[str, Any], delivery_id: str, action: st
         )
 
 
-async def handle_pr_closed(payload: Dict[str, Any], delivery_id: str):
+async def handle_pr_closed(payload: dict[str, Any], delivery_id: str):
     """Update DB PR state on close/merge and invalidate the GitHub cache."""
     repository = payload.get("repository", {})
     pull_request = payload.get("pull_request", {})
@@ -372,7 +358,7 @@ class GitHubWebhookService:
         return hmac.compare_digest(expected, signature)
 
     @staticmethod
-    async def process_webhook(event: str, action: str, payload: Dict[str, Any], delivery_id: str):
+    async def process_webhook(event: str, action: str, payload: dict[str, Any], delivery_id: str):
         print(f"Received webhook: event={event}, action={action}, delivery_id={delivery_id}")
 
         import json

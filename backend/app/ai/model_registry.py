@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class CanonicalModel(BaseModel):
     enterprise_only: bool = False
     region_supported: bool = True
     
-    context_window: Optional[int] = None
+    context_window: int | None = None
     input_cost: float = 0.0
     output_cost: float = 0.0
     
@@ -32,7 +32,7 @@ class CanonicalModel(BaseModel):
     supports_reasoning: bool = False
     
     status: str = "available"
-    validation_timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    validation_timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 class CanonicalModelRegistry:
     """
@@ -41,7 +41,7 @@ class CanonicalModelRegistry:
     """
     def __init__(self):
         # Nested dictionary mapping: dict[provider][canonical_model_name] -> CanonicalModel
-        self._registry: Dict[str, Dict[str, CanonicalModel]] = {}
+        self._registry: dict[str, dict[str, CanonicalModel]] = {}
 
     def register(self, model: CanonicalModel) -> None:
         """Register a normalized model into the registry."""
@@ -51,7 +51,7 @@ class CanonicalModelRegistry:
         
         self._registry[provider][model.canonical_model_name] = model
 
-    def resolve(self, provider: str, model_name: str) -> Optional[CanonicalModel]:
+    def resolve(self, provider: str, model_name: str) -> CanonicalModel | None:
         """
         Resolve a model name to its CanonicalModel.
         Tries canonical name first, then litellm name, then provider name.
@@ -67,7 +67,7 @@ class CanonicalModelRegistry:
             return provider_models[model_name]
             
         # 2. Match by litellm_model_name or provider_model_name
-        for canonical_name, m in provider_models.items():
+        for m in provider_models.values():
             if m.litellm_model_name == model_name or m.provider_model_name == model_name:
                 return m
                 
@@ -80,7 +80,7 @@ class CanonicalModelRegistry:
                 
         return None
         
-    def get_all_for_provider(self, provider: str) -> List[CanonicalModel]:
+    def get_all_for_provider(self, provider: str) -> list[CanonicalModel]:
         """Return all models currently registered for a given provider."""
         provider = provider.lower()
         if provider not in self._registry:
@@ -123,8 +123,7 @@ class CanonicalModelRegistry:
             provider = provider.lower()
             
             canonical_name = model_key
-            if canonical_name.startswith(f"{provider}/"):
-                canonical_name = canonical_name[len(f"{provider}/"):]
+            canonical_name = canonical_name.removeprefix(f"{provider}/")
                 
             input_cost = metadata.get("input_cost_per_token", 0.0)
             output_cost = metadata.get("output_cost_per_token", 0.0)

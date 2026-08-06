@@ -1,8 +1,4 @@
-﻿import time
-import hashlib
-import uuid
-from dataclasses import dataclass, field
-from typing import Dict, Optional, List
+﻿from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -54,7 +50,7 @@ class TokenMetadata:
     total_tokens: int = 0
     budget_limit: int = 10000
     budget_used: float = 0.0
-    section_tokens: Dict[str, int] = field(default_factory=dict)
+    section_tokens: dict[str, int] = field(default_factory=dict)
     compression_ratio: float = 1.0
     estimated_cost_usd: float = 0.0
 
@@ -82,14 +78,14 @@ class PromptExplainability:
     selected_model: str = ""
     review_type: str = ""
     sections_included: list[str] = field(default_factory=list)
-    budget_allocation: Dict[str, int] = field(default_factory=dict)
+    budget_allocation: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
 class PromptBuildRequest:
     """Input specification for the Prompt Builder Engine."""
     review_type: ReviewType = ReviewType.PR_REVIEW
-    repo_id: Optional[str] = None
+    repo_id: str | None = None
     repo_path: str = "."
     repo_size: RepositorySize = RepositorySize.MEDIUM
     diff_content: str = ""
@@ -118,7 +114,7 @@ class CompiledPrompt:
     prompt_id: str = ""
     prompt_version: str = ""
     review_type: str = ""
-    sections: Dict[str, PromptSection] = field(default_factory=dict)
+    sections: dict[str, PromptSection] = field(default_factory=dict)
     system_prompt: str = ""
     user_prompt: str = ""
     total_tokens: int = 0

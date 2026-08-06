@@ -25,30 +25,28 @@ webhook / recovery.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.models.github import Installation, Repository, PullRequest
-from app.models.review import Review
+from app.github.auth import github_app_auth
 from app.models.execution import ReviewExecution
+from app.models.github import Installation, PullRequest, Repository
+from app.models.review import Review
 from app.models.sync_run import (
-    SyncRun,
     SYNC_REASON_BACKGROUND,
     SYNC_REASON_MANUAL,
-    SYNC_REASON_RECOVERY,
     SYNC_REASON_STARTUP,
-    SYNC_REASON_WEBHOOK,
     SYNC_STATUS_FAILED,
     SYNC_STATUS_PARTIAL,
     SYNC_STATUS_RUNNING,
     SYNC_STATUS_SUCCESS,
+    SyncRun,
 )
-from app.github.auth import github_app_auth
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +57,7 @@ _ACTIVE_REVIEW_STATUSES = ("queued", "pending", "running")
 # Minimum GitHub App permissions Revora needs to review a repository.
 # (The issues permission is NOT required — installations granted only
 # pull_requests/checks/contents must never be gated.)
-REQUIRED_PERMISSIONS: Dict[str, str] = {
+REQUIRED_PERMISSIONS: dict[str, str] = {
     "pull_requests": "write",
     "checks": "write",
     "contents": "read",
@@ -73,7 +71,7 @@ def sync_delivery_id(repo_github_id: int, pr_number: int, head_sha: str) -> str:
     return f"sync:{repo_github_id}:{pr_number}:{head_sha}"
 
 
-def _has_required_permissions(permissions: Optional[Dict[str, Any]], suspended_at) -> bool:
+def _has_required_permissions(permissions: dict[str, Any] | None, suspended_at) -> bool:
     """True while the installation still has every permission Revora needs."""
     if suspended_at is not None:
         return False
@@ -87,10 +85,10 @@ def _has_required_permissions(permissions: Optional[Dict[str, Any]], suspended_a
     return True
 
 
-def _ensure_aware(dt: Optional[datetime]) -> Optional[datetime]:
+def _ensure_aware(dt: datetime | None) -> datetime | None:
     """Normalize naive datetimes (SQLite returns naive) to UTC-aware."""
     if dt is not None and dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -102,11 +100,11 @@ async def record_sync_run(
     db,
     reason: str,
     status: str,
-    counts: Optional[Dict[str, int]] = None,
-    error: Optional[str] = None,
-    details: Optional[Dict[str, Any]] = None,
-    triggered_by: Optional[uuid.UUID] = None,
-    run_id: Optional[uuid.UUID] = None,
+    counts: dict[str, int] | None = None,
+    error: str | None = None,
+    details: dict[str, Any] | None = None,
+    triggered_by: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
 ) -> SyncRun:
     """Create (or finalize, when run_id is given) a sync_runs audit row.
 
@@ -123,13 +121,13 @@ async def record_sync_run(
             run = SyncRun(
                 reason=reason,
                 triggered_by=triggered_by,
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 status=SYNC_STATUS_RUNNING,
             )
             db.add(run)
         else:
             run.status = status
-            run.completed_at = datetime.now(timezone.utc)
+            run.completed_at = datetime.now(UTC)
             run.error = error
             run.repo_count = counts.get("repo_count", 0)
             run.repos_added = counts.get("repos_added", 0)
@@ -154,8 +152,8 @@ async def record_sync_run(
 
 async def sync_repositories_once(
     reason: str,
-    user_id: Optional[uuid.UUID] = None,
-) -> Dict[str, Any]:
+    user_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
     """Add/update/mark-removed repositories and refresh installation
     permissions for every installation (or a single user).
 
@@ -165,8 +163,8 @@ async def sync_repositories_once(
 
     Returns counts plus a per-repo failure map.
     """
-    now = datetime.now(timezone.utc)
-    counts: Dict[str, Any] = {
+    now = datetime.now(UTC)
+    counts: dict[str, Any] = {
         "repo_count": 0,
         "repos_added": 0,
         "repos_updated": 0,
@@ -188,7 +186,7 @@ async def sync_repositories_once(
         for inst in installations:
             inst_started_at = now
             inst_ok = True
-            inst_error: Optional[str] = None
+            inst_error: str | None = None
             try:
                 token = await github_app_auth.get_installation_token(inst.installation_id)
                 auth_headers = {**headers, "Authorization": f"Bearer {token}"}
@@ -319,7 +317,7 @@ async def sync_repositories_once(
                             inst.permissions = gh_perms
                         suspended = gh_inst.get("suspended_at")
                         inst.suspended_at = (
-                            datetime.fromisoformat(str(suspended).replace("Z", "+00:00"))
+                            datetime.fromisoformat(str(suspended))
                             if suspended
                             else None
                         )
@@ -345,7 +343,7 @@ async def sync_repositories_once(
 
             # Per-installation last-sync markers (UI: "Last synchronized X ago").
             inst.last_sync_started_at = inst_started_at
-            inst.last_sync_completed_at = datetime.now(timezone.utc)
+            inst.last_sync_completed_at = datetime.now(UTC)
             inst.last_sync_status = "success" if inst_ok else "failed"
             inst.last_sync_error = inst_error
             inst.last_sync_reason = reason
@@ -363,8 +361,8 @@ async def sync_repositories_once(
 
 async def sync_prs_once(
     reason: str,
-    user_id: Optional[uuid.UUID] = None,
-) -> Dict[str, Any]:
+    user_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
     """Reconcile open PRs (new / new commit / reopened / closed) for active
     repositories and enqueue missed reviews.
 
@@ -375,8 +373,8 @@ async def sync_prs_once(
 
     Returns counts plus a per-repo failure map.
     """
-    now = datetime.now(timezone.utc)
-    counts: Dict[str, Any] = {
+    now = datetime.now(UTC)
+    counts: dict[str, Any] = {
         "prs_found": 0,
         "prs_updated": 0,
         "jobs_enqueued": 0,
@@ -422,7 +420,7 @@ async def sync_prs_once(
             ).scalars().all()
         )
 
-        due_repos: List[tuple[Repository, Installation]] = []
+        due_repos: list[tuple[Repository, Installation]] = []
         for repo, inst in rows:
             last = _ensure_aware(repo.last_synced_at)
             has_open = repo.id in open_pr_repo_ids
@@ -442,7 +440,7 @@ async def sync_prs_once(
             key=lambda ri: (
                 ri[0].id not in open_pr_repo_ids,
                 ri[0].last_synced_at is not None,
-                _ensure_aware(ri[0].last_synced_at) or datetime.min.replace(tzinfo=timezone.utc),
+                _ensure_aware(ri[0].last_synced_at) or datetime.min.replace(tzinfo=UTC),
             )
         )
 
@@ -472,8 +470,8 @@ async def _sync_repository_prs(
     db,
     repo: Repository,
     inst: Installation,
-    headers: Dict[str, str],
-    counts: Dict[str, Any],
+    headers: dict[str, str],
+    counts: dict[str, Any],
     now: datetime,
 ) -> tuple[int, int, int]:
     """Fetch open PRs for one repository and reconcile each against the DB.
@@ -485,7 +483,7 @@ async def _sync_repository_prs(
     token = await github_app_auth.get_installation_token(inst.installation_id)
     auth_headers = {**headers, "Authorization": f"Bearer {token}"}
 
-    gh_open: List[dict] = []
+    gh_open: list[dict] = []
     async with httpx.AsyncClient() as client:
         page = 1
         while True:
@@ -579,7 +577,7 @@ async def _reconcile_single_pr(
     owner: str,
     repo_name: str,
     gh_pr: dict,
-    auth_headers: Dict[str, str],
+    auth_headers: dict[str, str],
 ) -> tuple[str, bool]:
     """Reconcile one PR row with GitHub state; enqueue a review when missed.
 
@@ -736,9 +734,9 @@ async def _execution_exists_for_sha(db, pr_id: uuid.UUID, head_sha: str) -> bool
 
 async def run_sync_pass(
     reason: str,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID | None = None,
     use_advisory_lock: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Full pass: repository sync + PR sync, with a sync_runs audit row.
 
     Returns a summary dict. Raises on catastrophic failure (after recording
@@ -749,7 +747,7 @@ async def run_sync_pass(
     return await _run_sync_pass(reason, user_id)
 
 
-async def _run_sync_pass_locked(reason: str, user_id: Optional[uuid.UUID]) -> Dict[str, Any]:
+async def _run_sync_pass_locked(reason: str, user_id: uuid.UUID | None) -> dict[str, Any]:
     """Hold a Postgres advisory lock for the whole pass so multiple API
     workers never run the same pass concurrently (rule 4).
 
@@ -775,8 +773,8 @@ async def _run_sync_pass_locked(reason: str, user_id: Optional[uuid.UUID]) -> Di
             )
 
 
-async def _run_sync_pass(reason: str, user_id: Optional[uuid.UUID]) -> Dict[str, Any]:
-    run_id: Optional[uuid.UUID] = None
+async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, Any]:
+    run_id: uuid.UUID | None = None
     async with AsyncSessionLocal() as db:
         run = await record_sync_run(db, reason, SYNC_STATUS_RUNNING, triggered_by=user_id)
         run_id = run.id

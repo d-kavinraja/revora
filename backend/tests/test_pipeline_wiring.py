@@ -4,10 +4,9 @@ Verifies that the orchestrator pipeline is correctly wired as the
 production code path through the webhook handler.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
-from datetime import datetime, timezone
 
 
 class TestPipelineWiring:
@@ -68,6 +67,7 @@ class TestPipelineWiring:
     async def test_webhook_returns_202(self):
         """Verify webhook endpoint returns 202 Accepted."""
         from fastapi.testclient import TestClient
+
         from app.main import app
 
         client = TestClient(app, raise_server_exceptions=False)

@@ -5,7 +5,6 @@ Validates prompt size, token count, sections, and provider limits.
 
 import logging
 from dataclasses import dataclass, field
-from typing import List
 
 from app.prompt_engine.models import CompiledPrompt, PromptBuildRequest
 
@@ -16,8 +15,8 @@ logger = logging.getLogger(__name__)
 class ValidationResult:
     """Result of prompt validation."""
     valid: bool = True
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 PROVIDER_LIMITS = {

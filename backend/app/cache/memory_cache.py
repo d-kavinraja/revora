@@ -1,8 +1,8 @@
-import time
 import asyncio
 import logging
+import time
 from collections import OrderedDict
-from typing import Optional, Any
+from typing import Any
 
 from app.cache.base_cache import BaseCache
 
@@ -17,7 +17,7 @@ class MemoryCache(BaseCache):
         self._hits = 0
         self._misses = 0
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         if key not in self._store:
             self._misses += 1
             return None
@@ -32,7 +32,7 @@ class MemoryCache(BaseCache):
         self._hits += 1
         return value
 
-    async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
         expiry = time.time() + ttl if ttl is not None else None
 
@@ -55,7 +55,7 @@ class MemoryCache(BaseCache):
         self._misses = 0
 
     async def get_or_compute(
-        self, key: str, compute_fn, ttl_seconds: Optional[int] = None
+        self, key: str, compute_fn, ttl_seconds: int | None = None
     ) -> Any:
         cached = await self.get(key)
         if cached is not None:

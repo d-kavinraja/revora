@@ -11,16 +11,15 @@ new PRs, new commits, missed-review enqueueing, and permission changes.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.models.github import PullRequest, Repository
+from app.models.github import PullRequest
 from app.models.review import Review
-from app.queue.models import ReviewJob, JobStatus
 from app.models.sync_run import SYNC_REASON_RECOVERY, SYNC_STATUS_SUCCESS
+from app.queue.models import JobStatus, ReviewJob
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ async def recover_stale_reviews_on_startup() -> int:
     """
     from app.services.review_execution_service import mark_execution_final
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     failed_count = 0
     async with AsyncSessionLocal() as db:
         active = (

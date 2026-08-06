@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import MetaData, Uuid, JSON
+from sqlalchemy import JSON, MetaData, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import JSONB
 
 JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
 

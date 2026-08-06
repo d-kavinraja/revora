@@ -1,10 +1,8 @@
-import re
-import hashlib
 import logging
-from typing import Optional
+import re
 
-from app.retrieval.models import RetrievedContext
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.models import RetrievedContext
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class SymbolMergeStrategy(BaseCompressionStrategy):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         content = context.content
         symbols = self._extract_symbols(content)
 

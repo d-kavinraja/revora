@@ -4,12 +4,10 @@ Detects test frameworks and counts test files.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List, Optional
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import TestingInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import TestingInfo
 
 TEST_FRAMEWORKS = {
     "jest": ["jest.config.js", "jest.config.ts", "jest.config.mjs", "jest.config.json"],
@@ -50,10 +48,10 @@ class TestingDetector(BaseDetector):
         Returns:
             DetectorResult with testing info.
         """
-        framework: Optional[str] = None
+        framework: str | None = None
         has_tests = False
         test_count = 0
-        test_dirs: List[str] = []
+        test_dirs: list[str] = []
 
         # Detect framework from config files
         for fw_name, markers in TEST_FRAMEWORKS.items():
@@ -86,11 +84,7 @@ class TestingDetector(BaseDetector):
             for fp in walker.file_paths:
                 filename = fp.split("/")[-1].split("\\")[-1]
                 if (
-                    filename.startswith("test_")
-                    or filename.endswith("_test.py")
-                    or filename.endswith(".test.js")
-                    or filename.endswith(".test.ts")
-                    or filename.endswith("_test.go")
+                    filename.startswith("test_") or filename.endswith(("_test.py", ".test.js", ".test.ts", "_test.go"))
                 ):
                     has_tests = True
                     test_count += 1

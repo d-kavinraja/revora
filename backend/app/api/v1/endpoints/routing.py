@@ -1,17 +1,16 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 import logging
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.deps import get_current_user
+from app.core.security import encryption_service
 from app.db.session import get_db
 from app.models.user import User
-from app.services.model_router import model_router
 from app.services.api_key_service import api_key_service
 from app.services.model_discovery import model_discovery_engine
-from app.core.security import encryption_service
-from app.schemas.health import ModelRoute
+from app.services.model_router import model_router
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -118,4 +117,4 @@ async def update_routing_preferences(
     except Exception as e:
         logger.error(f"Failed to update routing preferences: {e}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to save preferences: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save preferences: {e!s}")

@@ -4,12 +4,10 @@ Detects build tools and Docker presence.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import BuildInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import BuildInfo
 
 BUILD_TOOLS = {
     "webpack": ["webpack.config.js", "webpack.config.ts", "webpack.config.mjs"],
@@ -47,15 +45,12 @@ class BuildDetector(BaseDetector):
         Returns:
             DetectorResult with build tool info.
         """
-        tools: List[str] = []
+        tools: list[str] = []
 
         # Check for Docker files
         docker_files = [
             fp for fp in walker.file_paths
-            if fp.lower().endswith("dockerfile")
-            or fp.endswith("docker-compose.yml")
-            or fp.endswith("docker-compose.yaml")
-            or fp.endswith("docker-compose.json")
+            if fp.lower().endswith("dockerfile") or fp.endswith(("docker-compose.yml", "docker-compose.yaml", "docker-compose.json"))
         ]
         has_dockerfile = any("dockerfile" in fp.lower() for fp in docker_files)
         has_docker_compose = any("docker-compose" in fp for fp in docker_files)

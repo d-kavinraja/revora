@@ -4,11 +4,11 @@ All intelligence detectors must implement this interface to ensure
 consistent behavior and enable parallel execution with error isolation.
 """
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
-import time
 import logging
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 class DetectorResult:
     """Standard result from any intelligence detector."""
     success: bool
-    data: Dict[str, Any]
+    data: dict[str, Any]
     confidence: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
     detector_name: str = ""
     detector_version: str = "1.0.0"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "success": self.success,

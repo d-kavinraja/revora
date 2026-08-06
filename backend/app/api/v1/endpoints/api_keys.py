@@ -1,27 +1,27 @@
-import uuid
-import asyncio
 import logging
-import litellm
-from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
-from app.db.session import get_db
-from app.models.user import User
-from app.models.github import Installation, Repository
-from app.services.api_key_service import api_key_service
-from sqlalchemy import select
-from app.schemas.api_key import ApiKey as ApiKeySchema, ApiKeyCreate, ApiKeyUpdate
-from app.schemas.usage import ApiKeyHealthRead, ApiKeyRotate, BulkValidateResult
 from app.core.security import encryption_service
+from app.db.session import get_db
+from app.models.github import Installation, Repository
+from app.models.user import User
+from app.schemas.api_key import ApiKey as ApiKeySchema
+from app.schemas.api_key import ApiKeyCreate, ApiKeyUpdate
+from app.schemas.usage import ApiKeyHealthRead, ApiKeyRotate, BulkValidateResult
+from app.services.api_key_service import api_key_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("", response_model=List[ApiKeySchema])
+@router.get("", response_model=list[ApiKeySchema])
 async def list_api_keys(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -204,10 +204,9 @@ async def delete_api_key(
     except Exception as e:
         logger.error(f"Failed to clean up repo mappings for key {key_id_str}: {e}")
 
-    return None
 
 
-@router.post("/{key_id}/test", response_model=Dict[str, Any])
+@router.post("/{key_id}/test", response_model=dict[str, Any])
 async def test_api_key(
     key_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -265,7 +264,7 @@ async def test_api_key(
 
     except Exception as e:
         err_str = str(e).lower()
-        is_auth_error = any(k in err_str for k in [
+        any(k in err_str for k in [
             "invalid_api_key", "invalid api key", "401", "403",
             "permission", "unauthorized", "forbidden",
         ])
@@ -352,7 +351,7 @@ async def validate_all_keys(
     return BulkValidateResult(results=results)
 
 
-@router.get("/{key_id}/health", response_model=List[ApiKeyHealthRead])
+@router.get("/{key_id}/health", response_model=list[ApiKeyHealthRead])
 async def get_key_health(
     key_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),

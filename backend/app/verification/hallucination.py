@@ -1,9 +1,10 @@
-from typing import Dict, Any, Optional
+from typing import Any
+
 
 class HallucinationDetector:
     """Detects hallucinations in AI findings."""
     
-    def detect(self, finding: Dict[str, Any], repo_path: str, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def detect(self, finding: dict[str, Any], repo_path: str, context: dict[str, Any]) -> dict[str, Any] | None:
         """
         Returns a dict with hallucination details if detected, else None.
         """

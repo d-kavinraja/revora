@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class RetrievalFallback:
         return self.current_strategy == "graceful_failure"
 
     @staticmethod
-    def create_minimal_result(diff_content: Optional[str] = None) -> dict:
+    def create_minimal_result(diff_content: str | None = None) -> dict:
         return {
             "fallback": True,
             "strategy": "pr_diff_only",

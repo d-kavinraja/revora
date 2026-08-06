@@ -1,9 +1,8 @@
 ﻿"""Tests for the Postgres-native job queue."""
 
-import pytest
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-from app.queue.models import ReviewJob, JobStatus
+
+from app.queue.models import JobStatus, ReviewJob
 
 
 class TestReviewJobModel:
@@ -36,7 +35,6 @@ class TestDispatcherIdempotency:
         """Verify supersede logic targets correct jobs."""
         # This tests the SQL logic conceptually
         # Full integration test would need a real database
-        pass
 
 
 class TestWorkerLoop:

@@ -1,18 +1,15 @@
-import time
-import logging
 import asyncio
+import logging
+import time
 import uuid
-from typing import List, Optional
 
+from app.ai.llm import llm_service
 from app.orchestrator.models import (
-    ProviderConfig,
-    LLMResponse,
-    UsageStats,
-    ExecutionContext,
     CONFIG_SOURCE_REPO,
     CONFIG_SOURCE_ROUTING,
+    LLMResponse,
+    UsageStats,
 )
-from app.ai.llm import llm_service
 from app.prompt_engine.models import CompiledPrompt
 from app.services.cost_estimator import cost_estimator
 
@@ -38,16 +35,16 @@ class LLMOrchestrator:
     """
 
     def __init__(self):
-        self.usage_history: List[UsageStats] = []
+        self.usage_history: list[UsageStats] = []
 
     async def complete(
         self,
         prompt: CompiledPrompt,
         user_id: str,
         config_source: str = CONFIG_SOURCE_ROUTING,
-        preferred_provider: Optional[str] = None,
-        preferred_model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
+        preferred_provider: str | None = None,
+        preferred_model: str | None = None,
+        api_key_id: str | None = None,
         callback=None,
     ) -> LLMResponse:
         """Execute exactly one LLM call using the resolved execution context.
@@ -85,7 +82,7 @@ class LLMOrchestrator:
         # For MODE 2: up to 2 attempts (1 initial + 1 transient retry).
         max_attempts = 1 if is_explicit else 2
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(max_attempts):
             try:

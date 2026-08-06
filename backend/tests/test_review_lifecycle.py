@@ -4,16 +4,16 @@ import uuid
 
 import pytest
 
-from app.models.github import Installation, Repository, PullRequest
+from app.cache.memory_cache import memory_cache
+from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
-from app.queue.models import ReviewJob, JobStatus
+from app.queue.models import JobStatus, ReviewJob
+from app.services.github_service import github_service
 from app.services.review_lifecycle import (
     _ALLOWED_ACTIONS,
     ReviewLifecycleConflict,
     review_lifecycle_service,
 )
-from app.services.github_service import github_service
-from app.cache.memory_cache import memory_cache
 
 
 @pytest.mark.asyncio

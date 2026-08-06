@@ -4,20 +4,20 @@ Builds all code graphs for a repository in parallel.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-import time
-import logging
 import asyncio
+import logging
+import time
 from typing import Optional
 
-from app.indexing.models import RepositoryIndex, CodeGraph
-from app.indexing.dependency_graph import build_import_graph
-from app.indexing.call_graph import build_call_graph
-from app.indexing.module_graph import build_module_graph
 from app.indexing.api_graph import build_api_graph
-from app.indexing.db_graph import build_db_graph
+from app.indexing.call_graph import build_call_graph
 from app.indexing.config_graph import build_config_graph
-from app.indexing.test_graph import build_test_graph
+from app.indexing.db_graph import build_db_graph
+from app.indexing.dependency_graph import build_import_graph
 from app.indexing.metadata_generator import generate_metadata
+from app.indexing.models import CodeGraph, RepositoryIndex
+from app.indexing.module_graph import build_module_graph
+from app.indexing.test_graph import build_test_graph
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class RepositoryIndexer:
         name: str,
         build_fn,
         repo_path: str,
-    ) -> Optional[CodeGraph]:
+    ) -> CodeGraph | None:
         """Safely build a graph with error handling.
 
         Args:

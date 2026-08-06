@@ -1,17 +1,23 @@
-import socket
-import logging
-import datetime
 import asyncio
+import datetime
+import logging
+import socket
+from collections.abc import AsyncGenerator
 from urllib.parse import urlparse
-from typing import AsyncGenerator
+
 from sqlalchemy import event
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine, AsyncEngine
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
 
 from app.core.config import settings
 from app.db.base import Base
-import app.models  # Register all models on Base.metadata
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +88,7 @@ async def get_engine_and_sessionmaker():
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.close()
-                dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+                dbapi_connection.create_function("now", 0, lambda: datetime.datetime.now(datetime.UTC).isoformat())
             
             # Automatically perform Base.metadata.create_all for SQLite fallback
             async with engine.begin() as conn:

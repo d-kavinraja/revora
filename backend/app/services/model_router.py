@@ -1,15 +1,12 @@
 ﻿import uuid
-from typing import Optional, List, Dict
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.models.provider import ProviderRegistry
-from app.models.api_key import ApiKey
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.user import User
-from app.services.provider_registry import provider_registry_service
+from app.schemas.health import ModelRoute
 from app.services.api_key_service import api_key_service
 from app.services.cost_estimator import cost_estimator
-from app.schemas.health import ModelRoute
+from app.services.provider_registry import provider_registry_service
 
 # Feature requirements
 FEATURE_REQUIREMENTS = {
@@ -27,9 +24,9 @@ class ModelRouter:
         db: AsyncSession,
         user_id: uuid.UUID,
         feature: str,
-        preferred_provider: Optional[str] = None,
-        preferred_model: Optional[str] = None,
-    ) -> List[ModelRoute]:
+        preferred_provider: str | None = None,
+        preferred_model: str | None = None,
+    ) -> list[ModelRoute]:
         user = await db.get(User, user_id)
         user_settings = {}
         if user and hasattr(user, "settings") and user.settings:
@@ -85,7 +82,7 @@ class ModelRouter:
 
     async def get_available_routes(
         self, db: AsyncSession, user_id: uuid.UUID, feature: str,
-    ) -> List[ModelRoute]:
+    ) -> list[ModelRoute]:
         return await self.route(db, user_id, feature)
 
     def get_feature_requirements(self, feature: str) -> dict:

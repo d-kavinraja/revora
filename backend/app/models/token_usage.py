@@ -1,6 +1,6 @@
 ﻿import uuid
-from typing import Optional
-from sqlalchemy import String, Float, Integer, Boolean, ForeignKey
+
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,7 +16,7 @@ class LlmTokenUsage(Base):
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
-    api_key_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True
     )
 
@@ -32,10 +32,10 @@ class LlmTokenUsage(Base):
 
     # Context
     feature: Mapped[str] = mapped_column(String(50), nullable=False)  # "code_review", etc.
-    review_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    review_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("reviews.id", ondelete="SET NULL"), nullable=True
     )
-    request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Metadata
     latency_ms: Mapped[float] = mapped_column(Float, nullable=False)
@@ -56,9 +56,9 @@ class CostBudget(Base):
     spent_usd: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Scope (NULL = all)
-    provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    feature: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    feature: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # State
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    reset_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # ISO datetime
+    reset_at: Mapped[str | None] = mapped_column(String(30), nullable=True)  # ISO datetime

@@ -1,6 +1,5 @@
-import os
 import json
-from typing import Optional
+import os
 
 
 def classify_repo_type(repo_path: str) -> str:

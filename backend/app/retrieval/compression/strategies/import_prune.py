@@ -1,9 +1,8 @@
-import re
 import logging
-from typing import Optional
+import re
 
-from app.retrieval.models import RetrievedContext
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.models import RetrievedContext
 from app.retrieval.token_budget_engine import token_budget_engine
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ class ImportPruneStrategy(BaseCompressionStrategy):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         content = context.content
         current_tokens = token_budget_engine.estimate_tokens(content)
 
@@ -31,11 +30,7 @@ class ImportPruneStrategy(BaseCompressionStrategy):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if re.match(r"^(import |from |require\()", stripped):
-                import_lines.append(i)
-            elif re.match(r"^#|^//|^/\*|^\*", stripped):
-                import_lines.append(i)
-            elif stripped == "" and import_lines and i == import_lines[-1] + 1:
+            if re.match(r"^(import |from |require\()", stripped) or re.match(r"^#|^//|^/\*|^\*", stripped) or stripped == "" and import_lines and i == import_lines[-1] + 1:
                 import_lines.append(i)
             else:
                 non_import_lines.append(i)

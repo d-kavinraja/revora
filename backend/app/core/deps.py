@@ -1,9 +1,9 @@
 import uuid
-from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import decode_access_token
 from app.db.session import get_db
@@ -23,7 +23,7 @@ async def get_current_user(
     )
     try:
         payload = decode_access_token(token)
-        user_id_str: Optional[str] = payload.get("sub")
+        user_id_str: str | None = payload.get("sub")
         if user_id_str is None:
             raise credentials_exception
         user_id = uuid.UUID(user_id_str)

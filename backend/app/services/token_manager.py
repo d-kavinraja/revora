@@ -1,8 +1,8 @@
 import uuid
-from typing import List, Optional, Dict
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
 from app.models.token_usage import LlmTokenUsage
 
@@ -20,9 +20,9 @@ class TokenManager:
         output_cost_usd: float,
         feature: str,
         latency_ms: float,
-        api_key_id: Optional[uuid.UUID] = None,
-        review_id: Optional[uuid.UUID] = None,
-        request_id: Optional[str] = None,
+        api_key_id: uuid.UUID | None = None,
+        review_id: uuid.UUID | None = None,
+        request_id: str | None = None,
         is_fallback: bool = False,
         cached: bool = False,
     ) -> LlmTokenUsage:
@@ -49,7 +49,7 @@ class TokenManager:
         await db.refresh(record)
         return record
 
-    def _apply_filters(self, query, provider: Optional[str] = None, model: Optional[str] = None, api_key_id: Optional[str] = None, repo_id: Optional[str] = None):
+    def _apply_filters(self, query, provider: str | None = None, model: str | None = None, api_key_id: str | None = None, repo_id: str | None = None):
         if provider:
             query = query.where(LlmTokenUsage.provider == provider)
         if model:
@@ -62,9 +62,10 @@ class TokenManager:
             except Exception:
                 pass
         if repo_id:
-            from app.models.review import Review
-            from app.models.github import PullRequest
             import uuid
+
+            from app.models.github import PullRequest
+            from app.models.review import Review
             try:
                 parsed_repo_id = uuid.UUID(repo_id) if isinstance(repo_id, str) else repo_id
                 query = query.join(Review, Review.id == LlmTokenUsage.review_id)
@@ -76,11 +77,11 @@ class TokenManager:
 
     async def get_usage_by_user(
         self, db: AsyncSession, user_id: uuid.UUID,
-        start: Optional[datetime] = None, end: Optional[datetime] = None,
-        provider: Optional[str] = None, model: Optional[str] = None,
-        api_key_id: Optional[str] = None, repo_id: Optional[str] = None,
+        start: datetime | None = None, end: datetime | None = None,
+        provider: str | None = None, model: str | None = None,
+        api_key_id: str | None = None, repo_id: str | None = None,
         limit: int = 100, offset: int = 0,
-    ) -> List[LlmTokenUsage]:
+    ) -> list[LlmTokenUsage]:
         query = select(LlmTokenUsage).where(LlmTokenUsage.user_id == user_id)
         if start:
             query = query.where(LlmTokenUsage.created_at >= start)
@@ -95,10 +96,10 @@ class TokenManager:
 
     async def get_cost_breakdown(
         self, db: AsyncSession, user_id: uuid.UUID,
-        start: Optional[datetime] = None, end: Optional[datetime] = None,
-        provider: Optional[str] = None, model: Optional[str] = None,
-        api_key_id: Optional[str] = None, repo_id: Optional[str] = None,
-    ) -> Dict:
+        start: datetime | None = None, end: datetime | None = None,
+        provider: str | None = None, model: str | None = None,
+        api_key_id: str | None = None, repo_id: str | None = None,
+    ) -> dict:
         query = select(LlmTokenUsage).where(LlmTokenUsage.user_id == user_id)
         if start:
             query = query.where(LlmTokenUsage.created_at >= start)
@@ -134,9 +135,9 @@ class TokenManager:
 
     async def get_total_cost(
         self, db: AsyncSession, user_id: uuid.UUID,
-        start: Optional[datetime] = None, end: Optional[datetime] = None,
-        provider: Optional[str] = None, model: Optional[str] = None,
-        api_key_id: Optional[str] = None, repo_id: Optional[str] = None,
+        start: datetime | None = None, end: datetime | None = None,
+        provider: str | None = None, model: str | None = None,
+        api_key_id: str | None = None, repo_id: str | None = None,
     ) -> float:
         breakdown = await self.get_cost_breakdown(
             db, user_id, start, end, provider, model, api_key_id, repo_id
@@ -145,10 +146,10 @@ class TokenManager:
 
     async def get_daily_trend(
         self, db: AsyncSession, user_id: uuid.UUID,
-        start: Optional[datetime] = None, end: Optional[datetime] = None,
-        provider: Optional[str] = None, model: Optional[str] = None,
-        api_key_id: Optional[str] = None, repo_id: Optional[str] = None,
-    ) -> List[Dict]:
+        start: datetime | None = None, end: datetime | None = None,
+        provider: str | None = None, model: str | None = None,
+        api_key_id: str | None = None, repo_id: str | None = None,
+    ) -> list[dict]:
         query = select(
             func.date_trunc('day', LlmTokenUsage.created_at).label('day'),
             func.sum(LlmTokenUsage.total_cost_usd).label('cost_usd'),

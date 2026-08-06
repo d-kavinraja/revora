@@ -1,8 +1,7 @@
 import os
 import re
-from typing import Dict
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 TEST_PATTERNS = {
     "python": {
@@ -24,7 +23,6 @@ TEST_PATTERNS = {
 
 def build_test_graph(repo_path: str) -> CodeGraph:
     graph = CodeGraph()
-    source_to_test: Dict[str, list] = {}
 
     for root, dirs, files in os.walk(repo_path):
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__"}]

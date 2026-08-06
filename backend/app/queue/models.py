@@ -1,10 +1,20 @@
 """ReviewJob model for the Postgres-native job queue."""
 
-import uuid
 import enum
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
+
 from app.db.base import Base
 
 
@@ -34,7 +44,7 @@ class ReviewJob(Base):
     payload = Column(JSONB, nullable=True)
     result = Column(JSONB, nullable=True)
     attempt_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error_text = Column(Text, nullable=True)

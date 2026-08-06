@@ -1,18 +1,18 @@
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.services.health_monitor import health_monitor
+from app.schemas.health import FailoverLogRead, ProviderHealthRead
 from app.services.api_key_service import api_key_service
-from app.schemas.health import ProviderHealthRead, FailoverLogRead, HealthDashboard
+from app.services.health_monitor import health_monitor
 
 router = APIRouter()
 
 
-@router.get("/providers", response_model=List[ProviderHealthRead])
+@router.get("/providers", response_model=list[ProviderHealthRead])
 async def list_provider_health(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -52,7 +52,7 @@ async def check_provider_health(
     return {"provider": provider, "status": health.status, "circuit_state": health.circuit_state}
 
 
-@router.get("/failovers", response_model=List[FailoverLogRead])
+@router.get("/failovers", response_model=list[FailoverLogRead])
 async def list_failovers(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

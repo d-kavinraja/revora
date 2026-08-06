@@ -1,17 +1,16 @@
 import os
-import json
-from typing import Dict, Any
+from typing import Any
 
 from app.indexing.models import RepositoryIndex
 
 
-def generate_metadata(repo_path: str, index: RepositoryIndex) -> Dict[str, Any]:
-    metadata: Dict[str, Any] = {}
+def generate_metadata(repo_path: str, index: RepositoryIndex) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
 
     # File statistics
     total_files = 0
     total_lines = 0
-    file_types: Dict[str, int] = {}
+    file_types: dict[str, int] = {}
 
     skip_dirs = {".git", "node_modules", "venv", "__pycache__", "dist", "build"}
 

@@ -4,12 +4,10 @@ Detects cloud providers by analyzing configuration files and code content.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List
 
+from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence._async_util import run_async
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-from app.core.constants import MAX_FILES_PER_DETECTOR
-
 
 CLOUD_INDICATORS = {
     "aws": ["AWS", "aws", "boto3", "lambda", "dynamodb", "s3", "sqs", "sns"],

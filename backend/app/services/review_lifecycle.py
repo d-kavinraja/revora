@@ -6,18 +6,18 @@ as a ReviewExecution row for history.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.github import Installation, Repository, PullRequest
-from app.models.review import Review
 from app.models.audit import AuditLog
 from app.models.exec_context import ReviewExecutionContext
-from app.queue.models import ReviewJob, JobStatus
+from app.models.github import Installation, PullRequest, Repository
+from app.models.review import Review
 from app.queue.dispatcher import enqueue_lifecycle_job
+from app.queue.models import JobStatus, ReviewJob
 from app.services.github_service import github_service
 
 logger = logging.getLogger(__name__)
@@ -120,9 +120,9 @@ class ReviewLifecycleService:
         db: AsyncSession,
         review_id: UUID,
         user_id: UUID,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
         """Cancel a queued or running review."""
         review_result = await db.execute(select(Review).where(Review.id == review_id))
         review = review_result.scalars().first()
@@ -211,24 +211,24 @@ class ReviewLifecycleService:
 
     async def rerun_completed_review(
         self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None, user_agent: str | None = None,
+    ) -> dict[str, Any]:
         return await self._lifecycle_action(
             "rerun", db, review_id, user_id, ip_address, user_agent,
         )
 
     async def retry_failed_review(
         self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None, user_agent: str | None = None,
+    ) -> dict[str, Any]:
         return await self._lifecycle_action(
             "retry", db, review_id, user_id, ip_address, user_agent,
         )
 
     async def restart_stopped_review(
         self, db: AsyncSession, review_id: UUID, user_id: UUID,
-        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None, user_agent: str | None = None,
+    ) -> dict[str, Any]:
         return await self._lifecycle_action(
             "restart", db, review_id, user_id, ip_address, user_agent,
         )
@@ -239,9 +239,9 @@ class ReviewLifecycleService:
         db: AsyncSession,
         review_id: UUID,
         user_id: UUID,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict[str, Any]:
         """Shared implementation for rerun/retry/restart.
 
         Validates the action, checks real-time PR status, REUSES the existing
@@ -364,7 +364,7 @@ class ReviewLifecycleService:
 
     async def get_review_history(
         self, db: AsyncSession, pr_id: UUID, current_review_id: UUID,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Return all review lifecycles for the PR plus the current review's executions.
 
         Reopened PRs create a new review row, so a PR can have several review
@@ -421,7 +421,7 @@ class ReviewLifecycleService:
 
     async def get_review_timeline(
         self, db: AsyncSession, review_id: UUID,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         from sqlalchemy import text
         stmt = text("""
             SELECT id, stage, status, started_at, completed_at, duration_ms, message, metrics
@@ -442,7 +442,7 @@ class ReviewLifecycleService:
             for r in rows
         ]
 
-    def _safe_uuid(self, value: Optional[str]) -> Optional[UUID]:
+    def _safe_uuid(self, value: str | None) -> UUID | None:
         if not value:
             return None
         try:
@@ -454,8 +454,8 @@ class ReviewLifecycleService:
     async def _audit(
         self, db: AsyncSession, actor_id: str, action: str,
         entity_type: str, entity_id: str,
-        details: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None, user_agent: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        ip_address: str | None = None, user_agent: str | None = None,
     ):
         log = AuditLog(
             actor_id=actor_id, action=action,

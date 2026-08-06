@@ -1,9 +1,8 @@
 """Tests for RepoWalker module."""
 
+
 import pytest
-import asyncio
-import os
-import tempfile
+
 from app.intelligence.repo_walker import RepoWalker
 
 

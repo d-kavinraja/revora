@@ -1,8 +1,5 @@
-import pytest
-from app.retrieval.engine import RetrievalEngine, retrieval_engine
-from app.retrieval.models import RetrievalResult, RetrievalConfig, RetrievedContext
-from app.retrieval.fallback import retrieval_fallback
-from app.indexing.models import RepositoryIndex, CodeGraph, GraphNode, GraphEdge
+from app.retrieval.engine import RetrievalEngine
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 
 
 class TestRetrievalEngine:

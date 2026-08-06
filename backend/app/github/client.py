@@ -1,12 +1,14 @@
+from typing import Any
+
 import httpx
-from typing import List, Dict, Any, Optional
 
 from app.github.auth import github_app_auth
+
 
 class GitHubClient:
     """Client for interacting with the GitHub API."""
     
-    async def _get_headers(self, installation_id: int) -> Dict[str, str]:
+    async def _get_headers(self, installation_id: int) -> dict[str, str]:
         token = await github_app_auth.get_installation_token(installation_id)
         return {
             "Authorization": f"Bearer {token}",
@@ -15,8 +17,8 @@ class GitHubClient:
         }
 
     async def create_check_run(
-        self, installation_id: int, owner: str, repo: str, name: str, head_sha: str, status: str = "in_progress", output: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, installation_id: int, owner: str, repo: str, name: str, head_sha: str, status: str = "in_progress", output: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Creates a check run on a GitHub commit."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/check-runs"
@@ -38,8 +40,8 @@ class GitHubClient:
             return response.json()
             
     async def update_check_run(
-        self, installation_id: int, owner: str, repo: str, check_run_id: int, status: str, output: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, installation_id: int, owner: str, repo: str, check_run_id: int, status: str, output: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Updates an existing check run."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/check-runs/{check_run_id}"
@@ -56,8 +58,8 @@ class GitHubClient:
             return response.json()
 
     async def create_pr_review(
-        self, installation_id: int, owner: str, repo: str, pull_number: int, body: str, event: str = "COMMENT", comments: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        self, installation_id: int, owner: str, repo: str, pull_number: int, body: str, event: str = "COMMENT", comments: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Submit a full PR review with summary and optional inline comments."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
@@ -77,7 +79,7 @@ class GitHubClient:
 
     async def create_issue_comment(
         self, installation_id: int, owner: str, repo: str, issue_number: int, body: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a top-level comment on the issue/pull request thread.
 
         Issue comments are editable (PATCH), so a single comment can be reused
@@ -93,7 +95,7 @@ class GitHubClient:
 
     async def update_issue_comment(
         self, installation_id: int, owner: str, repo: str, comment_id: int, body: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Edit an existing issue comment (replaces its body)."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{comment_id}"
@@ -106,7 +108,7 @@ class GitHubClient:
 
     async def list_pr_reviews(
         self, installation_id: int, owner: str, repo: str, pull_number: int
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List all reviews submitted on a pull request."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
@@ -118,7 +120,7 @@ class GitHubClient:
 
     async def update_pr_review(
         self, installation_id: int, owner: str, repo: str, pull_number: int, review_id: int, body: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update the body of an existing pull request review."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"
@@ -132,7 +134,7 @@ class GitHubClient:
 
     async def delete_pr_review(
         self, installation_id: int, owner: str, repo: str, pull_number: int, review_id: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a pull request review."""
         headers = await self._get_headers(installation_id)
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"

@@ -10,9 +10,9 @@ review lineage (retry → rerun → restart chain).
 Also adds updated_at to review_timelines for ordering.
 """
 
-import uuid
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "20260730_1500"
 down_revision = "20260730_1400"

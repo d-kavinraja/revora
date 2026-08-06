@@ -1,10 +1,7 @@
-import time
 import hashlib
 import logging
-from typing import Optional
 
 from app.cache.redis_cache import redis_cache
-from app.cache.memory_cache import memory_cache
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +15,7 @@ class RetrievalCache:
         repo_id: str,
         changed_files_hash: str,
         budget: int,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         key = self._build_key(repo_id, changed_files_hash, budget)
         return await redis_cache.get(key)
 
@@ -28,7 +25,7 @@ class RetrievalCache:
         changed_files_hash: str,
         budget: int,
         result: dict,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> None:
         key = self._build_key(repo_id, changed_files_hash, budget)
         await redis_cache.set(key, result, ttl or self._default_ttl)

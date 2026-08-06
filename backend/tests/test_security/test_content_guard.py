@@ -1,11 +1,10 @@
 """Tests for unified content guard (merged prompt_guard + sanitizer)."""
 
-import pytest
 from app.security.content_guard import (
-    sanitize_input,
-    sanitize_output,
     detect_injection,
+    sanitize_input,
     sanitize_messages,
+    sanitize_output,
 )
 
 

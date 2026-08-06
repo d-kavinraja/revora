@@ -1,7 +1,9 @@
 import uuid
-from typing import Optional, Any
 from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class ApiKeyBase(BaseModel):
     provider: str = Field(..., max_length=50)
@@ -11,15 +13,15 @@ class ApiKeyCreate(ApiKeyBase):
     api_key: str = Field(..., description="The raw API key to be encrypted")
 
 class ApiKeyUpdate(BaseModel):
-    label: Optional[str] = Field(None, max_length=100)
-    api_key: Optional[str] = Field(None, description="The new raw API key")
-    is_valid: Optional[bool] = None
+    label: str | None = Field(None, max_length=100)
+    api_key: str | None = Field(None, description="The new raw API key")
+    is_valid: bool | None = None
 
 class ApiKeyInDBBase(ApiKeyBase):
     id: uuid.UUID
     user_id: uuid.UUID
     is_valid: bool
-    last_used_at: Optional[datetime] = None
+    last_used_at: datetime | None = None
     created_at: datetime
     
     model_config = {"from_attributes": True}

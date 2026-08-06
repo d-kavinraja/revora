@@ -1,9 +1,7 @@
-import os
 import json
-from typing import Dict
+import os
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
-
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 CONFIG_EXTENSIONS = (".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".config")
 CONFIG_NAMES = {

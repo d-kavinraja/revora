@@ -1,7 +1,6 @@
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 from app.retrieval.retrievers.base_retriever import BaseRetriever
 
 logger = logging.getLogger(__name__)
@@ -25,9 +24,10 @@ class HistoricalRetriever(BaseRetriever):
             return []
 
         try:
-            from app.models.knowledge import RepositoryKnowledge
-            from app.db.session import AsyncSessionLocal
             from sqlalchemy import select
+
+            from app.db.session import AsyncSessionLocal
+            from app.models.knowledge import RepositoryKnowledge
 
             async with AsyncSessionLocal() as db:
                 query = await db.execute(

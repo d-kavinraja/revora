@@ -1,8 +1,11 @@
 import uuid
-from typing import Optional, List, Dict, Any
-from sqlalchemy import String, ForeignKey, Integer, Boolean, Float, Text
+from typing import Any, Optional
+
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base, JSON_TYPE
+
+from app.db.base import JSON_TYPE, Base
+
 
 class VerificationResultModel(Base):
     __tablename__ = "verification_results"
@@ -11,19 +14,19 @@ class VerificationResultModel(Base):
     review_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reviews.id", ondelete="CASCADE"), index=True, nullable=False)
     finding_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    line_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False) # SECURITY, PERFORMANCE, etc.
     severity: Mapped[str] = mapped_column(String(20), nullable=False) # HIGH, MEDIUM, LOW, CRITICAL
-    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    suggested_fix: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_fix: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     confidence_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     # Relationships
-    evidence: Mapped[List["ReviewEvidenceModel"]] = relationship("ReviewEvidenceModel", back_populates="verification_result", cascade="all, delete-orphan")
+    evidence: Mapped[list["ReviewEvidenceModel"]] = relationship("ReviewEvidenceModel", back_populates="verification_result", cascade="all, delete-orphan")
     hallucination_report: Mapped[Optional["HallucinationReportModel"]] = relationship("HallucinationReportModel", back_populates="verification_result", uselist=False, cascade="all, delete-orphan")
     false_positive_report: Mapped[Optional["FalsePositiveReportModel"]] = relationship("FalsePositiveReportModel", back_populates="verification_result", uselist=False, cascade="all, delete-orphan")
 
@@ -34,7 +37,7 @@ class ReviewEvidenceModel(Base):
     verification_result_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("verification_results.id", ondelete="CASCADE"), index=True, nullable=False)
     evidence_type: Mapped[str] = mapped_column(String(50), nullable=False) # SNIPPET, API_CHECK, RULE_MATCH
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata_json: Mapped[Dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, server_default='{}')
 
     # Relationships
     verification_result: Mapped["VerificationResultModel"] = relationship("VerificationResultModel", back_populates="evidence")

@@ -1,16 +1,15 @@
 import logging
-from typing import Optional
 
+from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
 from app.retrieval.ranking.normalizer import ScoreNormalizer
-from app.retrieval.ranking.scorers.graph_distance import GraphDistanceScorer
-from app.retrieval.ranking.scorers.file_importance import FileImportanceScorer
-from app.retrieval.ranking.scorers.dependency_weight import DependencyWeightScorer
 from app.retrieval.ranking.scorers.change_frequency import ChangeFrequencyScorer
+from app.retrieval.ranking.scorers.dependency_weight import DependencyWeightScorer
+from app.retrieval.ranking.scorers.file_importance import FileImportanceScorer
+from app.retrieval.ranking.scorers.graph_distance import GraphDistanceScorer
 from app.retrieval.ranking.scorers.security_impact import SecurityImpactScorer
 from app.retrieval.ranking.scorers.test_coverage import TestCoverageScorer
-from app.indexing.models import RepositoryIndex
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class RankingEngine:
     async def rank(
         self,
         contexts: list[RetrievedContext],
-        index: Optional[RepositoryIndex] = None,
+        index: RepositoryIndex | None = None,
     ) -> list[RetrievedContext]:
         if not contexts:
             return []

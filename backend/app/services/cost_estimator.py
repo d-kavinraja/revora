@@ -1,11 +1,10 @@
 ﻿import uuid
-from typing import Optional, Dict, List
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
 
 from app.models.token_usage import CostBudget
-
 
 # Cost per 1K tokens by provider (input/output) - updated 2026 pricing
 PROVIDER_COST_TABLE = {
@@ -23,7 +22,7 @@ PROVIDER_COST_TABLE = {
 
 
 class CostEstimator:
-    def get_rates(self, provider: str, model: Optional[str] = None) -> Dict[str, float]:
+    def get_rates(self, provider: str, model: str | None = None) -> dict[str, float]:
         normalized = provider.lower().strip()
         return PROVIDER_COST_TABLE.get(normalized, {"input": 0.001, "output": 0.003})
 
@@ -35,10 +34,10 @@ class CostEstimator:
 
     async def check_and_reserve_budget(
         self, db: AsyncSession, user_id: uuid.UUID, cost_usd: float,
-        provider: Optional[str] = None, feature: Optional[str] = None,
+        provider: str | None = None, feature: str | None = None,
     ) -> bool:
         """Atomic check-and-reserve: returns False if budget would be exceeded."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = today_start.replace(day=1)
 
@@ -80,10 +79,10 @@ class CostEstimator:
 
     async def check_budget(
         self, db: AsyncSession, user_id: uuid.UUID,
-        provider: Optional[str] = None, feature: Optional[str] = None,
+        provider: str | None = None, feature: str | None = None,
     ) -> bool:
         """Check if user has any budget remaining."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = today_start.replace(day=1)
 
@@ -123,7 +122,7 @@ class CostEstimator:
 
     async def record_spend(
         self, db: AsyncSession, user_id: uuid.UUID, cost_usd: float,
-        provider: Optional[str] = None, feature: Optional[str] = None,
+        provider: str | None = None, feature: str | None = None,
     ) -> None:
         """Atomic spend recording - uses SQL-level increment."""
         await db.execute(
@@ -138,7 +137,7 @@ class CostEstimator:
         )
         await db.commit()
 
-    async def get_budgets(self, db: AsyncSession, user_id: uuid.UUID) -> List[CostBudget]:
+    async def get_budgets(self, db: AsyncSession, user_id: uuid.UUID) -> list[CostBudget]:
         result = await db.execute(
             select(CostBudget).where(CostBudget.user_id == user_id)
         )
@@ -151,7 +150,7 @@ class CostEstimator:
         await db.refresh(budget)
         return budget
 
-    async def update_budget(self, db: AsyncSession, budget_id: uuid.UUID, data: dict) -> Optional[CostBudget]:
+    async def update_budget(self, db: AsyncSession, budget_id: uuid.UUID, data: dict) -> CostBudget | None:
         budget = await db.get(CostBudget, budget_id)
         if not budget:
             return None

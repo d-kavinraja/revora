@@ -4,13 +4,11 @@ Detects authentication patterns, CORS, rate limiting, and HTTPS configuration.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List
 
-from app.intelligence._async_util import run_async
-from app.intelligence.models import SecurityInfo
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR
-
+from app.intelligence._async_util import run_async
+from app.intelligence.base_detector import BaseDetector, DetectorResult
+from app.intelligence.models import SecurityInfo
 
 AUTH_PATTERNS = [
     "Authorization",
@@ -50,7 +48,7 @@ class SecurityDetector(BaseDetector):
         Returns:
             DetectorResult with security info.
         """
-        auth_patterns: List[str] = []
+        auth_patterns: list[str] = []
         has_cors = False
         has_rate_limiting = False
         has_https_redirect = False

@@ -1,9 +1,8 @@
 import hashlib
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.models import RetrievedContext
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class DedupStrategy(BaseCompressionStrategy):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         content_hash = hashlib.sha256(context.content.encode()).hexdigest()[:32]
 
         if content_hash in self._seen_hashes:

@@ -1,6 +1,6 @@
 import logging
-from typing import Optional, List
-from app.indexing.models import RepositoryIndex, CodeGraph
+
+from app.indexing.models import CodeGraph, RepositoryIndex
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ class TreeSitterIndexer:
     def __init__(self):
         self.supported_languages = ["python", "javascript", "typescript", "go", "rust"]
         
-    async def build_index(self, repo_path: str, diff_files: Optional[List[str]] = None) -> RepositoryIndex:
+    async def build_index(self, repo_path: str, diff_files: list[str] | None = None) -> RepositoryIndex:
         """Builds or incrementally patches a semantic AST graph."""
         logger.info(f"Building Tree-Sitter AST graph for {repo_path}")
         index = RepositoryIndex()

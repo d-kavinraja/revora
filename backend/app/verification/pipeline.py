@@ -1,18 +1,18 @@
+import logging
 import time
 import uuid
-from typing import List, Dict, Any, Tuple
-import logging
+from typing import Any
 
-from app.verification.validators import (
-    RepositoryValidator,
-    SecurityValidator,
-    PerformanceValidator,
-    ArchitectureValidator,
-    RuleValidator,
-)
-from app.verification.hallucination import HallucinationDetector
 from app.verification.confidence import ConfidenceEngine
 from app.verification.evidence import EvidenceEngine
+from app.verification.hallucination import HallucinationDetector
+from app.verification.validators import (
+    ArchitectureValidator,
+    PerformanceValidator,
+    RepositoryValidator,
+    RuleValidator,
+    SecurityValidator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class VerificationPipeline:
         self.confidence_engine = ConfidenceEngine()
         self.evidence_engine = EvidenceEngine()
 
-    async def process(self, findings: List[Dict[str, Any]], repo_path: str, context: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    async def process(self, findings: list[dict[str, Any]], repo_path: str, context: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         start_time = time.time()
         
         verified_findings = []

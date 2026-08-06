@@ -4,14 +4,13 @@ Provides PR state lookups used by lifecycle validation.
 All responses are cached for 60 seconds to reduce GitHub API calls.
 """
 
-import time
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 import httpx
 
-from app.github.auth import github_app_auth
 from app.cache.memory_cache import memory_cache
+from app.github.auth import github_app_auth
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ class GitHubService:
         repo_full_name: str,
         pr_number: int,
         installation_id: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fetch the latest PR state from the GitHub API.
 
         Returns a dict with keys:
@@ -87,13 +86,13 @@ class GitHubService:
     async def batch_get_pull_requests(
         self,
         prs: list[tuple[str, int, int]],
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """Fetch multiple PRs, returning {repo_full_name:#pr_number: result}.
 
         Each tuple: (repo_full_name, pr_number, installation_id).
         Reuses the per-PR cache.
         """
-        result: Dict[str, Dict[str, Any]] = {}
+        result: dict[str, dict[str, Any]] = {}
         for repo_full_name, pr_number, installation_id in prs:
             key = f"{repo_full_name}#{pr_number}"
             result[key] = await self.get_pull_request(

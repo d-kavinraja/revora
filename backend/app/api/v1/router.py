@@ -1,5 +1,25 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import webhooks, auth, repositories, reviews, dashboard, review_stream, api_keys, ui_settings, providers, usage, health, routing, analytics, llm, models, cost, verification, review_lifecycle
+
+from app.api.v1.endpoints import (
+    analytics,
+    api_keys,
+    auth,
+    cost,
+    dashboard,
+    health,
+    llm,
+    models,
+    providers,
+    repositories,
+    review_lifecycle,
+    review_stream,
+    reviews,
+    routing,
+    ui_settings,
+    usage,
+    verification,
+    webhooks,
+)
 
 api_router = APIRouter()
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])

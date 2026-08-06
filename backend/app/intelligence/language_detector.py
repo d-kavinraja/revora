@@ -4,13 +4,11 @@ Detects programming languages by analyzing file extensions.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import Dict, List
 from collections import defaultdict
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import LanguageInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import LanguageInfo
 
 # Extension to language mapping
 EXTENSION_MAP = {
@@ -73,7 +71,7 @@ class LanguageDetector(BaseDetector):
         Returns:
             DetectorResult with language distribution.
         """
-        language_counts: Dict[str, int] = defaultdict(int)
+        language_counts: dict[str, int] = defaultdict(int)
         total_files = 0
 
         for file_path in walker.file_paths:
@@ -124,7 +122,7 @@ class LanguageDetector(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_languages(repo_path: str) -> List[LanguageInfo]:
+def detect_languages(repo_path: str) -> list[LanguageInfo]:
     """Detect languages in a repository (legacy interface).
 
     Args:

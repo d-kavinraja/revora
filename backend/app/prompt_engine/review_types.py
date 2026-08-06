@@ -5,7 +5,6 @@ Each review type defines system instructions, analysis focus, and output format.
 
 from app.prompt_engine.models import ReviewType
 
-
 REVIEW_TYPE_CONFIGS = {
     ReviewType.PR_REVIEW: {
         "system_instruction": """You are Revora AI, an expert senior software engineer performing a code review.

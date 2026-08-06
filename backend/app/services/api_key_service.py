@@ -1,21 +1,21 @@
 ﻿import uuid
-from typing import List, Optional, Dict
-from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, datetime
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import encryption_service
 from app.models.api_key import ApiKey
 from app.models.health import ApiKeyHealth
 from app.schemas.api_key import ApiKeyCreate, ApiKeyUpdate
-from app.core.security import encryption_service
 
 
 class ApiKeyService:
-    async def get_all_for_user(self, db: AsyncSession, user_id: uuid.UUID) -> List[ApiKey]:
+    async def get_all_for_user(self, db: AsyncSession, user_id: uuid.UUID) -> list[ApiKey]:
         result = await db.execute(select(ApiKey).where(ApiKey.user_id == user_id))
         return list(result.scalars().all())
 
-    async def get_by_id(self, db: AsyncSession, key_id: uuid.UUID) -> Optional[ApiKey]:
+    async def get_by_id(self, db: AsyncSession, key_id: uuid.UUID) -> ApiKey | None:
         return await db.get(ApiKey, key_id)
 
     async def create(self, db: AsyncSession, user_id: uuid.UUID, key_in: ApiKeyCreate) -> ApiKey:
@@ -33,7 +33,7 @@ class ApiKeyService:
 
     async def update(self, db: AsyncSession, db_obj: ApiKey, obj_in: ApiKeyUpdate) -> ApiKey:
         update_data = obj_in.model_dump(exclude_unset=True)
-        if "api_key" in update_data and update_data["api_key"]:
+        if update_data.get("api_key"):
             db_obj.encrypted_key = encryption_service.encrypt(update_data.pop("api_key"))
         for field, value in update_data.items():
             setattr(db_obj, field, value)
@@ -46,7 +46,7 @@ class ApiKeyService:
         await db.delete(db_obj)
         await db.commit()
 
-    async def get_decrypted_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> Optional[str]:
+    async def get_decrypted_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> str | None:
         """Get decrypted API key, preferring the most recently used valid key."""
         result = await db.execute(
             select(ApiKey)
@@ -78,7 +78,7 @@ class ApiKeyService:
                 continue
         return decrypted
 
-    async def get_usable_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> Optional[ApiKey]:
+    async def get_usable_key(self, db: AsyncSession, user_id: uuid.UUID, provider: str) -> ApiKey | None:
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.user_id == user_id)
@@ -88,7 +88,7 @@ class ApiKeyService:
         )
         return result.scalars().first()
 
-    async def get_all_usable_keys(self, db: AsyncSession, user_id: uuid.UUID) -> Dict[str, ApiKey]:
+    async def get_all_usable_keys(self, db: AsyncSession, user_id: uuid.UUID) -> dict[str, ApiKey]:
         result = await db.execute(
             select(ApiKey)
             .where(ApiKey.user_id == user_id)
@@ -101,7 +101,7 @@ class ApiKeyService:
                 provider_keys[key.provider] = key
         return provider_keys
 
-    async def rotate(self, db: AsyncSession, key_id: uuid.UUID, new_key: str) -> Optional[ApiKey]:
+    async def rotate(self, db: AsyncSession, key_id: uuid.UUID, new_key: str) -> ApiKey | None:
         db_key = await self.get_by_id(db, key_id)
         if not db_key:
             return None
@@ -117,9 +117,9 @@ class ApiKeyService:
         db: AsyncSession,
         key_id: uuid.UUID,
         status: str,
-        error_type: Optional[str] = None,
-        error_message: Optional[str] = None,
-        latency_ms: Optional[float] = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        latency_ms: float | None = None,
     ) -> ApiKeyHealth:
         health = ApiKeyHealth(
             key_id=key_id,
@@ -127,14 +127,14 @@ class ApiKeyService:
             error_type=error_type,
             error_message=error_message,
             latency_ms=latency_ms,
-            checked_at=datetime.now(timezone.utc),
+            checked_at=datetime.now(UTC),
         )
         db.add(health)
         await db.commit()
         await db.refresh(health)
         return health
 
-    async def get_health_history(self, db: AsyncSession, key_id: uuid.UUID, limit: int = 10) -> List[ApiKeyHealth]:
+    async def get_health_history(self, db: AsyncSession, key_id: uuid.UUID, limit: int = 10) -> list[ApiKeyHealth]:
         result = await db.execute(
             select(ApiKeyHealth)
             .where(ApiKeyHealth.key_id == key_id)
@@ -146,7 +146,7 @@ class ApiKeyService:
     async def mark_last_used(self, db: AsyncSession, key_id: uuid.UUID) -> None:
         db_key = await self.get_by_id(db, key_id)
         if db_key:
-            db_key.last_used_at = datetime.now(timezone.utc)
+            db_key.last_used_at = datetime.now(UTC)
             db.add(db_key)
             await db.commit()
 

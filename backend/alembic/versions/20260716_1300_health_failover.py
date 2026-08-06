@@ -4,8 +4,9 @@ Revision ID: h34lth_f4ll0v3r
 Revises: tk3n_us4g3_c0st
 Create Date: 2026-07-16 13:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "h34lth_f4ll0v3r"
 down_revision = "tk3n_us4g3_c0st"

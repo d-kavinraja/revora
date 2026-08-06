@@ -1,28 +1,28 @@
 import logging
-import uuid
 import os
 import re
-from typing import List, Dict, Any, Optional
+import uuid
+from typing import Any
 
-from app.verification.pipeline import pipeline
+from app.db.session import AsyncSessionLocal
+from app.models.verification import (
+    FalsePositiveReportModel,
+    HallucinationReportModel,
+    ReviewEvidenceModel,
+    VerificationMetricModel,
+    VerificationResultModel,
+)
 from app.verification.cache import verification_cache
 from app.verification.models import VerificationResult, VerifiedFinding
-from app.models.verification import (
-    VerificationResultModel,
-    VerificationMetricModel,
-    HallucinationReportModel,
-    FalsePositiveReportModel,
-    ReviewEvidenceModel
-)
-from app.db.session import AsyncSessionLocal
+from app.verification.pipeline import pipeline
 
 logger = logging.getLogger(__name__)
 
 class VerificationEngine:
     """Verifies AI-generated findings against actual code."""
 
-    async def verify(self, ai_response: str, repo_path: str, changed_files: List[str] = None, context: Dict[str, Any] = None) -> VerificationResult:
-        logger.info(f"Starting verification of AI findings")
+    async def verify(self, ai_response: str, repo_path: str, changed_files: list[str] | None = None, context: dict[str, Any] | None = None) -> VerificationResult:
+        logger.info("Starting verification of AI findings")
         
         if context is None:
             context = {}
@@ -81,7 +81,7 @@ class VerificationEngine:
         logger.info(f"Verification complete: {result.verified_count} verified, {result.rejected_count} rejected")
         return result
 
-    async def _persist_to_db(self, review_id: uuid.UUID, verified_findings: List[Dict[str, Any]], metrics: Dict[str, Any]):
+    async def _persist_to_db(self, review_id: uuid.UUID, verified_findings: list[dict[str, Any]], metrics: dict[str, Any]):
         async with AsyncSessionLocal() as db:
             # Save metrics
             db_metric = VerificationMetricModel(
@@ -167,7 +167,7 @@ class VerificationEngine:
 
             await db.commit()
 
-    async def _parse_dependencies(self, repo_path: str) -> List[str]:
+    async def _parse_dependencies(self, repo_path: str) -> list[str]:
         """Simple dependency parsing to populate context for HallucinationDetector."""
         deps = set()
         req_path = os.path.join(repo_path, "requirements.txt")
@@ -190,8 +190,9 @@ class VerificationEngine:
         pkg_exists = await asyncio.to_thread(os.path.exists, pkg_path)
         if pkg_exists:
             try:
-                import aiofiles
                 import json
+
+                import aiofiles
                 async with aiofiles.open(pkg_path, mode="r", encoding="utf-8") as f:
                     content = await f.read()
                     data = json.loads(content)
@@ -202,7 +203,7 @@ class VerificationEngine:
                 
         return list(deps)
 
-    def _parse_findings(self, response: str) -> List[Dict[str, Any]]:
+    def _parse_findings(self, response: str) -> list[dict[str, Any]]:
         """
         Robust implementation of the Review Parser.
         Extracts findings from LLM response, handling JSON formats.

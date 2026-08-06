@@ -4,7 +4,6 @@ Collects quantitative metrics about the repository:
 file counts, line counts, size distribution, etc.
 """
 
-from typing import Dict
 
 from app.intelligence.base_detector import BaseDetector, DetectorResult
 
@@ -38,7 +37,7 @@ class MetricsEngine(BaseDetector):
 
         # Directory depth analysis
         max_depth = 0
-        depth_counts: Dict[int, int] = {}
+        depth_counts: dict[int, int] = {}
 
         for fp in walker.file_paths:
             depth = fp.count("/") + fp.count("\\")
@@ -49,7 +48,7 @@ class MetricsEngine(BaseDetector):
         ext_counts = extensions
 
         # Top directories
-        top_dirs: Dict[str, int] = {}
+        top_dirs: dict[str, int] = {}
         for fp in walker.file_paths:
             parts = fp.replace("\\", "/").split("/")
             if len(parts) > 1:

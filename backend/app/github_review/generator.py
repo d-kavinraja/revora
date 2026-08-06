@@ -1,5 +1,4 @@
 import logging
-from typing import Optional, List
 
 from app.github_review.models import GitHubReviewComment, GitHubReviewSummary
 from app.verification.models import VerificationResult
@@ -30,7 +29,7 @@ class GitHubReviewGenerator:
         verified: VerificationResult,
         pr_title: str = "",
         repo_summary: str = "",
-        usage_stats: Optional[dict] = None,
+        usage_stats: dict | None = None,
         duration_ms: float = 0,
     ) -> GitHubReviewSummary:
         risk_score = self._calculate_risk_score(verified)
@@ -38,9 +37,7 @@ class GitHubReviewGenerator:
         comments = self._build_comments(verified)
 
         event = "COMMENT"
-        if risk_score == "critical":
-            event = "REQUEST_CHANGES"
-        elif risk_score == "high":
+        if risk_score == "critical" or risk_score == "high":
             event = "REQUEST_CHANGES"
 
         if not verified.findings and verified.total_findings == 0:
@@ -79,14 +76,14 @@ class GitHubReviewGenerator:
         verified: VerificationResult,
         risk_score: str,
         pr_title: str,
-        usage_stats: Optional[dict],
+        usage_stats: dict | None,
         duration_ms: float,
     ) -> str:
         sections = []
 
         # Risk header
         risk_emoji = {"low": "✅", "medium": "⚠️", "high": "🔶", "critical": "🔴"}
-        sections.append(f"## Revora AI Review\n")
+        sections.append("## Revora AI Review\n")
         sections.append(f"**Risk Assessment: {risk_emoji.get(risk_score, '❓')} {risk_score.upper()}**\n")
 
         # Summary
@@ -144,7 +141,7 @@ class GitHubReviewGenerator:
 
         return "\n".join(sections)
 
-    def _build_comments(self, verified: VerificationResult) -> List[GitHubReviewComment]:
+    def _build_comments(self, verified: VerificationResult) -> list[GitHubReviewComment]:
         comments = []
         for finding in verified.findings:
             body_parts = []

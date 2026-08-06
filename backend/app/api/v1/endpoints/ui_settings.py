@@ -1,5 +1,6 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ async def get_theme_config():
     }
 
 @router.post("/validate-form")
-async def validate_form_payload(payload: Dict[str, Any]):
+async def validate_form_payload(payload: dict[str, Any]):
     provider = payload.get("provider")
     api_key = payload.get("api_key")
     label = payload.get("label")

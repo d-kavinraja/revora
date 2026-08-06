@@ -7,17 +7,16 @@ BYOK Principle: This service uses EXACTLY the key and model it is given.
 No fallback, no key cycling, no provider switching.
 """
 
-import uuid
 import asyncio
 import logging
-from typing import Optional, Tuple
+import uuid
 
 from litellm import completion
 
 from app.ai.model_registry import canonical_registry
-from app.services.api_key_service import api_key_service
-from app.db.session import AsyncSessionLocal
 from app.core.constants import LLM_DEFAULT_TIMEOUT
+from app.db.session import AsyncSessionLocal
+from app.services.api_key_service import api_key_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +29,10 @@ class LLMService:
         user_id: uuid.UUID,
         provider: str,
         messages: list,
-        model: str = None,
-        api_key_id: Optional[str] = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
         timeout: int = LLM_DEFAULT_TIMEOUT,
-    ) -> Tuple[Optional[str], int, int]:
+    ) -> tuple[str | None, int, int]:
         """Execute exactly one LLM call with the given provider/key/model.
 
         Args:
@@ -109,7 +108,7 @@ class LLMService:
                 return content, input_tokens, output_tokens
             return None, 0, 0
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise RuntimeError(
                 f"LLM call to {provider}/{display_model} timed out after {effective_timeout}s"
             )
@@ -159,8 +158,8 @@ class LLMService:
         self,
         user_id: uuid.UUID,
         provider: str,
-        api_key_id: Optional[str] = None,
-    ) -> Optional[str]:
+        api_key_id: str | None = None,
+    ) -> str | None:
         """Resolve API key from database only.
 
         When api_key_id is provided (MODE 1), ONLY that specific key is used.

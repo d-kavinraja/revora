@@ -12,9 +12,11 @@ Also drops the parent_review_id column — review lineage is now tracked
 via review_executions instead of chained review rows.
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+from alembic import op
 
 revision = "20260731_1100"
 down_revision = "20260731_1000"

@@ -1,6 +1,5 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Any
 
 
 class EventType(str, Enum):
@@ -27,12 +26,13 @@ class PipelineEvent:
     status: str  # waiting, running, completed, failed, skipped
     message: str = ""
     timestamp: float = 0.0
-    duration_ms: Optional[float] = None
-    metrics: Optional[dict] = None
-    progress: Optional[float] = None  # 0-100
+    duration_ms: float | None = None
+    metrics: dict | None = None
+    progress: float | None = None  # 0-100
 
     def to_sse(self) -> str:
-        import json, time
+        import json
+        import time
         data = {
             "type": self.type.value,
             "review_id": self.review_id,

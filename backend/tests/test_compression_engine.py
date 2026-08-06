@@ -1,9 +1,10 @@
 import pytest
-from app.retrieval.models import RetrievedContext, RetrievalResult
-from app.retrieval.compression.engine import compression_engine, CompressionEngine
+
+from app.retrieval.compression.engine import CompressionEngine, compression_engine
 from app.retrieval.compression.strategies.dedup import DedupStrategy
-from app.retrieval.compression.strategies.truncation import TruncationStrategy
 from app.retrieval.compression.strategies.import_prune import ImportPruneStrategy
+from app.retrieval.compression.strategies.truncation import TruncationStrategy
+from app.retrieval.models import RetrievalResult, RetrievedContext
 from app.retrieval.token_budget_engine import token_budget_engine
 
 

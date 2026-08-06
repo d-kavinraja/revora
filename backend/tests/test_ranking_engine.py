@@ -1,9 +1,10 @@
 import pytest
-from app.retrieval.models import RetrievedContext, RetrievalConfig
-from app.retrieval.ranking.engine import ranking_engine, RankingEngine
-from app.retrieval.ranking.scorers.graph_distance import GraphDistanceScorer
-from app.retrieval.ranking.scorers.file_importance import FileImportanceScorer
+
+from app.retrieval.models import RetrievedContext
+from app.retrieval.ranking.engine import RankingEngine, ranking_engine
 from app.retrieval.ranking.normalizer import ScoreNormalizer
+from app.retrieval.ranking.scorers.file_importance import FileImportanceScorer
+from app.retrieval.ranking.scorers.graph_distance import GraphDistanceScorer
 
 
 @pytest.fixture

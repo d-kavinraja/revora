@@ -1,6 +1,6 @@
 ﻿import uuid
-from typing import Optional
 from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -12,16 +12,16 @@ class LLMRequestLogRead(BaseModel):
     model: str
     feature: str
     status: str
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
+    error_type: str | None = None
+    error_message: str | None = None
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     latency_ms: float
     input_tokens: int
     output_tokens: int
     cost_usd: float
     was_fallback: bool
-    original_provider: Optional[str] = None
+    original_provider: str | None = None
     attempt_number: int
     created_at: datetime
 

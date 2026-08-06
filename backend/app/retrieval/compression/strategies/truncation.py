@@ -1,8 +1,7 @@
 import logging
-from typing import Optional
 
-from app.retrieval.models import RetrievedContext
 from app.retrieval.compression.base_strategy import BaseCompressionStrategy
+from app.retrieval.models import RetrievedContext
 from app.retrieval.token_budget_engine import token_budget_engine
 
 logger = logging.getLogger(__name__)
@@ -17,7 +16,7 @@ class TruncationStrategy(BaseCompressionStrategy):
         self,
         context: RetrievedContext,
         max_tokens: int,
-    ) -> Optional[RetrievedContext]:
+    ) -> RetrievedContext | None:
         content = context.content
         current_tokens = token_budget_engine.estimate_tokens(content)
 

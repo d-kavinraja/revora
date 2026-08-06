@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+
 from app.queue.worker import run_worker
 
 if __name__ == "__main__":

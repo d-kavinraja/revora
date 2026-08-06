@@ -5,11 +5,9 @@ Uses deterministic analysis without LLM calls.
 """
 
 import hashlib
-from typing import Dict, List
 
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR
-
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 # File extensions to analyze
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".rb"}
@@ -39,7 +37,7 @@ class DuplicateDetector(BaseDetector):
             DetectorResult with duplicate code findings.
         """
         # Map from content hash to file locations
-        content_hashes: Dict[str, List[Dict]] = {}
+        content_hashes: dict[str, list[dict]] = {}
         files_analyzed = 0
 
         # Collect code files
@@ -65,7 +63,7 @@ class DuplicateDetector(BaseDetector):
                     continue
 
                 # Skip common patterns (imports, comments, blank lines)
-                if block.startswith("#") or block.startswith("//"):
+                if block.startswith(("#", "//")):
                     continue
 
                 # Hash the block
@@ -82,11 +80,11 @@ class DuplicateDetector(BaseDetector):
                 })
 
         # Find duplicates (hashes with multiple locations)
-        duplicates: List[Dict] = []
+        duplicates: list[dict] = []
         for block_hash, locations in content_hashes.items():
             if len(locations) > 1:
                 # Deduplicate by file
-                files = set(loc["file"] for loc in locations)
+                files = {loc["file"] for loc in locations}
                 if len(files) > 1:  # Only report if in different files
                     duplicates.append({
                         "locations": locations,

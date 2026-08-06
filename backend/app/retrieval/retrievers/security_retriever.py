@@ -1,10 +1,8 @@
-import os
 import logging
-from typing import Optional
+import os
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 from app.retrieval.retrievers.base_retriever import BaseRetriever
-from app.indexing.models import RepositoryIndex
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +27,7 @@ class SecurityRetriever(BaseRetriever):
         config: RetrievalConfig,
         result: RetrievalResult,
     ) -> list[RetrievedContext]:
-        index: Optional[RepositoryIndex] = getattr(result, "_index", None)
+        getattr(result, "_index", None)
         repo_path = getattr(result, "_repo_path", ".")
         changed_files = getattr(result, "_changed_file_paths", [])
 
@@ -74,7 +72,7 @@ class SecurityRetriever(BaseRetriever):
             pass
         return files
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 200) -> Optional[str]:
+    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 200) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:

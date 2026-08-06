@@ -1,7 +1,5 @@
-import time
 import hashlib
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -49,7 +47,7 @@ class RetrievalResult:
     budget_limit: int = 10000
     retrieval_time_ms: float = 0.0
     cache_hit: bool = False
-    fallback_used: Optional[str] = None
+    fallback_used: str | None = None
 
     def all_contexts(self) -> list[RetrievedContext]:
         return (

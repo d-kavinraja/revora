@@ -1,5 +1,5 @@
 from app.retrieval.models import RetrievedContext
-from app.retrieval.token_budget import truncate_to_budget, estimate_tokens
+from app.retrieval.token_budget import estimate_tokens, truncate_to_budget
 
 
 def compress_context(

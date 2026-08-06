@@ -1,15 +1,14 @@
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-correlation_id_ctx: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Retrieve the correlation ID for the current context."""
     return correlation_id_ctx.get()
 

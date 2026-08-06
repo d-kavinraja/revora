@@ -4,20 +4,17 @@ Stores and retrieves repository knowledge (conventions, summaries, rules)
 with DB-backed persistence and content hashing for cache invalidation.
 """
 
-import uuid
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Optional, Dict
+import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
-from app.models.knowledge import RepositoryKnowledge, RepositoryRule
-from app.models.github import Repository
 from app.knowledge.convention_detector import detect_conventions
 from app.knowledge.rule_engine import load_rules
+from app.models.knowledge import RepositoryKnowledge
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +37,7 @@ class KnowledgeStore:
         self,
         repo_id: uuid.UUID,
         knowledge_type: str,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """Load knowledge by repo_id and type.
 
         Args:
@@ -81,7 +78,7 @@ class KnowledgeStore:
         repo_id: uuid.UUID,
         knowledge_type: str,
         content: str,
-        metadata: Optional[Dict] = None,
+        metadata: dict | None = None,
     ) -> None:
         """Save or update knowledge for a repository.
 
@@ -104,7 +101,7 @@ class KnowledgeStore:
                 )
                 row = existing.first()
 
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
 
                 if row:
                     # Update existing
@@ -192,7 +189,7 @@ class KnowledgeStore:
     async def invalidate_cache(
         self,
         repo_id: uuid.UUID,
-        knowledge_type: Optional[str] = None,
+        knowledge_type: str | None = None,
     ) -> None:
         """Invalidate cached knowledge for a repository.
 

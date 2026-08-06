@@ -4,16 +4,13 @@ Detects frameworks by checking config file existence and content.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-import os
-from typing import List, Optional, Tuple
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import FrameworkInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import FrameworkInfo
 
 # Framework signatures: (name, signatures, config_file)
-FRAMEWORK_SIGNATURES: List[Tuple[str, List[str], Optional[str]]] = [
+FRAMEWORK_SIGNATURES: list[tuple[str, list[str], str | None]] = [
     # JavaScript / TypeScript
     ("Next.js", ["next.config.js", "next.config.ts", "next.config.mjs"], None),
     ("React", ["react", "react-dom"], "package.json"),
@@ -81,7 +78,7 @@ class FrameworkDetector(BaseDetector):
         Returns:
             DetectorResult with detected frameworks.
         """
-        frameworks: List[FrameworkInfo] = []
+        frameworks: list[FrameworkInfo] = []
         seen = set()
 
         for name, signatures, config_file in FRAMEWORK_SIGNATURES:
@@ -92,7 +89,7 @@ class FrameworkDetector(BaseDetector):
                 # Check if config file exists via walker
                 config_files = [
                     fp for fp in walker.file_paths
-                    if fp.endswith(config_file) or fp.endswith("/" + config_file)
+                    if fp.endswith((config_file, "/" + config_file))
                 ]
 
                 if not config_files:
@@ -130,7 +127,7 @@ class FrameworkDetector(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_frameworks(repo_path: str) -> List[FrameworkInfo]:
+def detect_frameworks(repo_path: str) -> list[FrameworkInfo]:
     """Detect frameworks in a repository (legacy interface).
 
     Args:

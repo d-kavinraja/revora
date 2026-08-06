@@ -10,8 +10,9 @@ On reruns, this comment is EDITED (PATCH) instead of posting a new
 duplicate comment for the same pull request.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "20260731_1000"
 down_revision = "20260730_1600"

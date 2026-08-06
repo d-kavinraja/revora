@@ -9,8 +9,9 @@ The AuditLog model inherits updated_at from Base but the
 original migration (20260730_1300) omitted the column.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "20260730_1600"
 down_revision = "20260730_1500"

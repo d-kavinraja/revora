@@ -5,11 +5,9 @@ Uses deterministic analysis without LLM calls.
 """
 
 import re
-from typing import Dict, List, Set
 
-from app.intelligence.base_detector import BaseDetector, DetectorResult
 from app.core.constants import MAX_FILES_PER_DETECTOR
-
+from app.intelligence.base_detector import BaseDetector, DetectorResult
 
 # File extensions to analyze
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx"}
@@ -35,8 +33,8 @@ class DeadCodeDetector(BaseDetector):
         Returns:
             DetectorResult with dead code findings.
         """
-        unused_imports: List[Dict] = []
-        unused_functions: List[Dict] = []
+        unused_imports: list[dict] = []
+        unused_functions: list[dict] = []
         files_analyzed = 0
 
         # Collect code files
@@ -46,8 +44,8 @@ class DeadCodeDetector(BaseDetector):
         ]
 
         # Build a set of all function/class definitions and their references
-        all_definitions: Dict[str, List[Dict]] = {}
-        all_references: Set[str] = set()
+        all_definitions: dict[str, list[dict]] = {}
+        all_references: set[str] = set()
 
         for fp in code_files[:MAX_FILES_PER_DETECTOR]:
             content = await walker.get_content(fp, max_chars=10000)

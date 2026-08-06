@@ -1,8 +1,7 @@
 import os
 import re
-from typing import Dict
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 FASTAPI_PATTERNS = [
     r'@(?:app|router)\.(get|post|put|delete|patch|options|head)\s*\(\s*["\']([^"\']+)',

@@ -12,14 +12,12 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import select, update
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.review import Review
 
@@ -31,7 +29,7 @@ TERMINAL = {"completed", "failed", "cancelled", "stopped", "timed_out"}
 
 
 async def cleanup():
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ZOMBIE_AGE_MINUTES)
+    cutoff = datetime.now(UTC) - timedelta(minutes=ZOMBIE_AGE_MINUTES)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Review).where(
@@ -46,7 +44,7 @@ async def cleanup():
 
         for review in zombies:
             # Do not touch reviews that still have a live job
-            from app.queue.models import ReviewJob, JobStatus
+            from app.queue.models import JobStatus, ReviewJob
             job_result = await db.execute(
                 select(ReviewJob.id).where(
                     ReviewJob.delivery_id.like(f"%-{review.id}"),
@@ -63,7 +61,7 @@ async def cleanup():
                 .values(
                     status="cancelled",
                     error_message="Stale queued review (job never completed) — marked cancelled by cleanup",
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(UTC),
                 )
             )
             logger.info(f"Marked zombie review {review.id} as cancelled")

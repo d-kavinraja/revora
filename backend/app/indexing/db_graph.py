@@ -1,7 +1,7 @@
 import os
 import re
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 ORM_PATTERNS = {
     "sqlalchemy": [

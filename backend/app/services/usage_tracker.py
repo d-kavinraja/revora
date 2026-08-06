@@ -1,9 +1,9 @@
-import uuid
 import hashlib
-from typing import Optional, List, Dict
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from app.models.observability import LLMRequestLog
 
@@ -24,15 +24,15 @@ class UsageTracker:
         output_tokens: int,
         cost_usd: float,
         started_at: datetime,
-        completed_at: Optional[datetime] = None,
-        response_text: Optional[str] = None,
-        error_type: Optional[str] = None,
-        error_message: Optional[str] = None,
+        completed_at: datetime | None = None,
+        response_text: str | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
         was_fallback: bool = False,
-        original_provider: Optional[str] = None,
+        original_provider: str | None = None,
         attempt_number: int = 1,
-        api_key_id: Optional[uuid.UUID] = None,
-        review_id: Optional[uuid.UUID] = None,
+        api_key_id: uuid.UUID | None = None,
+        review_id: uuid.UUID | None = None,
     ) -> LLMRequestLog:
         messages_str = str(messages)
         messages_hash = hashlib.sha256(messages_str.encode()).hexdigest()
@@ -53,7 +53,7 @@ class UsageTracker:
             error_type=error_type,
             error_message=error_message,
             started_at=started_at,
-            completed_at=completed_at or datetime.now(timezone.utc),
+            completed_at=completed_at or datetime.now(UTC),
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -71,12 +71,12 @@ class UsageTracker:
 
     def _apply_filters(
         self, query,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None
     ):
         if provider:
             query = query.where(LLMRequestLog.provider == provider)
@@ -89,8 +89,8 @@ class UsageTracker:
             except Exception:
                 pass
         if repo_id:
-            from app.models.review import Review
             from app.models.github import PullRequest
+            from app.models.review import Review
             try:
                 parsed_repo_id = uuid.UUID(repo_id) if isinstance(repo_id, str) else repo_id
                 query = query.join(Review, Review.id == LLMRequestLog.review_id)
@@ -100,24 +100,24 @@ class UsageTracker:
                 pass
         if start_date:
             if start_date.tzinfo is None:
-                start_date = start_date.replace(tzinfo=timezone.utc)
+                start_date = start_date.replace(tzinfo=UTC)
             query = query.where(LLMRequestLog.started_at >= start_date)
         if end_date:
             if end_date.tzinfo is None:
-                end_date = end_date.replace(tzinfo=timezone.utc)
+                end_date = end_date.replace(tzinfo=UTC)
             query = query.where(LLMRequestLog.started_at <= end_date)
         return query
 
     async def get_user_requests(
         self, db: AsyncSession, user_id: uuid.UUID,
         limit: int = 50, offset: int = 0,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[LLMRequestLog]:
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[LLMRequestLog]:
         query = select(LLMRequestLog).where(LLMRequestLog.user_id == user_id)
         query = self._apply_filters(query, provider, model, api_key_id, repo_id, start_date, end_date)
         query = query.order_by(LLMRequestLog.started_at.desc()).offset(offset).limit(limit)
@@ -126,13 +126,13 @@ class UsageTracker:
 
     async def get_error_summary(
         self, db: AsyncSession, user_id: uuid.UUID,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> Dict:
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> dict:
 
         query = select(LLMRequestLog).where(
             LLMRequestLog.user_id == user_id,
@@ -162,13 +162,13 @@ class UsageTracker:
 
     async def get_latency_stats(
         self, db: AsyncSession, user_id: uuid.UUID, 
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> Dict:
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> dict:
         query = select(LLMRequestLog.latency_ms).where(
             LLMRequestLog.user_id == user_id,
             LLMRequestLog.status == "success",
@@ -192,13 +192,13 @@ class UsageTracker:
 
     async def get_feature_usage(
         self, db: AsyncSession, user_id: uuid.UUID,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[Dict]:
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[dict]:
         query = select(LLMRequestLog).where(LLMRequestLog.user_id == user_id)
         query = self._apply_filters(query, provider, model, api_key_id, repo_id, start_date, end_date)
         result = await db.execute(query)
@@ -226,13 +226,13 @@ class UsageTracker:
 
     async def get_provider_comparison(
         self, db: AsyncSession, user_id: uuid.UUID,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key_id: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[Dict]:
+        provider: str | None = None,
+        model: str | None = None,
+        api_key_id: str | None = None,
+        repo_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[dict]:
         query = select(LLMRequestLog).where(LLMRequestLog.user_id == user_id)
         query = self._apply_filters(query, provider, model, api_key_id, repo_id, start_date, end_date)
         result = await db.execute(query)

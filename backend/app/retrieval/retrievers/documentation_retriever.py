@@ -1,8 +1,7 @@
-import os
 import logging
-from typing import Optional
+import os
 
-from app.retrieval.models import RetrievedContext, RetrievalResult, RetrievalConfig
+from app.retrieval.models import RetrievalConfig, RetrievalResult, RetrievedContext
 from app.retrieval.retrievers.base_retriever import BaseRetriever
 
 logger = logging.getLogger(__name__)
@@ -93,7 +92,7 @@ class DocumentationRetriever(BaseRetriever):
 
         return doc_files
 
-    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 100) -> Optional[str]:
+    def _read_file(self, repo_path: str, file_path: str, max_lines: int = 100) -> str | None:
         full_path = os.path.join(repo_path, file_path)
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:

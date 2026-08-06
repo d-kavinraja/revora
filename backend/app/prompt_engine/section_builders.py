@@ -6,10 +6,12 @@ with safe_* wrappers for error isolation.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Dict
 
 from app.prompt_engine.models import (
-    PromptSection, PromptBuildRequest, ReviewType, TokenMetadata
+    PromptBuildRequest,
+    PromptSection,
+    ReviewType,
+    TokenMetadata,
 )
 from app.prompt_engine.review_types import get_review_config
 
@@ -37,10 +39,10 @@ class BaseSectionBuilder(ABC):
         """Priority for ordering (higher = included first when budget is tight)."""
 
     @abstractmethod
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         """Build the section content."""
 
-    async def safe_build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def safe_build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         """Build with error isolation. Returns None on failure instead of raising."""
         try:
             section = await self.build(request, context)
@@ -64,7 +66,7 @@ class SystemInstructionsBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 100
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         config = get_review_config(request.review_type)
         return PromptSection(
             name=self.name,
@@ -83,7 +85,7 @@ class RepositorySummaryBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 90
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.intelligence_data:
             return None
 
@@ -125,7 +127,7 @@ class ArchitectureSummaryBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 85
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.intelligence_data:
             return None
 
@@ -139,9 +141,9 @@ class ArchitectureSummaryBuilder(BaseSectionBuilder):
                 parts.append(f"**Pattern**: {arch['pattern']}")
             if "description" in arch:
                 parts.append(f"**Description**: {arch['description']}")
-            if "strengths" in arch and arch["strengths"]:
+            if arch.get("strengths"):
                 parts.append(f"**Strengths**: {', '.join(arch['strengths']) if isinstance(arch['strengths'], list) else arch['strengths']}")
-            if "weaknesses" in arch and arch["weaknesses"]:
+            if arch.get("weaknesses"):
                 parts.append(f"**Weaknesses**: {', '.join(arch['weaknesses']) if isinstance(arch['weaknesses'], list) else arch['weaknesses']}")
         else:
             parts.append(str(arch))
@@ -161,7 +163,7 @@ class RepositoryRulesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 80
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         all_rules = list(request.rules) if request.rules else []
 
         ranked = context.get("ranked_context")
@@ -188,7 +190,7 @@ class CodingConventionsBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 75
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.conventions:
             return None
         return PromptSection(name=self.name, content=request.conventions)
@@ -205,7 +207,7 @@ class OrganizationRulesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 70
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.organization_rules:
             return None
         rules_text = "\n".join(f"- {r}" for r in request.organization_rules)
@@ -223,7 +225,7 @@ class RelevantFilesBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 60
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         ranked = context.get("ranked_context")
         if not ranked:
             return None
@@ -250,7 +252,7 @@ class RelevantCodeBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 55
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         ranked = context.get("ranked_context")
         if not ranked:
             return None
@@ -300,7 +302,7 @@ class StaticAnalysisBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 50
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.static_analysis:
             return None
         return PromptSection(name=self.name, content=request.static_analysis)
@@ -322,7 +324,7 @@ class ReviewContextBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 95
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         parts = []
 
         if request.pr_number:
@@ -364,7 +366,7 @@ class IssueContextBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 40
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         if not request.issue_context:
             return None
         return PromptSection(name=self.name, content=request.issue_context)
@@ -381,7 +383,7 @@ class OutputFormatBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 30
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         config = get_review_config(request.review_type)
         return PromptSection(name=self.name, content=config["output_format"])
 
@@ -397,7 +399,7 @@ class TokenMetadataBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 5
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         token_meta = context.get("token_metadata")
         if not token_meta:
             token_meta = TokenMetadata(budget_limit=request.token_budget)
@@ -419,7 +421,7 @@ class ProviderMetadataBuilder(BaseSectionBuilder):
     def priority(self) -> int:
         return 5
 
-    async def build(self, request: PromptBuildRequest, context: dict) -> Optional[PromptSection]:
+    async def build(self, request: PromptBuildRequest, context: dict) -> PromptSection | None:
         content = f"Provider: {request.provider}"
         if request.model:
             content += f"\nModel: {request.model}"

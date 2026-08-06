@@ -1,5 +1,10 @@
 import pytest
-from app.retrieval.token_budget_engine import TokenBudgetEngine, TokenBudget, PRESET_BUDGETS
+
+from app.retrieval.token_budget_engine import (
+    PRESET_BUDGETS,
+    TokenBudget,
+    TokenBudgetEngine,
+)
 
 
 @pytest.fixture

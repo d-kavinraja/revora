@@ -4,11 +4,10 @@ All graph builders must implement this interface to ensure
 consistent behavior and enable parallel execution.
 """
 
+import logging
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
-import time
-import logging
 
 from app.indexing.models import CodeGraph
 
@@ -19,8 +18,8 @@ logger = logging.getLogger(__name__)
 class GraphBuildResult:
     """Result from a graph builder."""
     success: bool
-    graph: Optional[CodeGraph] = None
-    error: Optional[str] = None
+    graph: CodeGraph | None = None
+    error: str | None = None
     duration_ms: float = 0.0
     builder_name: str = ""
     node_count: int = 0

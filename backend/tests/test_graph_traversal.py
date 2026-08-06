@@ -1,5 +1,6 @@
 import pytest
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 from app.retrieval.graph_traversal import GraphTraversalEngine
 
 

@@ -3,11 +3,9 @@
 Caches compiled prompts to avoid redundant rebuilds. Supports memory and Redis.
 """
 
-import time
-import logging
 import hashlib
-import json
-from typing import Optional, Any
+import logging
+import time
 from collections import OrderedDict
 
 from app.prompt_engine.models import CompiledPrompt
@@ -25,7 +23,7 @@ class PromptCache:
         self._hits = 0
         self._misses = 0
 
-    async def get(self, cache_key: str) -> Optional[CompiledPrompt]:
+    async def get(self, cache_key: str) -> CompiledPrompt | None:
         """Get a cached prompt by cache key."""
         if cache_key not in self._cache:
             self._misses += 1
@@ -41,7 +39,7 @@ class PromptCache:
         self._cache.move_to_end(cache_key)
         return entry["prompt"]
 
-    async def set(self, cache_key: str, prompt: CompiledPrompt, ttl: Optional[int] = None) -> None:
+    async def set(self, cache_key: str, prompt: CompiledPrompt, ttl: int | None = None) -> None:
         """Cache a compiled prompt."""
         if ttl is None:
             ttl = self._default_ttl

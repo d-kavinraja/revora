@@ -1,6 +1,8 @@
 ﻿import json
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
+
 from app.core.config import settings
 from app.github.webhooks import github_webhook_service
 

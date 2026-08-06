@@ -1,24 +1,25 @@
 """Tests for Intelligence Engine and detectors."""
 
+
 import pytest
-import asyncio
-from app.intelligence.engine import IntelligenceEngine
-from app.intelligence.repo_walker import RepoWalker
-from app.intelligence.language_detector import LanguageDetector
-from app.intelligence.framework_detector import FrameworkDetector
+
 from app.intelligence.architecture_detector import ArchitectureDetector
-from app.intelligence.database_detector import DatabaseDetector
 from app.intelligence.build_detector import BuildDetector
 from app.intelligence.cicd_detector import CICDDetector
-from app.intelligence.testing_detector import TestingDetector
-from app.intelligence.security_detector import SecurityDetector
 from app.intelligence.cloud_detector import CloudDetector
-from app.intelligence.queue_detector import QueueDetector
-from app.intelligence.dependency_analyzer import DependencyAnalyzer
-from app.intelligence.secret_detector import SecretDetector
 from app.intelligence.complexity_analyzer import ComplexityAnalyzer
+from app.intelligence.database_detector import DatabaseDetector
+from app.intelligence.dependency_analyzer import DependencyAnalyzer
+from app.intelligence.engine import IntelligenceEngine
+from app.intelligence.framework_detector import FrameworkDetector
 from app.intelligence.health_engine import HealthEngine
+from app.intelligence.language_detector import LanguageDetector
 from app.intelligence.metrics_engine import MetricsEngine
+from app.intelligence.queue_detector import QueueDetector
+from app.intelligence.repo_walker import RepoWalker
+from app.intelligence.secret_detector import SecretDetector
+from app.intelligence.security_detector import SecurityDetector
+from app.intelligence.testing_detector import TestingDetector
 
 
 @pytest.fixture

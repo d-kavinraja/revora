@@ -1,7 +1,9 @@
 import pytest
-from app.ai.model_registry import canonical_registry, CanonicalModel
-from app.services.model_discovery import ModelDiscoveryEngine
+
 from app.ai.llm import LLMService
+from app.ai.model_registry import CanonicalModel, canonical_registry
+from app.services.model_discovery import ModelDiscoveryEngine
+
 
 @pytest.fixture(autouse=True)
 def setup_teardown_registry():

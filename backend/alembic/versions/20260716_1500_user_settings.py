@@ -5,9 +5,10 @@ Revises: h34lth_f4ll0v3r
 Create Date: 2026-07-16 15:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
+
+from alembic import op
 
 revision = "us3r_s3tt1ngs"
 down_revision = "h34lth_f4ll0v3r"

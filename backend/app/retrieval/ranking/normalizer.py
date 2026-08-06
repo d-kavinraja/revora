@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 
 def min_max_normalize(

@@ -1,14 +1,16 @@
+import asyncio
 import os
 import shutil
 import tempfile
-import asyncio
+
 from git import Repo
+
 
 class GitService:
     """Utility class for cloning and analyzing repositories."""
     
     @staticmethod
-    async def clone_repository(clone_url: str, token: str, head_sha: str = None) -> str:
+    async def clone_repository(clone_url: str, token: str, head_sha: str | None = None) -> str:
         """
         Clones a repository securely into a temporary directory.
         Uses the provided installation token.

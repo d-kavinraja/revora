@@ -1,13 +1,12 @@
 import os
 import re
-from typing import Dict, Set
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 
 def build_import_graph(repo_path: str) -> CodeGraph:
     graph = CodeGraph()
-    file_imports: Dict[str, Set[str]] = {}
+    file_imports: dict[str, set[str]] = {}
 
     for root, dirs, files in os.walk(repo_path):
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", "__pycache__", "dist", "build"}]
@@ -37,7 +36,7 @@ def build_import_graph(repo_path: str) -> CodeGraph:
     return graph
 
 
-def _parse_python_imports(fp: str) -> Set[str]:
+def _parse_python_imports(fp: str) -> set[str]:
     imports = set()
     try:
         with open(fp, "r", encoding="utf-8", errors="ignore") as f:
@@ -55,7 +54,7 @@ def _parse_python_imports(fp: str) -> Set[str]:
     return imports
 
 
-def _parse_js_imports(fp: str) -> Set[str]:
+def _parse_js_imports(fp: str) -> set[str]:
     imports = set()
     try:
         with open(fp, "r", encoding="utf-8", errors="ignore") as f:
@@ -69,7 +68,7 @@ def _parse_js_imports(fp: str) -> Set[str]:
     return imports
 
 
-def _parse_go_imports(fp: str) -> Set[str]:
+def _parse_go_imports(fp: str) -> set[str]:
     imports = set()
     try:
         with open(fp, "r", encoding="utf-8", errors="ignore") as f:

@@ -4,12 +4,10 @@ Detects message queues and caching solutions.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List
 
+from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence._async_util import run_async
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-from app.core.constants import MAX_FILES_PER_DETECTOR
-
 
 QUEUE_SIGNATURES = {
     "celery": ["celery", "Celery"],
@@ -51,8 +49,8 @@ class QueueDetector(BaseDetector):
         Returns:
             DetectorResult with queue and cache info.
         """
-        queues: List[str] = []
-        caching: List[str] = []
+        queues: list[str] = []
+        caching: list[str] = []
 
         # Collect file content for analysis
         config_files = [
@@ -102,7 +100,7 @@ class QueueDetector(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_queues(repo_path: str) -> List[str]:
+def detect_queues(repo_path: str) -> list[str]:
     """Detect queues in a repository (legacy interface)."""
     from app.intelligence.repo_walker import RepoWalker
 
@@ -116,7 +114,7 @@ def detect_queues(repo_path: str) -> List[str]:
     return run_async(_detect())
 
 
-def detect_caching(repo_path: str) -> List[str]:
+def detect_caching(repo_path: str) -> list[str]:
     """Detect caching in a repository (legacy interface)."""
     from app.intelligence.repo_walker import RepoWalker
 

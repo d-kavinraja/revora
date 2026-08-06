@@ -1,22 +1,21 @@
-﻿import uuid
+﻿import hashlib
 import time
-import hashlib
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+import uuid
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.security.content_guard import detect_injection, sanitize_messages
+from app.services.cost_estimator import cost_estimator
 from app.services.model_router import model_router
 from app.services.retry_failover import retry_failover
 from app.services.token_manager import token_manager
-from app.services.cost_estimator import cost_estimator
 from app.services.usage_tracker import usage_tracker
-from app.orchestrator.models import LLMResponse
-from app.security.content_guard import sanitize_messages, detect_injection
-from app.core.config import settings
 
 router = APIRouter()
 
@@ -24,9 +23,9 @@ router = APIRouter()
 class LLMExecuteRequest(BaseModel):
     messages: list
     feature: str = "code_review"
-    preferred_provider: Optional[str] = None
-    preferred_model: Optional[str] = None
-    api_key_id: Optional[str] = None
+    preferred_provider: str | None = None
+    preferred_model: str | None = None
+    api_key_id: str | None = None
 
 
 class LLMExecuteResponse(BaseModel):

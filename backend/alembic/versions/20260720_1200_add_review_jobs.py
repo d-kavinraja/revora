@@ -4,9 +4,10 @@ Revision ID: 001_review_jobs
 Create Date: 2026-07-20
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "001_review_jobs"
 down_revision = "20260718_1200"

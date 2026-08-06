@@ -1,11 +1,9 @@
-import time
 import hashlib
 import logging
-from typing import Optional
 
-from app.cache.redis_cache import redis_cache
 from app.cache.memory_cache import memory_cache
-from app.indexing.models import RepositoryIndex, CodeGraph, GraphNode, GraphEdge
+from app.cache.redis_cache import redis_cache
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode, RepositoryIndex
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +15,8 @@ class GraphCache:
     async def get_index(
         self,
         repo_id: str,
-        commit_sha: Optional[str] = None,
-    ) -> Optional[RepositoryIndex]:
+        commit_sha: str | None = None,
+    ) -> RepositoryIndex | None:
         key = self._build_key(repo_id, commit_sha)
         cached = await redis_cache.get(key)
         if cached is not None:
@@ -29,23 +27,23 @@ class GraphCache:
         self,
         repo_id: str,
         index: RepositoryIndex,
-        commit_sha: Optional[str] = None,
-        ttl: Optional[int] = None,
+        commit_sha: str | None = None,
+        ttl: int | None = None,
     ) -> None:
         key = self._build_key(repo_id, commit_sha)
         serialized = self._serialize_index(index)
         await redis_cache.set(key, serialized, ttl or self._default_ttl)
 
-    async def invalidate(self, repo_id: str, commit_sha: Optional[str] = None) -> None:
+    async def invalidate(self, repo_id: str, commit_sha: str | None = None) -> None:
         key = self._build_key(repo_id, commit_sha)
         await redis_cache.delete(key)
         await memory_cache.delete(key)
 
-    async def has_index(self, repo_id: str, commit_sha: Optional[str] = None) -> bool:
+    async def has_index(self, repo_id: str, commit_sha: str | None = None) -> bool:
         key = self._build_key(repo_id, commit_sha)
         return await redis_cache.exists(key)
 
-    def _build_key(self, repo_id: str, commit_sha: Optional[str] = None) -> str:
+    def _build_key(self, repo_id: str, commit_sha: str | None = None) -> str:
         raw = f"graph_index:{repo_id}:{commit_sha or 'latest'}"
         return f"cache:graph:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 

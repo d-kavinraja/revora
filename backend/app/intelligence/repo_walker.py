@@ -5,13 +5,12 @@ All detectors and graph builders receive the same walker instance,
 eliminating redundant filesystem I/O.
 """
 
-import os
 import fnmatch
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+import os
 from collections import defaultdict
 
-from app.core.constants import SKIP_DIRS, SKIP_EXTENSIONS, MAX_FILE_READ_CHARS
+from app.core.constants import MAX_FILE_READ_CHARS, SKIP_DIRS, SKIP_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +34,18 @@ class RepoWalker:
     def __init__(
         self,
         repo_path: str,
-        skip_dirs: Optional[Set[str]] = None,
-        skip_extensions: Optional[Set[str]] = None,
+        skip_dirs: set[str] | None = None,
+        skip_extensions: set[str] | None = None,
     ):
         self.repo_path = os.path.abspath(repo_path)
         self.skip_dirs = skip_dirs or set(SKIP_DIRS)
         self.skip_extensions = skip_extensions or set(SKIP_EXTENSIONS)
 
         # Cached data
-        self._file_paths: Optional[List[str]] = None
-        self._file_contents: Dict[str, str] = {}
-        self._extensions: Optional[Dict[str, int]] = None
-        self._dir_structure: Optional[Dict] = None
+        self._file_paths: list[str] | None = None
+        self._file_contents: dict[str, str] = {}
+        self._extensions: dict[str, int] | None = None
+        self._dir_structure: dict | None = None
         self._walked: bool = False
 
     async def walk(self) -> None:
@@ -66,7 +65,7 @@ class RepoWalker:
             return
 
         file_paths = []
-        extensions: Dict[str, int] = defaultdict(int)
+        extensions: dict[str, int] = defaultdict(int)
 
         for root, dirs, files in os.walk(self.repo_path):
             # Filter out skipped directories (in-place modification)
@@ -105,14 +104,14 @@ class RepoWalker:
         )
 
     @property
-    def file_paths(self) -> List[str]:
+    def file_paths(self) -> list[str]:
         """All non-skipped file paths (relative to repo root)."""
         if not self._walked:
             raise RuntimeError("RepoWalker.walk() must be called first")
         return self._file_paths or []
 
     @property
-    def extensions(self) -> Dict[str, int]:
+    def extensions(self) -> dict[str, int]:
         """Extension -> count mapping."""
         if not self._walked:
             raise RuntimeError("RepoWalker.walk() must be called first")
@@ -159,11 +158,11 @@ class RepoWalker:
             self._file_contents[cache_key] = content
             return content
 
-        except (OSError, IOError, UnicodeDecodeError) as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.debug(f"Failed to read {file_path}: {e}")
             return ""
 
-    def get_files_by_extension(self, ext: str) -> List[str]:
+    def get_files_by_extension(self, ext: str) -> list[str]:
         """Get all files with a specific extension.
 
         Args:
@@ -178,7 +177,7 @@ class RepoWalker:
             if fp.lower().endswith(ext)
         ]
 
-    def get_files_by_pattern(self, pattern: str) -> List[str]:
+    def get_files_by_pattern(self, pattern: str) -> list[str]:
         """Get files matching a glob pattern.
 
         Args:
@@ -192,7 +191,7 @@ class RepoWalker:
             if fnmatch.fnmatch(fp, pattern)
         ]
 
-    def get_files_in_directory(self, dir_path: str) -> List[str]:
+    def get_files_in_directory(self, dir_path: str) -> list[str]:
         """Get all files under a specific directory.
 
         Args:
@@ -207,7 +206,7 @@ class RepoWalker:
             if fp.startswith(dir_path) or fp == dir_path.rstrip("/")
         ]
 
-    def get_directory_tree(self, max_depth: int = 3) -> Dict:
+    def get_directory_tree(self, max_depth: int = 3) -> dict:
         """Get directory structure as a nested dict.
 
         Args:
@@ -219,7 +218,7 @@ class RepoWalker:
         if self._dir_structure is not None:
             return self._dir_structure
 
-        tree: Dict = {}
+        tree: dict = {}
         for fp in self.file_paths:
             parts = fp.split(os.sep)
             current = tree
@@ -235,7 +234,7 @@ class RepoWalker:
         self._dir_structure = tree
         return tree
 
-    def get_language_distribution(self) -> Dict[str, int]:
+    def get_language_distribution(self) -> dict[str, int]:
         """Get file count by programming language.
 
         Returns:
@@ -288,7 +287,7 @@ class RepoWalker:
             ".gql": "GraphQL",
         }
 
-        distribution: Dict[str, int] = defaultdict(int)
+        distribution: dict[str, int] = defaultdict(int)
         for ext, count in self.extensions.items():
             language = EXTENSION_TO_LANGUAGE.get(ext, ext.lstrip(".").upper())
             distribution[language] += count

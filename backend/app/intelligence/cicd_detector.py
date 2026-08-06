@@ -4,12 +4,10 @@ Detects CI/CD providers from configuration files.
 Uses the shared RepoWalker for efficient filesystem access.
 """
 
-from typing import List, Optional
 
 from app.intelligence._async_util import run_async
-from app.intelligence.models import CIInfo
 from app.intelligence.base_detector import BaseDetector, DetectorResult
-
+from app.intelligence.models import CIInfo
 
 CI_PROVIDERS = {
     "github_actions": {
@@ -62,8 +60,8 @@ class CICDDetector(BaseDetector):
             DetectorResult with CI/CD info.
         """
         import os as _os
-        providers: List[str] = []
-        config_files: List[str] = []
+        providers: list[str] = []
+        config_files: list[str] = []
 
         for provider, config in CI_PROVIDERS.items():
             found = False
@@ -89,7 +87,7 @@ class CICDDetector(BaseDetector):
                 for ci_file in config["files"]:
                     matching_files = [
                         fp for fp in walker.file_paths
-                        if fp.endswith("/" + ci_file) or fp.endswith(_os.sep + ci_file) or fp == ci_file
+                        if fp.endswith(("/" + ci_file, _os.sep + ci_file)) or fp == ci_file
                     ]
                     if matching_files:
                         providers.append(provider)
@@ -108,7 +106,7 @@ class CICDDetector(BaseDetector):
 
 
 # Legacy function interface for backward compatibility
-def detect_ci(repo_path: str) -> Optional[CIInfo]:
+def detect_ci(repo_path: str) -> CIInfo | None:
     """Detect CI/CD in a repository (legacy interface)."""
     from app.intelligence.repo_walker import RepoWalker
 

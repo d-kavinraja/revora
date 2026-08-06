@@ -43,7 +43,7 @@ def _extract_review_id(job) -> str | None:
             if review_id:
                 uuid.UUID(review_id)
                 return review_id
-        except Exception:  # noqa: BLE001, S110
+        except Exception:
             pass
 
     delivery_id = getattr(job, "delivery_id", None)
@@ -54,7 +54,7 @@ def _extract_review_id(job) -> str | None:
             candidate = str(delivery_id).rsplit("-", 1)[1]
             uuid.UUID(candidate)
             return candidate
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
     return None
 
@@ -112,7 +112,7 @@ async def _mark_review_failed(job, error_str: str):
 
                 await mark_execution_final(db, uuid.UUID(review_id), "failed")
                 await db.commit()
-    except Exception as inner_e:  # noqa: BLE001
+    except Exception as inner_e:
         logger.error(f"Failed to update Review status to failed: {inner_e}")
 
 
@@ -232,7 +232,7 @@ async def process_job(job_row) -> bool:
                 logger.info(
                     f"Created failure check run for MODE 3: {check_run.get('id')}"
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.error(f"Failed to create MODE 3 check run: {e}")
             # Mark review as failed in DB
             try:
@@ -256,7 +256,7 @@ async def process_job(job_row) -> bool:
 
                     await mark_execution_final(db, db_review.id, "failed")
                     await db.commit()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.error(f"Failed to mark review as failed for MODE 3: {e}")
             return False
 
@@ -398,7 +398,7 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
                         logger.info(
                             f"Marked PR #{pr_number} active review(s) as cancelled (job was cancelled)"
                         )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Failed to cancel PR-scoped review for cancelled job: {e}")
         return
     try:
@@ -413,7 +413,7 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
             await mark_execution_final(session, uuid.UUID(review_id), "cancelled")
             await session.commit()
             logger.info(f"Marked review {review_id} as cancelled (job was cancelled)")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"Failed to mark review {review_id} as cancelled: {e}")
 
 
@@ -639,7 +639,7 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                                 job_status.updated_at = datetime.now(UTC)
                                 s.add(job_status)
                                 await s.commit()
-                    except Exception:  # noqa: BLE001, S110
+                    except Exception:
                         pass  # Ignore temporary DB errors in watcher
 
             watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))

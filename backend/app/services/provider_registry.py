@@ -1,16 +1,16 @@
-﻿from typing import List, Optional, Dict
-from sqlalchemy.ext.asyncio import AsyncSession
+﻿
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.provider import ProviderRegistry
 
 
 class ProviderRegistryService:
-    async def get_all(self, db: AsyncSession) -> List[ProviderRegistry]:
+    async def get_all(self, db: AsyncSession) -> list[ProviderRegistry]:
         result = await db.execute(select(ProviderRegistry).order_by(ProviderRegistry.priority))
         return list(result.scalars().all())
 
-    async def get_enabled(self, db: AsyncSession) -> List[ProviderRegistry]:
+    async def get_enabled(self, db: AsyncSession) -> list[ProviderRegistry]:
         result = await db.execute(
             select(ProviderRegistry)
             .where(ProviderRegistry.is_enabled == True)
@@ -18,19 +18,19 @@ class ProviderRegistryService:
         )
         return list(result.scalars().all())
 
-    async def get_by_slug(self, db: AsyncSession, slug: str) -> Optional[ProviderRegistry]:
+    async def get_by_slug(self, db: AsyncSession, slug: str) -> ProviderRegistry | None:
         result = await db.execute(
             select(ProviderRegistry).where(ProviderRegistry.slug == slug)
         )
         return result.scalars().first()
 
-    async def get_by_name(self, db: AsyncSession, name: str) -> Optional[ProviderRegistry]:
+    async def get_by_name(self, db: AsyncSession, name: str) -> ProviderRegistry | None:
         result = await db.execute(
             select(ProviderRegistry).where(ProviderRegistry.name == name)
         )
         return result.scalars().first()
 
-    async def update(self, db: AsyncSession, slug: str, data: dict) -> Optional[ProviderRegistry]:
+    async def update(self, db: AsyncSession, slug: str, data: dict) -> ProviderRegistry | None:
         provider = await self.get_by_slug(db, slug)
         if not provider:
             return None
@@ -42,7 +42,7 @@ class ProviderRegistryService:
         await db.refresh(provider)
         return provider
 
-    async def toggle(self, db: AsyncSession, slug: str, enabled: bool) -> Optional[ProviderRegistry]:
+    async def toggle(self, db: AsyncSession, slug: str, enabled: bool) -> ProviderRegistry | None:
         provider = await self.get_by_slug(db, slug)
         if not provider:
             return None
@@ -52,7 +52,7 @@ class ProviderRegistryService:
         await db.refresh(provider)
         return provider
 
-    async def get_capabilities_matrix(self, db: AsyncSession) -> Dict[str, List[str]]:
+    async def get_capabilities_matrix(self, db: AsyncSession) -> dict[str, list[str]]:
         providers = await self.get_all(db)
         matrix = {}
         for p in providers:
@@ -68,7 +68,7 @@ class ProviderRegistryService:
             matrix[p.slug] = caps
         return matrix
 
-    async def get_litellm_provider_map(self, db: AsyncSession) -> Dict[str, str]:
+    async def get_litellm_provider_map(self, db: AsyncSession) -> dict[str, str]:
         providers = await self.get_enabled(db)
         return {p.name: p.litellm_provider for p in providers}
 

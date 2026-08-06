@@ -1,5 +1,5 @@
-﻿import re
-import logging
+﻿import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,6 @@ def sanitize_messages(messages: list) -> list:
             content = sanitize_text(content)
             # Check for injection
             if detect_injection(content):
-                logger.warning(f"Prompt injection detected in message")
+                logger.warning("Prompt injection detected in message")
         sanitized.append({**msg, "content": content})
     return sanitized

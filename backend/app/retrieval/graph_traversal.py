@@ -1,7 +1,7 @@
 from collections import deque
-from typing import Callable, Optional
+from collections.abc import Callable
 
-from app.indexing.models import CodeGraph, GraphNode, GraphEdge
+from app.indexing.models import CodeGraph, GraphEdge, GraphNode
 
 
 class GraphTraversalEngine:
@@ -15,7 +15,7 @@ class GraphTraversalEngine:
         start_node_id: str,
         max_depth: int = 0,
         max_nodes: int = 0,
-        node_filter: Optional[Callable[[GraphNode], bool]] = None,
+        node_filter: Callable[[GraphNode], bool] | None = None,
     ) -> list[tuple[str, int]]:
         actual_depth = max_depth or self._max_depth
         actual_max = max_nodes or self._max_nodes
@@ -51,7 +51,7 @@ class GraphTraversalEngine:
         start_node_id: str,
         max_depth: int = 0,
         max_nodes: int = 0,
-        node_filter: Optional[Callable[[GraphNode], bool]] = None,
+        node_filter: Callable[[GraphNode], bool] | None = None,
     ) -> list[tuple[str, int]]:
         actual_depth = max_depth or self._max_depth
         actual_max = max_nodes or self._max_nodes
@@ -88,7 +88,7 @@ class GraphTraversalEngine:
         graph: CodeGraph,
         start_node_id: str,
         k: int = 2,
-        node_filter: Optional[Callable[[GraphNode], bool]] = None,
+        node_filter: Callable[[GraphNode], bool] | None = None,
     ) -> list[tuple[str, int]]:
         return self.bfs(
             graph,
@@ -102,7 +102,7 @@ class GraphTraversalEngine:
         graph: CodeGraph,
         start_node_id: str,
         end_node_id: str,
-    ) -> Optional[list[str]]:
+    ) -> list[str] | None:
         if start_node_id == end_node_id:
             return [start_node_id]
 
@@ -126,7 +126,7 @@ class GraphTraversalEngine:
         self,
         graph: CodeGraph,
         start_node_id: str,
-        edge_type_filter: Optional[str] = None,
+        edge_type_filter: str | None = None,
         reverse: bool = False,
     ) -> list[str]:
         visited: set[str] = set()

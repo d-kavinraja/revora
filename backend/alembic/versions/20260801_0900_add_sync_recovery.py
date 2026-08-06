@@ -17,9 +17,11 @@ Automatic recovery & repository synchronization after server downtime:
   manual / webhook / recovery) with reason, status and per-repo counts.
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+from alembic import op
 
 revision = "20260801_0900"
 down_revision = "20260731_1200"

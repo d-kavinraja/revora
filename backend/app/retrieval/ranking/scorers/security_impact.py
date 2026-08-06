@@ -1,8 +1,7 @@
-from typing import Optional
 
+from app.indexing.models import RepositoryIndex
 from app.retrieval.models import RetrievedContext
 from app.retrieval.ranking.base_scorer import BaseScorer
-from app.indexing.models import RepositoryIndex
 
 SECURITY_KEYWORDS = [
     "auth", "login", "password", "token", "jwt", "oauth",
@@ -26,7 +25,7 @@ class SecurityImpactScorer(BaseScorer):
     async def score(
         self,
         context: RetrievedContext,
-        index: Optional[RepositoryIndex] = None,
+        index: RepositoryIndex | None = None,
     ) -> float:
         file_path = context.file_path
         content_lower = context.content.lower()

@@ -2,6 +2,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_upload_size: int = 10 * 1024 * 1024): # 10MB default
         super().__init__(app)

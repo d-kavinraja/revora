@@ -1,6 +1,6 @@
-from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -8,7 +8,6 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.services.usage_tracker import usage_tracker
-from fastapi import HTTPException
 
 router = APIRouter()
 
@@ -29,12 +28,12 @@ async def require_usage_enabled():
 async def list_requests(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key_id: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -48,12 +47,12 @@ async def list_requests(
 
 @router.get("/errors")
 async def get_errors(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key_id: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -66,12 +65,12 @@ async def get_errors(
 
 @router.get("/latency")
 async def get_latency(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key_id: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -84,12 +83,12 @@ async def get_latency(
 
 @router.get("/features")
 async def get_feature_usage(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key_id: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),
@@ -102,12 +101,12 @@ async def get_feature_usage(
 
 @router.get("/providers")
 async def get_provider_comparison(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key_id: Optional[str] = None,
-    repo_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key_id: str | None = None,
+    repo_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_usage_enabled),

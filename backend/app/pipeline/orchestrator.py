@@ -9,36 +9,34 @@ BYOK Architecture:
 - No provider fallback, no key cycling, no model switching.
 """
 
+import logging
 import time
 import uuid
-import logging
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.db.session import AsyncSessionLocal
-from app.models.review import Review
-from app.models.github import PullRequest, Repository
-from app.sse.emitter import SSEEmitter
-from app.sse.events import EventType
-from app.intelligence.engine import intelligence_engine
-from app.indexing.indexer import repository_indexer
-from app.knowledge.knowledge_store import knowledge_store
-from app.retrieval.engine import retrieval_engine
-from app.retrieval.models import RetrievalConfig
-from app.retrieval.init import initialize_retrieval_engine
-from app.retrieval.token_budget_engine import token_budget_engine
-from app.prompt_engine.builder import prompt_builder
-from app.prompt_engine.models import ReviewType
-from app.orchestrator.orchestrator import llm_orchestrator
-from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING
-from app.verification.engine import verification_engine
-from app.github_review.generator import github_review_generator
-from app.security.content_guard import sanitize_input
-from app.github.client import github_client
 from app.ai.git_utils import GitService
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
+from app.github.client import github_client
+from app.github_review.generator import github_review_generator
+from app.indexing.indexer import repository_indexer
+from app.intelligence.engine import intelligence_engine
+from app.knowledge.knowledge_store import knowledge_store
+from app.models.github import PullRequest, Repository
+from app.models.review import Review
+from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING
+from app.orchestrator.orchestrator import llm_orchestrator
+from app.prompt_engine.builder import prompt_builder
+from app.prompt_engine.models import ReviewType
+from app.retrieval.engine import retrieval_engine
+from app.retrieval.init import initialize_retrieval_engine
+from app.retrieval.models import RetrievalConfig
+from app.security.content_guard import sanitize_input
+from app.sse.emitter import SSEEmitter
+from app.sse.events import EventType
+from app.verification.engine import verification_engine
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +64,10 @@ class ReviewPipeline:
         diff_content: str,
         user_id: str,
         provider: str = "gemini",
-        model: str = None,
-        clone_url: str = None,
-        token: str = None,
-        api_key_id: str = None,
+        model: str | None = None,
+        clone_url: str | None = None,
+        token: str | None = None,
+        api_key_id: str | None = None,
         config_source: str = CONFIG_SOURCE_ROUTING,
     ) -> dict:
         """Execute the full review pipeline.
@@ -801,7 +799,7 @@ class ReviewPipeline:
                 db_review = res.scalars().first()
                 if db_review:
                     db_review.status = "completed"
-                    db_review.completed_at = datetime.now(timezone.utc)
+                    db_review.completed_at = datetime.now(UTC)
                     db_review.summary = review_summary_body
                     if not review_summary_body:
                         logger.warning(f"Review {review_id} completed without a summary body")
@@ -816,7 +814,9 @@ class ReviewPipeline:
 
                     # Mark this run's execution as completed
                     try:
-                        from app.services.review_execution_service import mark_execution_final
+                        from app.services.review_execution_service import (
+                            mark_execution_final,
+                        )
                         duration_ms = None
                         if db_review.started_at and db_review.completed_at:
                             duration_ms = int(
@@ -873,10 +873,11 @@ class ReviewPipeline:
         # --- 2. Record usage in a FRESH session ---
         if settings.USAGE_ANALYTICS_ENABLED:
             try:
+                import uuid as _uuid
+
+                from app.services.cost_estimator import cost_estimator
                 from app.services.token_manager import token_manager
                 from app.services.usage_tracker import usage_tracker
-                from app.services.cost_estimator import cost_estimator
-                import uuid as _uuid
 
                 input_tok  = llm_response.input_tokens  or 0
                 output_tok = llm_response.output_tokens or 0
@@ -927,7 +928,7 @@ class ReviewPipeline:
                             input_tokens=input_tok,
                             output_tokens=output_tok,
                             cost_usd=input_cost + output_cost,
-                            started_at=datetime.now(timezone.utc),
+                            started_at=datetime.now(UTC),
                             was_fallback=llm_response.is_fallback,
                             api_key_id=api_key_id,
                             review_id=review_id,
@@ -950,10 +951,12 @@ class ReviewPipeline:
                 if db_review:
                     db_review.status = "failed"
                     db_review.error_message = error_message
-                    db_review.completed_at = datetime.now(timezone.utc)
+                    db_review.completed_at = datetime.now(UTC)
                     await db.commit()
                     try:
-                        from app.services.review_execution_service import mark_execution_final
+                        from app.services.review_execution_service import (
+                            mark_execution_final,
+                        )
                         await mark_execution_final(db, review_id, "failed")
                         await db.commit()
                     except Exception as e:

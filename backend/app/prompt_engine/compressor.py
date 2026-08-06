@@ -4,11 +4,10 @@ Applies compression strategies to reduce token usage while preserving
 essential information for the review.
 """
 
-import logging
 import hashlib
-from typing import Dict, List, Optional, Set
+import logging
 
-from app.prompt_engine.models import PromptSection, PromptBuildRequest
+from app.prompt_engine.models import PromptSection
 from app.prompt_engine.token_budget import estimate_tokens
 
 logger = logging.getLogger(__name__)
@@ -19,9 +18,9 @@ class PromptCompressor:
 
     async def compress_sections(
         self,
-        sections: Dict[str, PromptSection],
+        sections: dict[str, PromptSection],
         budget: int,
-    ) -> Dict[str, PromptSection]:
+    ) -> dict[str, PromptSection]:
         """Apply compression strategies to fit within budget.
 
         Strategies:
@@ -35,7 +34,7 @@ class PromptCompressor:
 
         compressed = {}
 
-        seen_hashes: Set[str] = set()
+        seen_hashes: set[str] = set()
 
         for name, section in sections.items():
             if name == "system_instructions":
@@ -107,7 +106,6 @@ class PromptCompressor:
         result = []
         in_code_block = False
         code_lines = []
-        code_indent = 0
 
         for line in lines:
             if line.strip().startswith("```"):

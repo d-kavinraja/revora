@@ -3,22 +3,24 @@
 Extracted from duplicated logic in webhooks.py and orchestrator.py.
 """
 
-import uuid
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.models.github import Installation, Repository, PullRequest
+from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
-from app.models.provider import ProviderRegistry
+from app.orchestrator.models import (
+    CONFIG_SOURCE_NONE,
+    CONFIG_SOURCE_REPO,
+    CONFIG_SOURCE_ROUTING,
+)
 from app.services.api_key_service import api_key_service
 from app.services.provider_registry import provider_registry_service
-from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING, CONFIG_SOURCE_NONE
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,8 @@ _TERMINAL_REVIEW_STATUSES = {"completed", "failed", "cancelled", "stopped", "tim
 async def resolve_provider_config(
     db_session,
     user_id: str,
-    db_repo: Optional[Repository] = None,
-) -> tuple[Optional[str], Optional[str], Optional[str], str]:
+    db_repo: Repository | None = None,
+) -> tuple[str | None, str | None, str | None, str]:
     """Resolve LLM provider, model, and API key ID.
 
     Priority: repo settings > user routing preferences.
@@ -144,7 +146,7 @@ async def get_or_create_review_records(
     delivery_id: str,
     status: str = "running",
     find_existing_pending: bool = True,
-    existing_review_id: Optional[str] = None,
+    existing_review_id: str | None = None,
 ) -> tuple[Review, Repository, PullRequest, str]:
     """Get or create Installation, Repository, PullRequest, and Review records.
 
@@ -236,7 +238,7 @@ async def get_or_create_review_records(
                 if db_review and db_review.status != status and db_review.status not in _TERMINAL_REVIEW_STATUSES:
                     db_review.status = status
                     if status == "running":
-                        db_review.started_at = datetime.now(timezone.utc)
+                        db_review.started_at = datetime.now(UTC)
                     review_transitioned = True
                     await db.commit()
                     await db.refresh(db_review)
@@ -258,7 +260,7 @@ async def get_or_create_review_records(
                 if db_review.status != status:
                     db_review.status = status
                     if status == "running":
-                        db_review.started_at = datetime.now(timezone.utc)
+                        db_review.started_at = datetime.now(UTC)
                     review_transitioned = True
                     await db.commit()
                     await db.refresh(db_review)
@@ -288,7 +290,7 @@ async def get_or_create_review_records(
             db_review = Review(
                 pr_id=db_pr.id,
                 status=status,
-                started_at=datetime.now(timezone.utc) if status == "running" else None,
+                started_at=datetime.now(UTC) if status == "running" else None,
             )
             db.add(db_review)
             review_transitioned = True
@@ -298,8 +300,11 @@ async def get_or_create_review_records(
 
         # Track this run as a ReviewExecution (queued → running).
         try:
-            from app.services.review_execution_service import mark_execution_running, create_execution
             from app.models.execution import ReviewExecution as ExecModel
+            from app.services.review_execution_service import (
+                create_execution,
+                mark_execution_running,
+            )
             existing_exec_id = await db.scalar(
                 select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
             )
@@ -354,16 +359,16 @@ async def record_usage_stats(
     output_tokens: int,
     latency_ms: float,
     is_fallback: bool = False,
-    api_key_id: Optional[str] = None,
+    api_key_id: str | None = None,
 ):
     """Record token usage for analytics and usage dashboards."""
     if not settings.USAGE_ANALYTICS_ENABLED:
         logger.debug("[usage] USAGE_ANALYTICS_ENABLED=False, skipping record_usage_stats")
         return
     try:
+        from app.services.cost_estimator import cost_estimator
         from app.services.token_manager import token_manager
         from app.services.usage_tracker import usage_tracker
-        from app.services.cost_estimator import cost_estimator
 
         input_cost = round(cost_estimator.estimate(provider, input_tokens, 0), 8)
         output_cost = round(cost_estimator.estimate(provider, 0, output_tokens), 8)
@@ -408,7 +413,7 @@ async def record_usage_stats(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     cost_usd=input_cost + output_cost,
-                    started_at=datetime.now(timezone.utc),
+                    started_at=datetime.now(UTC),
                     was_fallback=is_fallback,
                     review_id=review_id,
                 )

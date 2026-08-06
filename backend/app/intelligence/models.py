@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -12,8 +11,8 @@ class LanguageInfo:
 @dataclass
 class FrameworkInfo:
     name: str
-    version: Optional[str] = None
-    config_file: Optional[str] = None
+    version: str | None = None
+    config_file: str | None = None
 
 
 @dataclass
@@ -25,22 +24,22 @@ class ArchitectureInfo:
 
 @dataclass
 class DatabaseInfo:
-    type: Optional[str] = None  # postgresql, mysql, sqlite, mongodb, redis
-    orm: Optional[str] = None  # sqlalchemy, prisma, typeorm, drizzle, mongoose
+    type: str | None = None  # postgresql, mysql, sqlite, mongodb, redis
+    orm: str | None = None  # sqlalchemy, prisma, typeorm, drizzle, mongoose
     indicators: list[str] = field(default_factory=list)
 
 
 @dataclass
 class PackageManagerInfo:
-    name: Optional[str] = None  # npm, yarn, pnpm, pip, poetry, cargo, go mod
-    lock_file: Optional[str] = None
-    config_file: Optional[str] = None
+    name: str | None = None  # npm, yarn, pnpm, pip, poetry, cargo, go mod
+    lock_file: str | None = None
+    config_file: str | None = None
 
 
 @dataclass
 class CIInfo:
-    provider: Optional[str] = None  # github_actions, gitlab_ci, circleci, jenkins
-    config_file: Optional[str] = None
+    provider: str | None = None  # github_actions, gitlab_ci, circleci, jenkins
+    config_file: str | None = None
     workflows: list[str] = field(default_factory=list)
 
 
@@ -61,7 +60,7 @@ class SecurityInfo:
 
 @dataclass
 class TestingInfo:
-    framework: Optional[str] = None  # jest, pytest, go test, vitest, mocha
+    framework: str | None = None  # jest, pytest, go test, vitest, mocha
     has_tests: bool = False
     test_count: int = 0
     test_directories: list[str] = field(default_factory=list)
@@ -71,17 +70,17 @@ class TestingInfo:
 class IntelligenceResult:
     languages: list[LanguageInfo] = field(default_factory=list)
     frameworks: list[FrameworkInfo] = field(default_factory=list)
-    architecture: Optional[ArchitectureInfo] = None
-    database: Optional[DatabaseInfo] = None
-    package_manager: Optional[PackageManagerInfo] = None
-    testing: Optional[TestingInfo] = None
-    build: Optional[BuildInfo] = None
-    ci: Optional[CIInfo] = None
-    security: Optional[SecurityInfo] = None
+    architecture: ArchitectureInfo | None = None
+    database: DatabaseInfo | None = None
+    package_manager: PackageManagerInfo | None = None
+    testing: TestingInfo | None = None
+    build: BuildInfo | None = None
+    ci: CIInfo | None = None
+    security: SecurityInfo | None = None
     repo_type: str = "standard"  # monorepo, microservices, standard
-    cloud_provider: Optional[str] = None  # aws, gcp, azure, vercel, netlify
-    caching: Optional[str] = None  # redis, memcached, none
-    queues: Optional[str] = None  # rabbitmq, sqs, celery, bull
+    cloud_provider: str | None = None  # aws, gcp, azure, vercel, netlify
+    caching: str | None = None  # redis, memcached, none
+    queues: str | None = None  # rabbitmq, sqs, celery, bull
     confidence: float = 0.0
 
     def to_dict(self) -> dict:

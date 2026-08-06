@@ -1,8 +1,6 @@
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 from datetime import datetime
-
 
 # ── Execution Modes ──────────────────────────────────────────────
 # These string constants define how an execution context was resolved.
@@ -20,7 +18,7 @@ class ExecutionContext:
     """
     provider: str
     model: str
-    api_key_id: Optional[str] = None
+    api_key_id: str | None = None
     source: str = CONFIG_SOURCE_REPO      # How this context was resolved
     resolved_at: float = field(default_factory=time.time)
 
@@ -52,7 +50,7 @@ class UsageStats:
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
     latency_ms: float = 0.0
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
 
 
 @dataclass

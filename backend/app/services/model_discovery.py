@@ -1,16 +1,17 @@
 import asyncio
 import hashlib
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import litellm
+
 from app.ai.model_registry import CanonicalModel, canonical_registry
 
 logger = logging.getLogger(__name__)
 
 # Global in-memory cache for model discovery.
-_MODEL_CACHE: Dict[str, Dict[str, Any]] = {}
+_MODEL_CACHE: dict[str, dict[str, Any]] = {}
 CACHE_TTL = timedelta(hours=1)
 
 def _hash_api_key(raw_key: str) -> str:
@@ -73,7 +74,7 @@ class ModelDiscoveryEngine:
     ENTERPRISE_TERMS = ["enterprise", "provisioned"]
 
     @classmethod
-    async def get_available_models(cls, provider: str, raw_key: str) -> List[Dict[str, Any]]:
+    async def get_available_models(cls, provider: str, raw_key: str) -> list[dict[str, Any]]:
         """
         Get enriched model metadata for a specific provider and API key.
         Uses caching to prevent excessive API calls.
@@ -85,12 +86,12 @@ class ModelDiscoveryEngine:
         # Check cache using hashed key
         cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
         cached = _MODEL_CACHE.get(cache_key)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if cached and (now - cached["timestamp"]) < CACHE_TTL:
             return cached["models"]
 
-        live_models: List[str] = []
+        live_models: list[str] = []
         try:
             if litellm_prov == "nvidia_nim":
                 try:
@@ -194,9 +195,7 @@ class ModelDiscoveryEngine:
 
         # Normalization logic
         if provider_lower == "gemini":
-            if model_name.startswith("gemini/"):
-                canonical_model_name = model_name.split("/", 1)[1]
-            elif model_name.startswith("models/"):
+            if model_name.startswith(("gemini/", "models/")):
                 canonical_model_name = model_name.split("/", 1)[1]
             litellm_model_name = f"gemini/{canonical_model_name}"
         elif provider_lower == "anthropic" and not model_name.startswith("anthropic/"):
@@ -265,7 +264,7 @@ class ModelDiscoveryEngine:
             supports_vision=supports_vision,
             supports_reasoning="reasoning" in m_lower or "o1" in m_lower,
             status=status,
-            validation_timestamp=datetime.now(timezone.utc).isoformat()
+            validation_timestamp=datetime.now(UTC).isoformat()
         )
 
     @classmethod
@@ -314,8 +313,7 @@ class ModelDiscoveryEngine:
         if not litellm_prov:
             return
         cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
-        if cache_key in _MODEL_CACHE:
-            del _MODEL_CACHE[cache_key]
+        _MODEL_CACHE.pop(cache_key, None)
 
 model_discovery_engine = ModelDiscoveryEngine()
 

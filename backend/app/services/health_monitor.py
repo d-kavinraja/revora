@@ -1,10 +1,10 @@
 ﻿import uuid
-from typing import Optional, Dict, List
-from datetime import datetime, timezone, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, datetime
 
-from app.models.health import ProviderHealth, FailoverLog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.health import FailoverLog, ProviderHealth
 
 CIRCUIT_BREAKER_THRESHOLD = 5  # failures before opening
 CIRCUIT_BREAKER_TIMEOUT = 300  # seconds before half_open
@@ -64,18 +64,18 @@ class HealthMonitor:
         health.error_rate = min(1.0, health.error_rate + 0.1)
         health.consecutive_failures += 1
         health.last_error = error_msg
-        health.last_error_at = datetime.now(timezone.utc)
+        health.last_error_at = datetime.now(UTC)
 
         # Proper state transitions
         if health.circuit_state == self.HALF_OPEN:
             # Half Open -> Open (recovery failed)
             health.circuit_state = self.OPEN
-            health.circuit_opened_at = datetime.now(timezone.utc)
+            health.circuit_opened_at = datetime.now(UTC)
             health.status = "down"
         elif health.consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
             # Closed -> Open (too many failures)
             health.circuit_state = self.OPEN
-            health.circuit_opened_at = datetime.now(timezone.utc)
+            health.circuit_opened_at = datetime.now(UTC)
             health.status = "down"
         elif health.consecutive_failures >= 2:
             health.status = "degraded"
@@ -92,7 +92,7 @@ class HealthMonitor:
         if health.circuit_state == self.OPEN:
             # Check if timeout has passed
             if health.circuit_opened_at:
-                elapsed = (datetime.now(timezone.utc) - health.circuit_opened_at).total_seconds()
+                elapsed = (datetime.now(UTC) - health.circuit_opened_at).total_seconds()
                 if elapsed > CIRCUIT_BREAKER_TIMEOUT:
                     # Transition to half_open to test recovery
                     health.circuit_state = self.HALF_OPEN
@@ -107,14 +107,14 @@ class HealthMonitor:
 
         return True
 
-    async def get_all_health(self, db: AsyncSession) -> List[ProviderHealth]:
+    async def get_all_health(self, db: AsyncSession) -> list[ProviderHealth]:
         result = await db.execute(select(ProviderHealth))
         return list(result.scalars().all())
 
-    async def get_health(self, db: AsyncSession, provider: str) -> Optional[ProviderHealth]:
+    async def get_health(self, db: AsyncSession, provider: str) -> ProviderHealth | None:
         return await self.get_or_create(db, provider)
 
-    async def get_circuit_breakers(self, db: AsyncSession) -> Dict[str, str]:
+    async def get_circuit_breakers(self, db: AsyncSession) -> dict[str, str]:
         healths = await self.get_all_health(db)
         return {h.provider: h.circuit_state for h in healths}
 
@@ -140,7 +140,7 @@ class HealthMonitor:
         await db.refresh(log)
         return log
 
-    async def get_recent_failovers(self, db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> List[FailoverLog]:
+    async def get_recent_failovers(self, db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> list[FailoverLog]:
         result = await db.execute(
             select(FailoverLog)
             .where(FailoverLog.user_id == user_id)

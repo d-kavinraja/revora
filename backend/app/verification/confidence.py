@@ -1,5 +1,7 @@
-from typing import Dict, Any, List
+from typing import Any
+
 from app.verification.validators import ValidationResult
+
 
 class ConfidenceEngine:
     """Calculates confidence scores based on validation results."""
@@ -9,7 +11,7 @@ class ConfidenceEngine:
     THRESHOLD_NEEDS_REVIEW = 0.50
     THRESHOLD_GOOD = 0.70
     
-    def calculate(self, finding: Dict[str, Any], validation_results: List[ValidationResult]) -> float:
+    def calculate(self, finding: dict[str, Any], validation_results: list[ValidationResult]) -> float:
         """
         Returns a confidence score between 0.0 and 1.0.
         """
