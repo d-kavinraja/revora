@@ -1,5 +1,5 @@
-# ruff: noqa: F821
 from typing import TYPE_CHECKING
+
 """Complexity analysis engine.
 
 Analyzes cyclomatic complexity of code files using pattern matching.
