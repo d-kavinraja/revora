@@ -10,6 +10,7 @@ class VerifiedFinding:
     issue_type: str  # bug, security, performance, style, improvement
     severity: str  # critical, high, medium, low
     description: str
+    title: str = ""
     suggestion: list[str] = field(default_factory=list)
     confidence: float = 0.0
     is_verified: bool = False
@@ -37,6 +38,7 @@ class VerificationResult:
                     "line_number": f.line_number,
                     "issue_type": f.issue_type,
                     "severity": f.severity,
+                    "title": f.title,
                     "description": f.description,
                     "suggestion": f.suggestion,
                     "confidence": f.confidence,

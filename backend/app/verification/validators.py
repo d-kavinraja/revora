@@ -55,6 +55,20 @@ class RepositoryValidator(BaseValidator):
             )
 
         if not os.path.exists(full_path):
+            # Check if this file is in the PR's changed files before penalizing.
+            # Path mismatches (relative vs absolute) are common but the file is real.
+            changed_files = context.get("changed_files", [])
+            basename = os.path.basename(file_path)
+            is_changed = any(
+                file_path in cf or basename == os.path.basename(cf)
+                for cf in changed_files
+            )
+            if is_changed:
+                return ValidationResult(
+                    is_valid=True,
+                    evidence=f"File {file_path} not found at exact path but is in the PR changed files",
+                    score_modifier=-0.1,
+                )
             return ValidationResult(
                 is_valid=False,
                 evidence=f"File {file_path} does not exist in repository.",
