@@ -152,7 +152,7 @@ class RepoWalker:
                     f"reading first {max_chars} chars"
                 )
 
-            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:  # noqa: ASYNC230
                 content = f.read(max_chars)
 
             self._file_contents[cache_key] = content

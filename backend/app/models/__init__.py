@@ -68,6 +68,7 @@ __all__ = [
     "ReviewEvidenceModel",
     "ReviewExecution",
     "ReviewExecutionContext",
+    "ReviewJob",
     "ReviewMetrics",
     "ReviewTimeline",
     "SyncRun",

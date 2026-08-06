@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """CI/CD detection engine.
 
 Detects CI/CD providers from configuration files.

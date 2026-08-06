@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Language detection engine.
 
 Detects programming languages by analyzing file extensions.

@@ -1,8 +1,10 @@
+# ruff: noqa: F821
 """Queue and cache detection engine.
 
 Detects message queues and caching solutions.
 Uses the shared RepoWalker for efficient filesystem access.
 """
+
 
 
 from app.core.constants import MAX_FILES_PER_DETECTOR

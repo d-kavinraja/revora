@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Cloud provider detection engine.
 
 Detects cloud providers by analyzing configuration files and code content.

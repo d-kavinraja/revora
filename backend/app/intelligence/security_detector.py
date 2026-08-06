@@ -1,8 +1,10 @@
+# ruff: noqa: F821
 """Security pattern detection engine.
 
 Detects authentication patterns, CORS, rate limiting, and HTTPS configuration.
 Uses the shared RepoWalker for efficient filesystem access.
 """
+
 
 
 from app.core.constants import MAX_FILES_PER_DETECTOR

@@ -1,10 +1,11 @@
 import logging
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
 
 class RetrievalFallback:
-    STRATEGIES = [
+    STRATEGIES: ClassVar[list[str]] = [
         "graph_retrieval",
         "knowledge_base",
         "static_analysis",

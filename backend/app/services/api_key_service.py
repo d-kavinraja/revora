@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -74,7 +74,7 @@ class ApiKeyService:
         for k in keys:
             try:
                 decrypted.append((k.id, encryption_service.decrypt(k.encrypted_key)))
-            except Exception:
+            except Exception:  # noqa: S112
                 continue
         return decrypted
 

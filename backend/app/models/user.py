@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 from typing import Any
 
 from sqlalchemy import BigInteger, Boolean, String

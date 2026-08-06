@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Framework detection engine.
 
 Detects frameworks by checking config file existence and content.

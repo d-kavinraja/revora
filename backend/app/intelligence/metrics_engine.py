@@ -5,7 +5,13 @@ file counts, line counts, size distribution, etc.
 """
 
 
+from typing import TYPE_CHECKING
+
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 
 class MetricsEngine(BaseDetector):

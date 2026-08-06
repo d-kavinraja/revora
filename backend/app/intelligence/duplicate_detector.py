@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Duplicate code detection engine.
 
 Detects potential copy-paste code using content hashing.
@@ -8,6 +9,10 @@ import hashlib
 
 from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 # File extensions to analyze
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".rb"}

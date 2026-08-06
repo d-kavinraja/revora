@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 import litellm
 
@@ -25,7 +25,7 @@ class ModelDiscoveryEngine:
     and caches the results.
     """
 
-    LITELLM_PROVIDER_MAP = {
+    LITELLM_PROVIDER_MAP: ClassVar[dict[str, str]] = {
         "gemini": "gemini",
         "openai": "openai",
         "anthropic": "anthropic",
@@ -41,7 +41,7 @@ class ModelDiscoveryEngine:
     }
 
     # Terms indicating a model is not a chat model
-    NON_CHAT_EXCLUSIONS = [
+    NON_CHAT_EXCLUSIONS: ClassVar[list[str]] = [
         "dall-e", "whisper", "embedding", "embed", "tts", "veo", "imagen", "lyria",
         "moderation", "speech", "audio", "video", "clip", "rerank",
         "image-generation", "image-preview", "1024-x", "1536-x", "512-x",
@@ -49,7 +49,7 @@ class ModelDiscoveryEngine:
         "reward", "guardrail", "bge-", "deplot", "diffusion"
     ]
 
-    RECOMMENDED_MODELS = [
+    RECOMMENDED_MODELS: ClassVar[list[str]] = [
         "meta/llama-3.3-70b-instruct",
         "deepseek-ai/deepseek-v4-flash",
         "minimaxai/minimax-m3",
@@ -64,14 +64,14 @@ class ModelDiscoveryEngine:
 
     # Gemini 2.0/2.5 models have severe rate limits on both free and paid tiers
     # Excluding them entirely - users should use 1.5, 3, or Gemma models
-    GEMINI_RATE_LIMITED_MODELS = [
+    GEMINI_RATE_LIMITED_MODELS: ClassVar[list[str]] = [
         "gemini-2.0", "gemini-2.5", "gemini-2.0-flash", "gemini-2.5-flash",
         "gemini-2.5-pro", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite",
     ]
 
-    DEPRECATED_TERMS = ["-001", "-0314", "-0613", "legacy", "deprecated"]
-    PREVIEW_TERMS = ["preview", "exp-", "experimental", "rc", "alpha", "beta"]
-    ENTERPRISE_TERMS = ["enterprise", "provisioned"]
+    DEPRECATED_TERMS: ClassVar[list[str]] = ["-001", "-0314", "-0613", "legacy", "deprecated"]
+    PREVIEW_TERMS: ClassVar[list[str]] = ["preview", "exp-", "experimental", "rc", "alpha", "beta"]
+    ENTERPRISE_TERMS: ClassVar[list[str]] = ["enterprise", "provisioned"]
 
     @classmethod
     async def get_available_models(cls, provider: str, raw_key: str) -> list[dict[str, Any]]:

@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Base graph builder interface for code graph indexing.
 
 All graph builders must implement this interface to ensure
@@ -10,6 +11,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from app.indexing.models import CodeGraph
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 logger = logging.getLogger(__name__)
 

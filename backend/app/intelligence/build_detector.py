@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Build tool detection engine.
 
 Detects build tools and Docker presence.

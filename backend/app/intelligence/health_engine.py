@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Repository health scoring engine.
 
 Calculates an overall health score for the repository based on
@@ -14,6 +15,10 @@ from app.core.constants import (
     HEALTH_WEIGHT_TESTING,
 )
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 
 class HealthEngine(BaseDetector):

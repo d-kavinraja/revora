@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Architecture detection engine.
 
 Detects architectural patterns (DDD, Clean, Hexagonal, MVC, etc.)

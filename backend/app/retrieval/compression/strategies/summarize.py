@@ -75,7 +75,7 @@ class SummarizeStrategy(BaseCompressionStrategy):
             source=context.source,
             metadata={**context.metadata, "compressed": True, "compression_strategy": "heuristic_summary"},
             compressed=True,
-            original_tokens=current_tokens,
+            original_tokens=context.token_count,
         )
 
     async def _summarize_llm(

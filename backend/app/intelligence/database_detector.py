@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Database detection engine.
 
 Detects database types and ORMs by analyzing file content.

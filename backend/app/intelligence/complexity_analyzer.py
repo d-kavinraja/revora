@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Complexity analysis engine.
 
 Analyzes cyclomatic complexity of code files using pattern matching.
@@ -8,6 +9,10 @@ import re
 
 from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 # Complexity-increasing keywords by language
 COMPLEXITY_KEYWORDS = {

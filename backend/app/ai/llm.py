@@ -87,7 +87,8 @@ class LLMService:
                     if isinstance(response.get("error"), dict)
                     else str(response.get("error", ""))
                 )
-                raise RuntimeError(
+                raise RuntimeError(  # noqa: TRY004
+
                     f"LLM provider returned error response: {error_msg or response}"
                 )
 
@@ -110,47 +111,56 @@ class LLMService:
 
         except TimeoutError:
             raise RuntimeError(
+
                 f"LLM call to {provider}/{display_model} timed out after {effective_timeout}s"
             )
         except Exception as e:
             error_str = str(e).lower()
             if "overloaded" in error_str or "503" in error_str or "busy" in error_str or "capacity" in error_str:
                 raise RuntimeError(
+
                     f"NVIDIA NIM server is temporarily overloaded for '{display_model}'. "
                     f"NVIDIA's API is experiencing high traffic. Please try again in a moment."
                 ) from e
             elif "429" in error_str or "rate" in error_str or "quota" in error_str:
                 raise RuntimeError(
+
                     f"Rate limit exceeded for model '{display_model}'. "
                     f"Provider error: {e}"
                 ) from e
             elif "401" in error_str or "unauthorized" in error_str:
                 raise RuntimeError(
+
                     f"Invalid API key for {provider}. "
                     f"Please update your API key in Settings > API Keys."
                 ) from e
             elif "403" in error_str or "forbidden" in error_str:
                 raise RuntimeError(
+
                     f"API access denied for model '{display_model}'. "
                     f"Your API key may not have the required permissions."
                 ) from e
             elif "404" in error_str or "not found" in error_str:
                 raise RuntimeError(
+
                     f"Model '{display_model}' not found or deprecated by the provider. "
                     f"Please check your provider settings."
                 ) from e
             elif "timeout" in error_str:
                 raise RuntimeError(
+
                     f"AI provider timed out for '{display_model}'. "
                     f"Please try again later."
                 ) from e
             elif "connection" in error_str or "connect" in error_str:
                 raise RuntimeError(
+
                     f"Unable to connect to AI provider '{provider}'. "
                     f"Please check your network connection."
                 ) from e
             else:
                 raise RuntimeError(
+
                     f"AI provider error for '{display_model}': {e}"
                 ) from e
 

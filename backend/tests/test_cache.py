@@ -42,8 +42,8 @@ class TestMemoryCache:
     async def test_ttl_expiry(self):
         cache = MemoryCache(max_size=100, default_ttl=0)
         await cache.set("key1", "value1", ttl_seconds=0)
-        import time
-        time.sleep(0.1)
+        import asyncio
+        await asyncio.sleep(0.1)
         result = await cache.get("key1")
         assert result is None
 

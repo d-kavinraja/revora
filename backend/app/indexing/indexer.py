@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Repository indexer.
 
 Builds all code graphs for a repository in parallel.

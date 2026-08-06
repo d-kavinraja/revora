@@ -5,9 +5,14 @@ Uses deterministic pattern matching without LLM calls.
 """
 
 import re
+from typing import TYPE_CHECKING
 
 from app.core.constants import MAX_FILES_PER_DETECTOR
 from app.intelligence.base_detector import BaseDetector, DetectorResult
+
+if TYPE_CHECKING:
+    from app.intelligence.repo_walker import RepoWalker
+
 
 # Secret patterns: (name, regex pattern, severity)
 SECRET_PATTERNS = [

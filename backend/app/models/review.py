@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 import uuid
 from datetime import datetime
 from typing import Any

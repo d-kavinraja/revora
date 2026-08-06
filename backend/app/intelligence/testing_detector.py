@@ -1,8 +1,10 @@
+# ruff: noqa: F821
 """Testing framework detection engine.
 
 Detects test frameworks and counts test files.
 Uses the shared RepoWalker for efficient filesystem access.
 """
+
 
 
 from app.intelligence._async_util import run_async

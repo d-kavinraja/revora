@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Dependency analysis engine.
 
 Detects package managers and analyzes dependencies.

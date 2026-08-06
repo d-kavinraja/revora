@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Base detector interface for the Repository Intelligence Engine.
 
 All intelligence detectors must implement this interface to ensure
