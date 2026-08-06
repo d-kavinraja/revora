@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { checkHealth } from '@/lib/api';
 
-const POLL_INTERVAL_MS = 10000; // Check every 10s during normal usage
-const RECOVERY_INTERVAL_MS = 3000; // Check every 3s when server is down
+const POLL_INTERVAL_MS = 15000;     // Check every 15s during normal usage
+const RECOVERY_INTERVAL_MS = 3000;  // Check every 3s when server is down
+const FAILURE_THRESHOLD = 3;        // Require 3 consecutive failures before showing overlay
 
 // Pages where we should NOT show the overlay or redirect (splash page itself, OAuth callback)
 const EXCLUDED_PATHS = ['/waking-up', '/auth/callback'];
@@ -15,12 +17,15 @@ type ServerState = 'unknown' | 'alive' | 'down';
 export function ServerStatusOverlay() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [serverState, setServerState] = useState<ServerState>('unknown');
   const [dots, setDots] = useState('');
   const [recovering, setRecovering] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isInitialMount = useRef(true);
+  const wasDown = useRef(false);
+  const failureCount = useRef(0);
 
   const isExcluded = EXCLUDED_PATHS.some(p => pathname === p || pathname.startsWith('/auth'));
 
@@ -40,22 +45,31 @@ export function ServerStatusOverlay() {
     const runCheck = async () => {
       const alive = await checkHealth();
       if (alive) {
-        if (serverState === 'down') {
-          // Server just recovered — show "recovered" state briefly before hiding
+        failureCount.current = 0; // Reset on success
+        if (serverState === 'down' || wasDown.current) {
+          // Server just recovered — show "recovered" state briefly, then auto-refresh all data
+          wasDown.current = false;
           setRecovering(true);
           setTimeout(() => {
             setServerState('alive');
             setRecovering(false);
-          }, 2000);
+            // Invalidate ALL cached queries so pages re-fetch fresh data automatically
+            queryClient.invalidateQueries();
+            // Force Next.js router cache refresh
+            router.refresh();
+          }, 1500);
         } else {
           setServerState('alive');
         }
       } else {
+        failureCount.current += 1;
         if (isInitialMount.current) {
           // If the server is asleep on the very first page load of any route, redirect to splash page
           router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
-        } else {
-          // If the server drops mid-session, just show the blur overlay
+        } else if (failureCount.current >= FAILURE_THRESHOLD) {
+          // Only show the overlay after FAILURE_THRESHOLD consecutive failures
+          // This prevents false positives when the backend is busy with a long LLM call
+          wasDown.current = true;
           setServerState('down');
         }
       }

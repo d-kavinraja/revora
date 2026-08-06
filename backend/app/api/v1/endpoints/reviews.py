@@ -11,6 +11,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
+from app.models.execution import ReviewExecution
 from app.models.user import User
 from app.queue.models import JobStatus
 from app.services.github_service import github_service
@@ -100,6 +101,19 @@ async def list_reviews(
     )
     reviews = reviews_result.scalars().all()
 
+    # Batch fetch the latest execution for each review to populate stats (for badges) and error messages
+    execution_map = {}
+    if reviews:
+        review_ids = [r.id for r in reviews]
+        execs_result = await db.execute(
+            select(ReviewExecution)
+            .where(ReviewExecution.review_id.in_(review_ids))
+            .order_by(ReviewExecution.review_id, ReviewExecution.execution_number.desc())
+        )
+        for ex in execs_result.scalars().all():
+            if ex.review_id not in execution_map:
+                execution_map[ex.review_id] = ex
+
     # Build a map of (repo.full_name, pr.pr_number, installation_id) for GitHub batch lookup
     pr_github_lookup: dict[str, dict[str, Any]] = {}
     repo_map = {r.id: r for r in repos}
@@ -172,15 +186,24 @@ async def list_reviews(
             else "unknown"
         )
 
+        latest_exec = execution_map.get(review.id)
+        
+        stats = latest_exec.stats.copy() if latest_exec and latest_exec.stats else {}
+        if latest_exec:
+            if latest_exec.provider:
+                stats["provider"] = stats.get("provider") or latest_exec.provider
+            if latest_exec.model:
+                stats["model"] = stats.get("model") or latest_exec.model
+        
         result.append(
             {
                 "id": str(review.id),
                 "status": review.status,
-                "summary": review.summary,
-                "stats": review.stats or {},
+                "summary": latest_exec.summary if latest_exec else None,
+                "stats": stats,
                 "started_at": _fmt_dt(review.started_at),
                 "completed_at": _fmt_dt(review.completed_at),
-                "error_message": review.error_message,
+                "error_message": latest_exec.error_message if latest_exec else None,
                 "created_at": _fmt_dt(review.created_at),
                 "github_pr_state": gh_state,
                 "pr_has_active_review": review.pr_id in active_pr_ids,
@@ -285,17 +308,29 @@ async def get_review(
         except Exception:
             gh_state = "unknown"
 
-    from app.services.review_execution_service import get_latest_execution
+    from app.services.review_execution_service import get_latest_execution, get_latest_completed_execution
     current_execution = await get_latest_execution(db, review.id)
+    last_completed = await get_latest_completed_execution(db, review.id)
+
+    # Use the completed execution's data for display if the current one is still running, queued, failed, or cancelled
+    use_last_completed = current_execution and current_execution.status in ("queued", "running", "pending", "failed", "cancelled") and last_completed
+    display_execution = last_completed if use_last_completed else current_execution
+
+    stats = display_execution.stats.copy() if display_execution and display_execution.stats else {}
+    if display_execution:
+        if display_execution.provider:
+            stats["provider"] = stats.get("provider") or display_execution.provider
+        if display_execution.model:
+            stats["model"] = stats.get("model") or display_execution.model
 
     return {
         "id": str(review.id),
         "status": review.status,
-        "summary": review.summary,
-        "stats": review.stats or {},
+        "summary": display_execution.summary if display_execution else None,
+        "stats": stats,
         "started_at": _fmt_dt(review.started_at),
         "completed_at": _fmt_dt(review.completed_at),
-        "error_message": review.error_message,
+        "error_message": current_execution.error_message if current_execution else None,
         "created_at": _fmt_dt(review.created_at),
         "github_pr_state": gh_state,
         "pr_has_active_review": pr_has_active,
@@ -319,12 +354,35 @@ async def get_review(
         "repository": repo_info,
         "current_execution": (
             {
+                "id": str(current_execution.id),
                 "execution_number": current_execution.execution_number,
                 "status": current_execution.status,
                 "provider": current_execution.provider,
                 "model": current_execution.model,
+                "summary": current_execution.summary,
+                "stats": current_execution.stats or {},
+                "error_message": current_execution.error_message,
+                "duration_ms": current_execution.duration_ms,
+                "started_at": _fmt_dt(current_execution.started_at),
+                "completed_at": _fmt_dt(current_execution.completed_at),
             }
             if current_execution
+            else None
+        ),
+        "last_completed_execution": (
+            {
+                "id": str(last_completed.id),
+                "execution_number": last_completed.execution_number,
+                "status": last_completed.status,
+                "provider": last_completed.provider,
+                "model": last_completed.model,
+                "summary": last_completed.summary,
+                "stats": last_completed.stats or {},
+                "duration_ms": last_completed.duration_ms,
+                "started_at": _fmt_dt(last_completed.started_at),
+                "completed_at": _fmt_dt(last_completed.completed_at),
+            }
+            if last_completed
             else None
         ),
     }
@@ -357,11 +415,11 @@ async def cancel_review(
     await db.execute(
         update(Review)
         .where(Review.id == rid)
-        .values(status="cancelled", error_message="Cancelled by user")
+        .values(status="cancelled")
     )
     from app.services.review_execution_service import mark_execution_final
 
-    await mark_execution_final(db, rid, "cancelled")
+    await mark_execution_final(db, rid, "cancelled", error_message="Cancelled by user")
 
     if pr:
         # 2a. Cancel the background job for THIS review.

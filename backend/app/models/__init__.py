@@ -1,6 +1,5 @@
 from app.models.api_key import ApiKey
 from app.models.audit import AuditLog
-from app.models.exec_context import ReviewExecutionContext
 from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.health import ApiKeyHealth, FailoverLog, ProviderHealth
@@ -67,7 +66,6 @@ __all__ = [
     "ReviewEvent",
     "ReviewEvidenceModel",
     "ReviewExecution",
-    "ReviewExecutionContext",
     "ReviewJob",
     "ReviewMetrics",
     "ReviewTimeline",

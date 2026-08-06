@@ -170,6 +170,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
   const pr = review.pull_request;
   const reviewProvider = ((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
+  
+  const summaryProvider = (review.stats as Record<string, string>)?.provider || 'gemini';
+  const summaryProviderLower = summaryProvider.toLowerCase();
 
   const providerMeta: Record<string, { label: string; gradient: string }> = {
     gemini: { label: 'Gemini AI Review', gradient: 'from-blue-500 to-brand' },
@@ -180,6 +183,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     deepseek: { label: 'DeepSeek Review', gradient: 'from-sky-500 to-blue-600' },
   };
   const meta = providerMeta[reviewProvider] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
+  const summaryMeta = providerMeta[summaryProviderLower] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
   const repo = review.repository;
   const duration =
     review.started_at && review.completed_at
@@ -378,12 +382,12 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
             <div className="shrink-0 flex items-center justify-center">
-              <ProviderIcon slug={reviewProvider} size={24} />
+              <ProviderIcon slug={summaryProviderLower} size={24} />
             </div>
             <div>
-              <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+              <span className="text-sm font-semibold text-foreground">{summaryMeta.label}</span>
               <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
-                {((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider)} &middot; {((review as any).current_execution?.model || (review.stats as Record<string, string>)?.model)}
+                {(review.stats as Record<string, string>)?.provider || 'gemini'} &middot; {(review.stats as Record<string, string>)?.model || 'unknown'}
               </span>
             </div>
           </div>

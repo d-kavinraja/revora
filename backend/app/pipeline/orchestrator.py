@@ -1028,18 +1028,6 @@ class ReviewPipeline:
                 if db_review:
                     db_review.status = "completed"
                     db_review.completed_at = datetime.now(UTC)
-                    db_review.summary = review_summary_body
-                    if not review_summary_body:
-                        logger.warning(
-                            f"Review {review_id} completed without a summary body"
-                        )
-                    db_review.stats = {
-                        "provider": llm_response.provider,
-                        "model": llm_response.model,
-                        "verified_findings": verified.verified_count,
-                        "rejected_findings": verified.rejected_count,
-                        **metrics,
-                    }
                     await db.commit()
 
                     # Mark this run's execution as completed
@@ -1070,6 +1058,14 @@ class ReviewPipeline:
                                 "output": output_tok,
                                 "total": input_tok + output_tok,
                             },
+                            summary=review_summary_body,
+                            stats={
+                                "provider": llm_response.provider,
+                                "model": llm_response.model,
+                                "verified_findings": verified.verified_count,
+                                "rejected_findings": verified.rejected_count,
+                                **metrics,
+                            }
                         )
                         await db.commit()
                     except Exception as e:
@@ -1077,59 +1073,6 @@ class ReviewPipeline:
                             f"Failed to mark execution completed for review {review_id}: {e}"
                         )
 
-                    # Ensure execution context exists (for reviews created outside webhook flow)
-                    try:
-                        from app.models.exec_context import ReviewExecutionContext
-
-                        ctx_res = await db.execute(
-                            select(ReviewExecutionContext).where(
-                                ReviewExecutionContext.review_id == review_id
-                            )
-                        )
-                        if not ctx_res.scalars().first():
-                            pr_res = await db.execute(
-                                select(PullRequest).where(
-                                    PullRequest.id == db_review.pr_id
-                                )
-                            )
-                            pr = pr_res.scalars().first()
-                            if pr is None:
-                                logger.warning(
-                                    f"PullRequest not found for review {review_id} — skipping execution context"
-                                )
-                            else:
-                                repo_res = await db.execute(
-                                    select(Repository).where(
-                                        Repository.id == pr.repo_id
-                                    )
-                                )
-                                repo = repo_res.scalars().first()
-                                repo_settings = repo.settings or {} if repo else {}
-                                exec_ctx = ReviewExecutionContext(
-                                    review_id=review_id,
-                                    repository_full_name=(
-                                        repo.full_name if repo else "unknown"
-                                    ),
-                                    provider=llm_response.provider,
-                                    api_key_id=(
-                                        uuid.UUID(api_key_id) if api_key_id else None
-                                    ),
-                                    model=llm_response.model,
-                                    commit_sha=pr.head_sha if pr else "",
-                                    base_branch=pr.base_branch if pr else "",
-                                    head_branch=pr.head_branch if pr else "",
-                                    pr_number=pr.pr_number if pr else 0,
-                                    configuration_snapshot=repo_settings,
-                                )
-                                db.add(exec_ctx)
-                                await db.commit()
-                                logger.info(
-                                    f"Created execution context for completed review {review_id}"
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to create execution context on completion: {e}"
-                        )
         except Exception as e:
             logger.error(f"Failed to save review status: {e}")
 
@@ -1230,7 +1173,6 @@ class ReviewPipeline:
                 db_review = res.scalars().first()
                 if db_review:
                     db_review.status = "failed"
-                    db_review.error_message = error_message
                     db_review.completed_at = datetime.now(UTC)
                     await db.commit()
                     try:
@@ -1238,7 +1180,7 @@ class ReviewPipeline:
                             mark_execution_final,
                         )
 
-                        await mark_execution_final(db, review_id, "failed")
+                        await mark_execution_final(db, review_id, "failed", error_message=error_message)
                         await db.commit()
                     except Exception as e:
                         logger.warning(

@@ -1,7 +1,7 @@
 function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-surface-1 ${className ?? ''}`} style={style}>
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
+    <div className={`relative overflow-hidden rounded-xl bg-muted/50 dark:bg-surface-2 animate-pulse ${className ?? ''}`} style={style}>
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-foreground/[0.04] dark:via-white/[0.04] to-transparent" />
     </div>
   );
 }
