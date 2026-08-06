@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan: startup recovery, full sync, background sync, shutdown."""
     import sys
+
     is_testing = "pytest" in sys.modules
 
     canonical_registry.discover_models()
