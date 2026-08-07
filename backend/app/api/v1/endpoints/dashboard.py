@@ -8,6 +8,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
+from app.models.execution import ReviewExecution
 from app.models.user import User
 
 router = APIRouter()
@@ -86,8 +87,11 @@ async def get_dashboard_stats(
                 # Approximate issues caught from stats JSONB
                 # Sum bug_count + security_count + performance_count from stats
                 reviews_result = await db.execute(
-                    select(Review.stats).where(
-                        Review.pr_id.in_(pr_ids), Review.status == "completed"
+                    select(ReviewExecution.stats)
+                    .join(Review, ReviewExecution.review_id == Review.id)
+                    .where(
+                        Review.pr_id.in_(pr_ids),
+                        ReviewExecution.status == "completed"
                     )
                 )
                 for (stats_row,) in reviews_result.all():
