@@ -11,7 +11,7 @@ import asyncio
 import logging
 import uuid
 
-from litellm import completion
+from litellm import acompletion
 
 from app.ai.model_registry import canonical_registry
 from app.core.constants import LLM_DEFAULT_TIMEOUT
@@ -69,15 +69,14 @@ class LLMService:
         effective_timeout = max(timeout or 300, 300)
 
         try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    completion,
-                    model=model_to_use,
-                    messages=messages,
-                    api_key=api_key,
-                    num_retries=2,
-                ),
-                timeout=effective_timeout,
+            # Removed asyncio.wait_for to ensure the system waits as long as needed 
+            # for the AI to complete its response without failing due to artificial limits.
+            response = await acompletion(
+                model=model_to_use,
+                messages=messages,
+                api_key=api_key,
+                num_retries=2,
+                timeout=None,  # Disable LiteLLM's internal timeout
             )
 
             if isinstance(response, dict):
@@ -108,7 +107,7 @@ class LLMService:
 
         except TimeoutError:
             raise RuntimeError(
-                f"LLM call to {provider}/{display_model} timed out after {effective_timeout}s"
+                f"LLM network connection to {provider}/{display_model} timed out unexpectedly."
             )
         except Exception as e:
             error_str = str(e).lower()
@@ -141,6 +140,11 @@ class LLMService:
                 raise RuntimeError(
                     f"Model '{display_model}' not found or deprecated by the provider. "
                     f"Please check your provider settings."
+                ) from e
+            elif "410" in error_str or "end of life" in error_str or "gone" in error_str:
+                raise RuntimeError(
+                    f"Model '{display_model}' has reached its end of life and is no longer available from the provider. "
+                    f"Please select a different model."
                 ) from e
             elif "timeout" in error_str:
                 raise RuntimeError(
