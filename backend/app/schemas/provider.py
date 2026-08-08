@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ProviderRegistryRead(BaseModel):
@@ -46,4 +46,17 @@ class ProviderToggle(BaseModel):
 
 
 class ProviderCapabilities(BaseModel):
-    providers: dict[str, list[str]]
+    matrix: dict[str, list[str]]
+
+
+class DiscoveredModelRead(BaseModel):
+    id: uuid.UUID
+    provider_slug: str
+    model_id: str
+    display_name: str
+    context_window: int | None = None
+    is_free: bool
+    description: str | None = None
+    last_synced_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)

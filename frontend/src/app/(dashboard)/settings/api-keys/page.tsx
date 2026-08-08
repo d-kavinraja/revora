@@ -277,7 +277,7 @@ export default function ApiKeysSettingsPage() {
                     <option value="anthropic" disabled>Claude (Under Testing)</option>
                     <option value="groq" disabled>Groq (Under Testing)</option>
                     <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
-                    <option value="openrouter" disabled>OpenRouter (Under Testing)</option>
+                    <option value="openrouter">OpenRouter</option>
                     <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
                     <option value="ollama" disabled>Ollama (Under Testing)</option>
                     <option value="cohere" disabled>Cohere (Under Testing)</option>

@@ -11,6 +11,7 @@ from app.models.knowledge import (
     ReviewEvent,
     ReviewMetrics,
 )
+from app.models.discovered_model import DiscoveredModel
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
 from app.models.prompt import (
@@ -41,6 +42,7 @@ __all__ = [
     "ApiKeyHealth",
     "AuditLog",
     "CostBudget",
+    "DiscoveredModel",
     "FailoverLog",
     "FalsePositiveReportModel",
     "HallucinationReportModel",

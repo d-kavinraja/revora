@@ -212,6 +212,18 @@ export interface Provider {
   extra_config: Record<string, unknown>;
   created_at: string | null;
   updated_at: string | null;
+  status?: 'active' | 'archived' | 'deleted' | null;
+}
+
+export interface DiscoveredModel {
+  id: string;
+  provider_slug: string;
+  model_id: string;
+  display_name: string;
+  context_window: number | null;
+  is_free: boolean;
+  description: string | null;
+  last_synced_at: string;
 }
 
 export interface ProviderHealth {
@@ -438,6 +450,10 @@ export const api = {
     apiClient.post<Provider>(`/providers/${slug}/toggle`, { is_enabled: enabled }).then((r) => r.data),
   getProviderCapabilities: () =>
     apiClient.get<Record<string, string[]>>('/providers/capabilities').then((r) => r.data),
+  syncProviderModels: (slug: string) =>
+    apiClient.post<DiscoveredModel[]>(`/providers/${slug}/sync-models`).then((r) => r.data),
+  getProviderModels: (slug: string) =>
+    apiClient.get<DiscoveredModel[]>(`/providers/${slug}/models`).then((r) => r.data),
 
   // Usage
   getUsageSummary: (period = 'month', filters?: UsageFilters) =>

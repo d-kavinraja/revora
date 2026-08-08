@@ -272,6 +272,8 @@ class LLMService:
             model = f"xai/{model}"
         elif provider == "nvidia" and not model.startswith("nvidia_nim/"):
             model = f"nvidia_nim/{model}"
+        elif provider == "openrouter" and not model.startswith("openrouter/"):
+            model = f"openrouter/{model}"
 
         return model, None
 
