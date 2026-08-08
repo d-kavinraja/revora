@@ -83,7 +83,7 @@ export default function ProvidersPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {providers.map((provider) => {
           const caps = capabilities[provider.slug] || [];
-          const isTesting = provider.slug !== 'gemini' && provider.slug !== 'nvidia' && provider.slug !== 'nvidia_nim';
+          const isTesting = provider.slug !== 'gemini' && provider.slug !== 'nvidia' && provider.slug !== 'nvidia_nim' && provider.slug !== 'openrouter';
           return (
             <div
               key={provider.slug}

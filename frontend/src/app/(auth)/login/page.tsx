@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/toaster';
 import { InfoIcon } from '@animateicons/react/lucide';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { useThemeStore } from '@/store/useThemeStore';
 
@@ -104,6 +105,16 @@ export default function LoginPage() {
           )}
           Sign in with GitHub
         </button>
+
+        <Link
+          href="/"
+          className="w-full mt-3 h-10 bg-transparent hover:bg-surface-2 border border-transparent hover:border-border text-foreground/70 hover:text-foreground rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-all duration-150"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Home page
+        </Link>
 
         <div className="overflow-hidden w-full mt-6 border-t border-border pt-4 relative h-8 flex items-center">
           <motion.div

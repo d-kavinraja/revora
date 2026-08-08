@@ -15,6 +15,21 @@ import { SetupGuide } from '@/components/shared/setup-guide';
 import { Header } from '@/components/layout/header';
 import Waves from '@/components/ui/Waves';
 import { Footer } from '@/components/ui/footer';
+import { LogoLoop } from '@/components/ui/logo-loop';
+import { Gemini, OpenAI, Claude, DeepSeek, Groq, OpenRouter, Azure, Mistral, Cohere, Ollama } from '@lobehub/icons';
+
+const apiLogos = [
+  { node: <Gemini.Color />, title: "Google Gemini" },
+  { node: <OpenAI />, title: "OpenAI" },
+  { node: <Claude.Color />, title: "Anthropic Claude" },
+  { node: <DeepSeek.Color />, title: "DeepSeek" },
+  { node: <Groq />, title: "Groq" },
+  { node: <OpenRouter className="text-blue-500" />, title: "OpenRouter" },
+  { node: <Azure.Color />, title: "Azure OpenAI" },
+  { node: <Mistral.Color />, title: "Mistral AI" },
+  { node: <Cohere.Color />, title: "Cohere" },
+  { node: <Ollama />, title: "Ollama" },
+];
 
 const features = [
   {
@@ -106,6 +121,28 @@ export default function LandingPage() {
               </a>
             </div>
           </motion.div>
+        </section>
+
+        {/* Supported AI Models Loop */}
+        <section className="w-full overflow-hidden pb-12 pt-4">
+          <div className="max-w-7xl mx-auto px-6 mb-8 text-center">
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
+              Powered by industry-leading AI models
+            </p>
+          </div>
+          <div style={{ height: '60px', position: 'relative' }}>
+            <LogoLoop
+              logos={apiLogos}
+              speed={120}
+              direction="left"
+              logoHeight={40}
+              gap={60}
+              scaleOnHover={true}
+              fadeOut={true}
+              fadeOutColor={isLight ? '#ffffff' : '#0b0b0b'}
+              ariaLabel="Supported AI Providers"
+            />
+          </div>
         </section>
 
         {/* 3-Step Setup Guide */}

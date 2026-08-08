@@ -21,7 +21,7 @@ export function ProviderIcon({ slug, size = 24, className = '' }: { slug?: strin
     case 'anthropic': return <Claude.Color size={size} className={className} />;
     case 'deepseek': return <DeepSeek.Color size={size} className={className} />;
     case 'groq': return <Groq size={size} className={className} />;
-    case 'openrouter': return <OpenRouter size={size} className={className} />;
+    case 'openrouter': return <OpenRouter size={size} className={`text-blue-500 ${className}`} />;
     case 'azure': return <Azure.Color size={size} className={className} />;
     case 'ollama': return <Ollama size={size} className={className} />;
     case 'cohere': return <Cohere.Color size={size} className={className} />;
