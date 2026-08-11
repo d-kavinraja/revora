@@ -1,18 +1,21 @@
 import datetime
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.discovery.base import BaseDiscoveryAdapter
+from app.ai.discovery.ollama_cloud import OllamaCloudDiscoveryAdapter
 from app.ai.discovery.openrouter import OpenRouterDiscoveryAdapter
+from app.core.security import encryption_service
 from app.models.api_key import ApiKey
 from app.models.discovered_model import DiscoveredModel
-from app.core.security import encryption_service
 
 
 class DiscoveryEngineService:
     def __init__(self):
         self.adapters: dict[str, BaseDiscoveryAdapter] = {
             "openrouter": OpenRouterDiscoveryAdapter(),
+            "ollama_cloud": OllamaCloudDiscoveryAdapter(),
         }
 
     async def sync_provider_models(self, db: AsyncSession, provider_slug: str, force: bool = False) -> list[DiscoveredModel]:
@@ -55,7 +58,7 @@ class DiscoveryEngineService:
         try:
             discovered_models = await adapter.fetch_models(raw_key)
         except Exception as e:
-            raise RuntimeError(f"Failed to fetch models from {provider_slug}: {str(e)}") from e
+            raise RuntimeError(f"Failed to fetch models from {provider_slug}: {e!s}") from e
 
         if not discovered_models:
             raise RuntimeError(f"No valid/free models found for {provider_slug}")

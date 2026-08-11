@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
@@ -16,6 +16,7 @@ PROVIDER_COST_TABLE = {
     "openrouter": {"input": 0.003, "output": 0.015},  # Varies by model
     "azure_openai": {"input": 0.0025, "output": 0.01},  # Same as OpenAI
     "ollama": {"input": 0.0, "output": 0.0},  # Local, free
+    "ollama_cloud": {"input": 0.0, "output": 0.0},  # Cloud free tier, no token cost
     "cohere": {"input": 0.0015, "output": 0.002},  # Command R+
     "mistral": {"input": 0.002, "output": 0.006},  # Mistral Large
 }

@@ -87,6 +87,7 @@ export default function RoutingPage() {
       openrouter: 'OpenRouter',
       azure_openai: 'Azure OpenAI',
       ollama: 'Ollama',
+      ollama_cloud: 'Ollama Cloud',
       cohere: 'Cohere',
       mistral: 'Mistral',
       nvidia: 'NVIDIA NIM',

@@ -1,12 +1,11 @@
 # ruff: noqa: F821
 import uuid
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import JSON_TYPE, Base
+from app.db.base import Base
 
 
 class Review(Base):

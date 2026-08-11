@@ -441,9 +441,9 @@ class ReviewLifecycleService:
         rows — all of them remain visible here as history. Execution history
         (rerun/retry/restart/webhook runs) lives in review_executions.
         """
-        from app.models.execution import ReviewExecution
-
         from sqlalchemy.orm import joinedload
+
+        from app.models.execution import ReviewExecution
         reviews_result = await db.execute(
             select(Review)
             .options(joinedload(Review.pull_request))

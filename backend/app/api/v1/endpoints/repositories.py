@@ -434,9 +434,9 @@ async def get_available_models(
     """Return live LLM models available from the user's actual API keys by querying each provider endpoint."""
     import logging as _logging
 
+    from app.ai.discovery.engine import discovery_engine
     from app.core.security import encryption_service
     from app.services.model_discovery import model_discovery_engine
-    from app.ai.discovery.engine import discovery_engine
 
     logger = _logging.getLogger(__name__)
 
@@ -540,9 +540,9 @@ async def update_repository_config(
 
     # Validate model if assigned_model and assigned_key_id are provided
     if config.assigned_provider and config.assigned_model and config.assigned_key_id:
+        from app.ai.discovery.engine import discovery_engine
         from app.core.security import encryption_service
         from app.services.model_discovery import model_discovery_engine
-        from app.ai.discovery.engine import discovery_engine
 
         # Get the API key to validate access
         db_key = await api_key_service.get_by_id(db, uuid.UUID(config.assigned_key_id))

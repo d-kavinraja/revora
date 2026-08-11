@@ -203,7 +203,7 @@ export default function ApiKeysSettingsPage() {
       openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini',
       groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
       openrouter: 'OpenRouter', azure_openai: 'Azure OpenAI',
-      ollama: 'Ollama', cohere: 'Cohere', mistral: 'Mistral',
+      ollama: 'Ollama', ollama_cloud: 'Ollama Cloud', cohere: 'Cohere', mistral: 'Mistral',
       nvidia: 'NVIDIA NIM',
       nvidia_nim: 'NVIDIA NIM',
     };
@@ -279,6 +279,7 @@ export default function ApiKeysSettingsPage() {
                     <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
                     <option value="openrouter">OpenRouter</option>
                     <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
+                    <option value="ollama_cloud">Ollama Cloud</option>
                     <option value="ollama" disabled>Ollama (Under Testing)</option>
                     <option value="cohere" disabled>Cohere (Under Testing)</option>
                     <option value="mistral" disabled>Mistral (Under Testing)</option>

@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
-from app.models.execution import ReviewExecution
 from app.models.user import User
 from app.queue.models import JobStatus
 from app.services.github_service import github_service
@@ -308,7 +308,10 @@ async def get_review(
         except Exception:
             gh_state = "unknown"
 
-    from app.services.review_execution_service import get_latest_execution, get_latest_completed_execution
+    from app.services.review_execution_service import (
+        get_latest_completed_execution,
+        get_latest_execution,
+    )
     current_execution = await get_latest_execution(db, review.id)
     last_completed = await get_latest_completed_execution(db, review.id)
 

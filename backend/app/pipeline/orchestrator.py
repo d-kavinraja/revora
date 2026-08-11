@@ -24,7 +24,7 @@ from app.github_review.generator import github_review_generator
 from app.indexing.indexer import repository_indexer
 from app.intelligence.engine import intelligence_engine
 from app.knowledge.knowledge_store import knowledge_store
-from app.models.github import PullRequest, Repository
+from app.models.github import Repository
 from app.models.review import Review
 from app.orchestrator.models import CONFIG_SOURCE_REPO, CONFIG_SOURCE_ROUTING
 from app.orchestrator.orchestrator import llm_orchestrator
