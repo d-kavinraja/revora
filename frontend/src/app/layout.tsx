@@ -12,7 +12,6 @@ const inter = Inter({
 const oxanium = Oxanium({
   subsets: ["latin"],
   variable: "--font-oxanium",
-  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
