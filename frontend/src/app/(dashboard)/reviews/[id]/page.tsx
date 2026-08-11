@@ -491,7 +491,13 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                       }`}>
                         {e.status}
                       </span>
-                      {e.model && <span className="text-xs text-muted-foreground truncate">{e.model}</span>}
+                      {(e.model || e.provider) && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs uppercase tracking-wider font-semibold text-foreground/80 truncate">
+                          {e.provider && <ProviderIcon slug={e.provider} size={14} />}
+                          {e.provider && <span>{e.provider} &middot; </span>}
+                          <span>{e.model}</span>
+                        </div>
+                      )}
                       {e.duration_ms !== null && (
                         <span className="text-xs text-muted-foreground ml-auto">{Math.round(e.duration_ms / 1000)}s</span>
                       )}
