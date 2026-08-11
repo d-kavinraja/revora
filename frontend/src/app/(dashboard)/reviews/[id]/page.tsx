@@ -181,6 +181,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     grok: { label: 'Grok AI Review', gradient: 'from-gray-600 to-gray-800' },
     groq: { label: 'Groq Review', gradient: 'from-pink-500 to-red-500' },
     deepseek: { label: 'DeepSeek Review', gradient: 'from-sky-500 to-blue-600' },
+    ollama_cloud: { label: 'Ollama Cloud Review', gradient: 'from-gray-400 to-gray-600' },
   };
   const meta = providerMeta[reviewProvider] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
   const summaryMeta = providerMeta[summaryProviderLower] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };

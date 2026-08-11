@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
-from app.models.execution import ReviewExecution
 from app.models.user import User
 
 router = APIRouter()

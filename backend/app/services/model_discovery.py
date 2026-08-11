@@ -37,6 +37,7 @@ class ModelDiscoveryEngine:
         "openrouter": "openrouter",
         "azure_openai": "azure",
         "ollama": "ollama",
+        "ollama_cloud": "openai",
         "cohere": "cohere",
         "mistral": "mistral",
         "nvidia": "nvidia_nim",
@@ -172,12 +173,17 @@ class ModelDiscoveryEngine:
                         "bigcode/starcoder2-15b",
                     ]
             else:
+                api_base = None
+                if provider.lower() == "ollama_cloud":
+                    api_base = "https://ollama.com/v1"
+
                 # Query the provider's actual API endpoint
                 live_models = await asyncio.to_thread(
                     litellm.get_valid_models,
                     check_provider_endpoint=True,
                     custom_llm_provider=litellm_prov,
                     api_key=raw_key,
+                    api_base=api_base,
                 )
         except Exception as e:
             error_str = str(e).lower()
@@ -270,6 +276,8 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"azure/{canonical_model_name}"
         elif provider_lower == "ollama" and not model_name.startswith("ollama/"):
             litellm_model_name = f"ollama/{canonical_model_name}"
+        elif provider_lower == "ollama_cloud" and not model_name.startswith("openai/"):
+            litellm_model_name = f"openai/{canonical_model_name}"
         elif provider_lower == "cohere" and not model_name.startswith("cohere/"):
             litellm_model_name = f"cohere/{canonical_model_name}"
         elif provider_lower == "mistral" and not model_name.startswith("mistral/"):

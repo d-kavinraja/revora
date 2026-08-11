@@ -250,7 +250,7 @@ async def test_repo_pass_marks_removed_not_deleted(test_db, mock_user, monkeypat
         test_db, mock_user, gid=1001, full_name="test-org/repo-a"
     )
     pr = await _add_pr(test_db, repo, 1, "a" * 40)
-    review = Review(pr_id=pr.id, status="completed", summary="history")
+    review = Review(pr_id=pr.id, status="completed")
     test_db.add(review)
     await test_db.commit()
     review_id = review.id

@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.discovery.engine import discovery_engine
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.provider import (
+    DiscoveredModelRead,
     ProviderRegistryRead,
     ProviderRegistryUpdate,
     ProviderToggle,
-    DiscoveredModelRead
 )
 from app.services.provider_registry import provider_registry_service
-from app.ai.discovery.engine import discovery_engine
 
 router = APIRouter()
 

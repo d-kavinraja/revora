@@ -1,5 +1,6 @@
 from app.models.api_key import ApiKey
 from app.models.audit import AuditLog
+from app.models.discovered_model import DiscoveredModel
 from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.health import ApiKeyHealth, FailoverLog, ProviderHealth
@@ -11,7 +12,6 @@ from app.models.knowledge import (
     ReviewEvent,
     ReviewMetrics,
 )
-from app.models.discovered_model import DiscoveredModel
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
 from app.models.prompt import (

@@ -7,7 +7,6 @@ BYOK Principle: This service uses EXACTLY the key and model it is given.
 No fallback, no key cycling, no provider switching.
 """
 
-import asyncio
 import logging
 import uuid
 
@@ -65,8 +64,13 @@ class LLMService:
         display_model = model
         if model_to_use.startswith("nvidia_nim/"):
             display_model = model_to_use[len("nvidia_nim/") :]
+        elif model_to_use.startswith("openai/") and provider == "ollama_cloud":
+            display_model = model_to_use[len("openai/") :]
 
-        effective_timeout = max(timeout or 300, 300)
+        # Determine custom base URL for cloud providers
+        api_base = None
+        if provider == "ollama_cloud":
+            api_base = "https://ollama.com/v1"
 
         try:
             # Removed asyncio.wait_for to ensure the system waits as long as needed 
@@ -75,6 +79,7 @@ class LLMService:
                 model=model_to_use,
                 messages=messages,
                 api_key=api_key,
+                api_base=api_base,
                 num_retries=2,
                 timeout=None,  # Disable LiteLLM's internal timeout
             )
@@ -118,8 +123,8 @@ class LLMService:
                 or "capacity" in error_str
             ):
                 raise RuntimeError(
-                    f"NVIDIA NIM server is temporarily overloaded for '{display_model}'. "
-                    f"NVIDIA's API is experiencing high traffic. Please try again in a moment."
+                    f"Provider server is temporarily overloaded for '{display_model}'. "
+                    f"The API is experiencing high traffic. Please try again in a moment."
                 ) from e
             elif "429" in error_str or "rate" in error_str or "quota" in error_str:
                 raise RuntimeError(
@@ -274,6 +279,11 @@ class LLMService:
             model = f"nvidia_nim/{model}"
         elif provider == "openrouter" and not model.startswith("openrouter/"):
             model = f"openrouter/{model}"
+        elif provider == "ollama_cloud":
+            if model.startswith("ollama/"):
+                model = model[len("ollama/"):]
+            if not model.startswith("openai/"):
+                model = f"openai/{model}"
 
         return model, None
 

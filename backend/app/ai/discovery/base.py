@@ -8,7 +8,6 @@ class BaseDiscoveryAdapter(ABC):
     @abstractmethod
     def provider_slug(self) -> str:
         """The slug of the provider this adapter belongs to (e.g. openrouter, nvidia)."""
-        pass
 
     @abstractmethod
     async def fetch_models(self, api_key: str) -> list[DiscoveredModel]:
@@ -16,4 +15,3 @@ class BaseDiscoveryAdapter(ABC):
         Fetches the models from the provider API using the supplied key.
         Returns a list of DiscoveredModel objects, without persisting them to DB yet.
         """
-        pass
