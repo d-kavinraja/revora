@@ -172,6 +172,25 @@ class ModelDiscoveryEngine:
                         "mistralai/mistral-large-2-instruct",
                         "bigcode/starcoder2-15b",
                     ]
+            elif provider.lower() == "cohere":
+                try:
+                    import httpx
+
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            "https://api.cohere.com/v2/models",
+                            headers=headers,
+                        )
+                        if resp.status_code in (200, 401, 403):
+                            data = resp.json().get("models", [])
+                            live_models = [
+                                m["name"]
+                                for m in data
+                                if isinstance(m, dict) and "name" in m and "chat" in m.get("endpoints", [])
+                            ]
+                except Exception as e:
+                    logger.warning(f"Direct Cohere API model fetch failed: {e}")
             else:
                 api_base = None
                 if provider.lower() == "ollama_cloud":
@@ -278,8 +297,8 @@ class ModelDiscoveryEngine:
             litellm_model_name = f"ollama/{canonical_model_name}"
         elif provider_lower == "ollama_cloud" and not model_name.startswith("openai/"):
             litellm_model_name = f"openai/{canonical_model_name}"
-        elif provider_lower == "cohere" and not model_name.startswith("cohere/"):
-            litellm_model_name = f"cohere/{canonical_model_name}"
+        elif provider_lower == "cohere" and not model_name.startswith("cohere_chat/"):
+            litellm_model_name = f"cohere_chat/{canonical_model_name}"
         elif provider_lower == "mistral" and not model_name.startswith("mistral/"):
             litellm_model_name = f"mistral/{canonical_model_name}"
         elif provider_lower == "nvidia" and not model_name.startswith("nvidia_nim/"):

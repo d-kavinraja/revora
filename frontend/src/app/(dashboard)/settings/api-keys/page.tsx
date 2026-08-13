@@ -280,8 +280,7 @@ export default function ApiKeysSettingsPage() {
                     <option value="openrouter">OpenRouter</option>
                     <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
                     <option value="ollama_cloud">Ollama Cloud</option>
-                    <option value="ollama" disabled>Ollama (Under Testing)</option>
-                    <option value="cohere" disabled>Cohere (Under Testing)</option>
+                    <option value="cohere">Cohere</option>
                     <option value="mistral" disabled>Mistral (Under Testing)</option>
                     <option value="nvidia">NVIDIA NIM</option>
                   </select>

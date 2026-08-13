@@ -146,7 +146,7 @@ class LLMService:
                     f"Model '{display_model}' not found or deprecated by the provider. "
                     f"Please check your provider settings."
                 ) from e
-            elif "410" in error_str or "end of life" in error_str or "gone" in error_str:
+            elif "410" in error_str or "end of life" in error_str or "gone" in error_str or "removed" in error_str:
                 raise RuntimeError(
                     f"Model '{display_model}' has reached its end of life and is no longer available from the provider. "
                     f"Please select a different model."
@@ -284,6 +284,11 @@ class LLMService:
                 model = model[len("ollama/"):]
             if not model.startswith("openai/"):
                 model = f"openai/{model}"
+        elif provider == "cohere":
+            if model.startswith("cohere/"):
+                model = model[len("cohere/"):]
+            if not model.startswith("cohere_chat/"):
+                model = f"cohere_chat/{model}"
 
         return model, None
 
