@@ -4,6 +4,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.discovery.base import BaseDiscoveryAdapter
+from app.ai.discovery.cohere import CohereDiscoveryAdapter
 from app.ai.discovery.ollama_cloud import OllamaCloudDiscoveryAdapter
 from app.ai.discovery.openrouter import OpenRouterDiscoveryAdapter
 from app.core.security import encryption_service
@@ -16,6 +17,7 @@ class DiscoveryEngineService:
         self.adapters: dict[str, BaseDiscoveryAdapter] = {
             "openrouter": OpenRouterDiscoveryAdapter(),
             "ollama_cloud": OllamaCloudDiscoveryAdapter(),
+            "cohere": CohereDiscoveryAdapter(),
         }
 
     async def sync_provider_models(self, db: AsyncSession, provider_slug: str, force: bool = False) -> list[DiscoveredModel]:
