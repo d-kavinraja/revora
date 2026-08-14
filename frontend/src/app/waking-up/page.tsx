@@ -142,7 +142,7 @@ function WakingUpContent() {
               </h1>
               <p className="text-zinc-300 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
                 Your Revora backend is currently offline, restarting, or waking up from sleep mode.<br />
-                This usually takes <span className="text-zinc-100 font-bold">30–60 seconds</span>.
+                This usually takes <span className="text-zinc-100 font-bold">nearly 2 minutes</span>.
               </p>
             </div>
           )}
