@@ -179,7 +179,7 @@ export default function LandingPage() {
       </main>
 
       <Footer
-        logoSrc="/icon.png"
+        logoSrc="/revora-logo.png"
         className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]"
       />
     </div>

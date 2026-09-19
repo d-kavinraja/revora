@@ -367,6 +367,17 @@ export interface LLMExecuteResponse {
   is_fallback: boolean;
 }
 
+export interface RepoGithubStats {
+  stars: number;
+  forks: number;
+  open_issues: number;
+  contributors: number;
+  owner_avatar_url: string | null;
+  homepage: string | null;
+  topics: string[];
+  watchers: number;
+}
+
 export interface UsageFilters {
   provider?: string;
   api_key_id?: string;
@@ -420,6 +431,7 @@ export const api = {
     apiClient.get<SyncRun[]>('/repositories/sync-runs', { params: { limit } }).then((r) => r.data),
   syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
   syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),
+  getRepoGithubStats: (id: string) => apiClient.get<RepoGithubStats>(`/repositories/${id}/github-stats`).then((r) => r.data),
   getApiKeys: () => apiClient.get<ApiKey[]>('/api-keys').then((r) => r.data),
   createApiKey: (data: ApiKeyCreate) => apiClient.post<ApiKey>('/api-keys', data).then((r) => r.data),
   updateApiKey: (id: string, data: ApiKeyUpdate) => apiClient.put<ApiKey>(`/api-keys/${id}`, data).then((r) => r.data),

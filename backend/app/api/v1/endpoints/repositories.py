@@ -413,6 +413,105 @@ async def sync_repository(
         raise HTTPException(status_code=500, detail=f"Failed to sync repository: {e}")
 
 
+# --- GitHub Stats Proxy ---
+
+
+@router.get("/{repo_id}/github-stats", response_model=dict[str, Any])
+async def get_repo_github_stats(
+    repo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch live GitHub stats (stars, forks, issues, contributors, avatar) for a repository.
+
+    This proxies the GitHub API request using the secure installation token
+    so the frontend never needs a personal access token.
+    """
+    try:
+        rid = uuid.UUID(repo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid repository ID")
+
+    # Verify the repo belongs to this user
+    installations_result = await db.execute(
+        select(Installation).where(Installation.user_id == current_user.id)
+    )
+    installations = installations_result.scalars().all()
+    installation_ids = [i.id for i in installations]
+
+    repo_result = await db.execute(
+        select(Repository).where(
+            Repository.id == rid,
+            Repository.installation_id.in_(installation_ids),
+        )
+    )
+    repo = repo_result.scalars().first()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    inst = next((i for i in installations if i.id == repo.installation_id), None)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Installation not found")
+
+    parts = repo.full_name.split("/")
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Invalid repository full name format.")
+    owner, repo_name = parts
+
+    try:
+        token = await github_app_auth.get_installation_token(inst.installation_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to authenticate with GitHub App: {e}")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Fetch main repo data
+        repo_res = await client.get(
+            f"https://api.github.com/repos/{owner}/{repo_name}",
+            headers=headers,
+        )
+        if not repo_res.is_success:
+            raise HTTPException(status_code=502, detail="Failed to fetch repository data from GitHub.")
+
+        gh_data = repo_res.json()
+
+        # Fetch contributor count using pagination trick (HEAD with per_page=1 then parse Link header)
+        contrib_res = await client.get(
+            f"https://api.github.com/repos/{owner}/{repo_name}/contributors?per_page=1&anon=true",
+            headers=headers,
+        )
+        contributors = 0
+        if contrib_res.is_success:
+            link_header = contrib_res.headers.get("link", "")
+            if 'rel="last"' in link_header:
+                # Extract page number from link header: ...<url?page=N>; rel="last"
+                import re
+                match = re.search(r'[?&]page=(\d+)[^>]*>;\s*rel="last"', link_header)
+                if match:
+                    contributors = int(match.group(1))
+            else:
+                # If there's no "last" link, all contributors fit on one page
+                contrib_list = contrib_res.json()
+                if isinstance(contrib_list, list):
+                    contributors = len(contrib_list)
+
+        return {
+            "stars": gh_data.get("stargazers_count", 0),
+            "forks": gh_data.get("forks_count", 0),
+            "open_issues": gh_data.get("open_issues_count", 0),
+            "contributors": contributors,
+            "owner_avatar_url": gh_data.get("owner", {}).get("avatar_url", None),
+            "homepage": gh_data.get("homepage") or None,
+            "topics": gh_data.get("topics", []),
+            "watchers": gh_data.get("watchers_count", 0),
+        }
+
+
 # --- Repository Model Configuration ---
 
 
