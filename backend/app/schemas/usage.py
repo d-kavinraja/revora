@@ -21,8 +21,29 @@ class ApiKeyRotate(BaseModel):
     api_key: str = Field(..., description="The new raw API key")
 
 
+class PerKeyValidationResult(BaseModel):
+    status: str = Field(
+        ...,
+        description="Per-credential outcome: success | failed | busy",
+        pattern="^(success|failed|busy)$",
+    )
+    message: str = Field(..., description="Frontend-safe summary message")
+    error_type: str | None = Field(
+        default=None,
+        description="Machine-readable failure category for UI/observability",
+    )
+
+
+class BulkValidationSummary(BaseModel):
+    total: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    busy: int = 0
+
+
 class BulkValidateResult(BaseModel):
-    results: dict  # key_id -> {"status": "success"|"failed", "message": str}
+    results: dict[str, PerKeyValidationResult]  # key_id -> per-key outcome
+    summary: BulkValidationSummary = BulkValidationSummary()
 
 
 class UsageSummary(BaseModel):

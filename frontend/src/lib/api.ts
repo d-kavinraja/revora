@@ -437,7 +437,17 @@ export const api = {
   rotateApiKey: (id: string, newKey: string) =>
     apiClient.post<ApiKey>(`/api-keys/${id}/rotate`, { api_key: newKey }).then((r) => r.data),
   validateAllKeys: () =>
-    apiClient.post<{ results: Record<string, { status: string; message: string }> }>('/api-keys/validate-all').then((r) => r.data),
+    apiClient.post<{
+      results: Record<string, { status: string; message: string; error_type?: string | null }>;
+      summary: { total: number; succeeded: number; failed: number; busy: number };
+    }>(
+      '/api-keys/validate-all',
+      {},
+      // Bulk validation runs bounded sequential per-key checks server-side
+      // (~22s per key worst case); use an explicit long timeout instead of
+      // the global 15s so legitimate multi-key runs don't false-timeout.
+      { timeout: 100000 },
+    ).then((r) => r.data),
   getKeyHealth: (id: string) =>
     apiClient.get<ApiKeyHealth[]>(`/api-keys/${id}/health`).then((r) => r.data),
 

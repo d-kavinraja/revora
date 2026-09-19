@@ -20,6 +20,102 @@ def _hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()[:16]
 
 
+class ProviderAuthError(Exception):
+    """Credential rejected by the provider (401/403/invalid key). Not retryable as-is."""
+
+    def __init__(self, message: str = "Provider authentication failed.", error_type: str = "authentication_error"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
+class ProviderBusyError(Exception):
+    """Provider temporarily unable to validate (429/503/timeout/network). Retryable."""
+
+    def __init__(self, message: str = "Provider is temporarily unavailable.", error_type: str = "provider_unavailable"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
+class ProviderUnavailableError(Exception):
+    """Provider returned no usable data for a non-auth, non-busy reason."""
+
+    def __init__(self, message: str = "Provider returned no usable models.", error_type: str = "provider_unavailable"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
+class ProviderConfigError(Exception):
+    """Revora-side configuration problem (unknown provider). Not retryable."""
+
+    def __init__(self, message: str = "Provider is not configured correctly.", error_type: str = "configuration_error"):
+        super().__init__(message)
+        self.error_type = error_type
+
+
+_AUTH_SIGNALS: tuple[str, ...] = (
+    "invalid_api_key",
+    "invalid api key",
+    "incorrect api key",
+    "invalid_api_key_provided",
+    "401",
+    "403",
+    "unauthorized",
+    "forbidden",
+    "permission",
+    "access denied",
+    "authentication",
+    "invalid x-api-key",
+    "invalid key",
+)
+
+_BUSY_SIGNALS: tuple[str, ...] = (
+    "429",
+    "rate_limit",
+    "rate limit",
+    "rate-limit",
+    "quota",
+    "quota_exceeded",
+    "insufficient_quota",
+    "503",
+    "502",
+    "504",
+    "service_unavailable",
+    "service unavailable",
+    "temporarily unavailable",
+    "timeout",
+    "timed out",
+    "deadline exceeded",
+    "connection reset",
+    "connection error",
+    "network",
+    "server error",
+    "internal server error",
+    "overloaded",
+    "try again",
+)
+
+
+def classify_provider_error(error: Exception) -> tuple[str, str, type]:
+    """Map a raw provider exception to (error_type, safe_message, exception_class).
+
+    Never includes raw provider output in the safe message.
+    """
+    raw = str(error).lower()
+    if any(sig in raw for sig in _AUTH_SIGNALS):
+        if "403" in raw or "forbidden" in raw or "permission" in raw:
+            return ("authorization_error", "Provider authorization failed. Check key permissions.", ProviderAuthError)
+        return ("invalid_key", "Invalid API key.", ProviderAuthError)
+    if any(sig in raw for sig in _BUSY_SIGNALS):
+        if "429" in raw or "rate" in raw:
+            return ("rate_limited", "Rate limit reached. Try again later.", ProviderBusyError)
+        if "quota" in raw:
+            return ("quota_exceeded", "Provider quota reached. Try again later.", ProviderBusyError)
+        if "timeout" in raw or "timed out" in raw or "deadline" in raw:
+            return ("timeout", "Validation timed out.", ProviderBusyError)
+        return ("provider_unavailable", "Provider is temporarily unavailable.", ProviderBusyError)
+    return ("provider_unavailable", "Provider is temporarily unavailable.", ProviderUnavailableError)
+
+
 class ModelDiscoveryEngine:
     """
     Production-grade Model Discovery Engine.
@@ -41,6 +137,15 @@ class ModelDiscoveryEngine:
         "cohere": "cohere",
         "mistral": "mistral",
         "nvidia": "nvidia_nim",
+    }
+
+    # Providers that borrow another provider's LiteLLM prefix and therefore
+    # need an explicit api_base on EVERY litellm call (model list AND quota
+    # smoke tests). Missing the base on any call silently routes to the
+    # borrowed provider's default endpoint (e.g. api.openai.com), whose 401
+    # then misreports a valid credential as invalid.
+    PROVIDER_API_BASES: ClassVar[dict[str, str]] = {
+        "ollama_cloud": "https://ollama.com/v1",
     }
 
     # Terms indicating a model is not a chat model
@@ -121,22 +226,35 @@ class ModelDiscoveryEngine:
 
     @classmethod
     async def get_available_models(
-        cls, provider: str, raw_key: str
+        cls, provider: str, raw_key: str, force_refresh: bool = False
     ) -> list[dict[str, Any]]:
         """
         Get enriched model metadata for a specific provider and API key.
         Uses caching to prevent excessive API calls.
+
+        Raises:
+            ProviderConfigError: unknown provider (Revora-side config issue).
+            ProviderAuthError: credential rejected (401/403/invalid key).
+            ProviderBusyError: transient condition (429/quota/5xx/timeout/network).
+            ProviderUnavailableError: no usable models for another reason.
+
+        Only successful, non-empty discoveries are cached. Failures are never
+        cached as success. Pass force_refresh=True for explicit user-triggered
+        revalidation (e.g. Validate All) to bypass a stale success cache.
         """
         litellm_prov = cls.LITELLM_PROVIDER_MAP.get(provider.lower())
         if not litellm_prov:
-            return []
+            raise ProviderConfigError(
+                f"Unsupported provider: {provider}.",
+                error_type="unknown_provider",
+            )
 
-        # Check cache using hashed key
+        # Check cache using hashed key (skipped on explicit refresh)
         cache_key = f"{litellm_prov}:{_hash_api_key(raw_key)}"
         cached = _MODEL_CACHE.get(cache_key)
         now = datetime.now(UTC)
 
-        if cached and (now - cached["timestamp"]) < CACHE_TTL:
+        if not force_refresh and cached and (now - cached["timestamp"]) < CACHE_TTL:
             return cached["models"]
 
         live_models: list[str] = []
@@ -151,27 +269,41 @@ class ModelDiscoveryEngine:
                             "https://integrate.api.nvidia.com/v1/models",
                             headers=headers,
                         )
-                        if resp.status_code in (200, 401, 403):
+                        if resp.status_code == 200:
                             data = resp.json().get("data", [])
                             live_models = [
                                 m["id"]
                                 for m in data
                                 if isinstance(m, dict) and "id" in m
                             ]
+                        elif resp.status_code in (401, 403):
+                            # Never fall back on auth failures: the credential
+                            # itself was rejected, not the model catalogue.
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type=(
+                                    "authorization_error"
+                                    if resp.status_code == 403
+                                    else "invalid_key"
+                                ),
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderUnavailableError):
+                    raise
                 except Exception as e:
-                    logger.warning(f"Direct NVIDIA API model fetch failed: {e}")
+                    logger.warning(f"Direct NVIDIA API model fetch failed: {type(e).__name__}")
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
 
                 if not live_models:
-                    live_models = [
-                        "meta/llama-3.3-70b-instruct",
-                        "meta/llama-3.1-70b-instruct",
-                        "meta/llama-3.1-8b-instruct",
-                        "deepseek-ai/deepseek-v4-flash",
-                        "deepseek-ai/deepseek-r1",
-                        "nvidia/llama-3.1-nemotron-70b-instruct",
-                        "mistralai/mistral-large-2-instruct",
-                        "bigcode/starcoder2-15b",
-                    ]
+                    # Empty catalogue without an auth signal is transient —
+                    # report busy rather than synthesising success from
+                    # hardcoded data or claiming the key is invalid.
+                    raise ProviderUnavailableError(
+                        "Provider returned no usable models."
+                    )
             elif provider.lower() == "cohere":
                 try:
                     import httpx
@@ -182,41 +314,75 @@ class ModelDiscoveryEngine:
                             "https://api.cohere.com/v2/models",
                             headers=headers,
                         )
-                        if resp.status_code in (200, 401, 403):
+                        if resp.status_code == 200:
                             data = resp.json().get("models", [])
                             live_models = [
                                 m["name"]
                                 for m in data
                                 if isinstance(m, dict) and "name" in m and "chat" in m.get("endpoints", [])
                             ]
+                        elif resp.status_code in (401, 403):
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type=(
+                                    "authorization_error"
+                                    if resp.status_code == 403
+                                    else "invalid_key"
+                                ),
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderUnavailableError):
+                    raise
                 except Exception as e:
-                    logger.warning(f"Direct Cohere API model fetch failed: {e}")
+                    logger.warning(f"Direct Cohere API model fetch failed: {type(e).__name__}")
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError(
+                        "Provider returned no usable models."
+                    )
             else:
-                api_base = None
-                if provider.lower() == "ollama_cloud":
-                    api_base = "https://ollama.com/v1"
+                api_base = cls.PROVIDER_API_BASES.get(provider.lower())
 
                 # Query the provider's actual API endpoint
-                live_models = await asyncio.to_thread(
-                    litellm.get_valid_models,
-                    check_provider_endpoint=True,
-                    custom_llm_provider=litellm_prov,
-                    api_key=raw_key,
-                    api_base=api_base,
-                )
-        except Exception as e:
-            error_str = str(e).lower()
-            # Rate limiting is not a permanent failure - return empty but don't cache
-            if "429" in error_str or "rate" in error_str or "quota" in error_str:
-                logger.warning(
-                    f"Rate limited during model discovery for '{provider}': {e}"
-                )
-                return []
-            logger.warning(f"Live model fetch failed for provider '{provider}': {e}")
-            return []
+                try:
+                    live_models = await asyncio.to_thread(
+                        litellm.get_valid_models,
+                        check_provider_endpoint=True,
+                        custom_llm_provider=litellm_prov,
+                        api_key=raw_key,
+                        api_base=api_base,
+                    )
+                except Exception as e:
+                    _, _, exc_cls = classify_provider_error(e)
+                    logger.warning(
+                        f"Live model fetch failed for provider '{provider}': {type(e).__name__}"
+                    )
+                    if exc_cls is ProviderAuthError:
+                        error_type, _, _ = classify_provider_error(e)
+                        raise ProviderAuthError(
+                            "Invalid API key." if error_type == "invalid_key"
+                            else "Provider authentication failed.",
+                            error_type=error_type,
+                        )
+                    if exc_cls is ProviderBusyError:
+                        error_type, _, _ = classify_provider_error(e)
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.",
+                            error_type=error_type,
+                        )
+                    raise ProviderUnavailableError(
+                        "Provider is temporarily unavailable."
+                    )
+        except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError, ProviderConfigError):
+            # Never cache failures. Propagate typed errors so callers can
+            # distinguish invalid vs busy vs unavailable.
+            raise
 
         if not live_models:
-            return []
+            raise ProviderUnavailableError("Provider returned no usable models.")
 
         enriched_models = []
         for model_name in live_models:
@@ -234,10 +400,30 @@ class ModelDiscoveryEngine:
             canonical_model = cls._enrich_model(model_name, provider)
             enriched_models.append(canonical_model)
 
-        # Run concurrent quota checks for all discovered models
+        if not enriched_models:
+            # Catalogue contained no usable chat models. The credential was
+            # accepted by the model-list endpoint, so this is not an auth
+            # failure — report unavailable rather than invalid.
+            raise ProviderUnavailableError("Provider returned no usable models.")
+
+        # Run concurrent quota checks for all discovered models.
+        # Auth rejections observed here (model list accepted the key but
+        # completions reject it, e.g. entitlement issues) must surface as
+        # auth failures, not silent empty results.
+        # Providers borrowing another provider's LiteLLM prefix (see
+        # PROVIDER_API_BASES) must pass their api_base here too, or the
+        # smoke test routes to the wrong endpoint and a valid key fails.
+        quota_api_base = cls.PROVIDER_API_BASES.get(provider.lower())
+        smoke_auth_failures = 0
+
         async def verify_and_update(c_model: CanonicalModel):
-            has_quota = await cls.verify_model_quota(c_model, raw_key)
-            c_model.accessible = has_quota
+            nonlocal smoke_auth_failures
+            accessible, saw_auth = await cls.verify_model_quota_detailed(
+                c_model, raw_key, api_base=quota_api_base
+            )
+            if not accessible and saw_auth:
+                smoke_auth_failures += 1
+            c_model.accessible = accessible
             canonical_registry.register(c_model)
             return c_model.model_dump()
 
@@ -248,6 +434,15 @@ class ModelDiscoveryEngine:
         # Filter out models that failed the quota check
         final_models = [m for m in validated_models if m["accessible"]]
 
+        if not final_models:
+            if smoke_auth_failures:
+                raise ProviderAuthError(
+                    "Invalid API key.", error_type="invalid_key"
+                )
+            raise ProviderUnavailableError(
+                "Provider returned no usable models."
+            )
+
         # Sort so recommended models appear at the top
         def get_model_priority(m: dict) -> int:
             name = m.get("canonical_model_name", "")
@@ -257,7 +452,8 @@ class ModelDiscoveryEngine:
 
         final_models.sort(key=get_model_priority)
 
-        # Update cache with hashed key
+        # Cache only successful, non-empty discoveries. Failures, busy
+        # states, and empty results are never cached as success.
         _MODEL_CACHE[cache_key] = {"timestamp": now, "models": final_models}
 
         return final_models
@@ -362,11 +558,41 @@ class ModelDiscoveryEngine:
 
     @classmethod
     async def verify_model_quota(
-        cls, canonical_model: CanonicalModel, raw_key: str
+        cls, canonical_model: CanonicalModel, raw_key: str, api_base: str | None = None
     ) -> bool:
         """
         Executes a 1-token smoke test to verify if the API key has quota for this model.
-        Returns True if successful, False if 404/unsupported.
+
+        Returns True if the model is usable, False if it is not (unsupported
+        model, or the credential was rejected with 401/403).
+
+        Transient conditions (429/503/timeout) retain the model as accessible
+        so a busy provider is not misreported as an invalid credential.
+
+        api_base must be supplied for providers that borrow another
+        provider's LiteLLM prefix (see PROVIDER_API_BASES); otherwise the
+        smoke test routes to the wrong endpoint.
+        """
+        accessible, _ = await cls.verify_model_quota_detailed(
+            canonical_model, raw_key, api_base=api_base
+        )
+        return accessible
+
+    @classmethod
+    async def verify_model_quota_detailed(
+        cls, canonical_model: CanonicalModel, raw_key: str, api_base: str | None = None
+    ) -> tuple[bool, bool]:
+        """
+        Smoke-test variant returning (accessible, saw_auth_failure).
+
+        Classification:
+          success                    -> (True, False)
+          401/403/invalid-key        -> (False, True)  -- never soft-success
+          404/not-found/unsupported  -> (False, False)
+          429/503/timeout/transient  -> (True, False)  -- retain, do not invalidate
+
+        api_base must be supplied for providers borrowing another
+        provider's prefix (see PROVIDER_API_BASES).
         """
         try:
             await asyncio.wait_for(
@@ -375,29 +601,51 @@ class ModelDiscoveryEngine:
                     model=canonical_model.litellm_model_name,
                     messages=[{"role": "user", "content": "hi"}],
                     api_key=raw_key,
+                    api_base=api_base,
                     max_tokens=1,
                     drop_params=True,
                 ),
                 timeout=5,
             )
-            return True
+            return True, False
         except Exception as e:
             error_str = str(e).lower()
+            if any(
+                sig in error_str
+                for sig in (
+                    "invalid_api_key",
+                    "invalid api key",
+                    "incorrect api key",
+                    "401",
+                    "unauthorized",
+                )
+            ) or (
+                ("403" in error_str or "forbidden" in error_str)
+                and "rate" not in error_str
+            ):
+                # Authentication/authorization rejection: the credential (or
+                # its entitlement for this model) was refused. Must NOT be
+                # treated as soft success — that would mark invalid keys valid.
+                logger.warning(
+                    f"Smoke test auth failure for {canonical_model.canonical_model_name}: {type(e).__name__}"
+                )
+                return False, True
             if (
                 "404" in error_str
                 or "not found" in error_str
                 or "unsupported" in error_str
             ):
                 logger.warning(
-                    f"Model {canonical_model.canonical_model_name} not supported: {e}"
+                    f"Model {canonical_model.canonical_model_name} not supported: {type(e).__name__}"
                 )
-                return False
+                return False, False
 
-            # If it fails due to transient 403, 429, timeout or server error, retain model as accessible
+            # Transient 429/timeout/server error: retain model as accessible
+            # so a busy provider is not misreported as an invalid credential.
             logger.info(
-                f"Smoke test soft failure for {canonical_model.canonical_model_name}: {e}"
+                f"Smoke test soft failure for {canonical_model.canonical_model_name}: {type(e).__name__}"
             )
-            return True
+            return True, False
 
     @classmethod
     async def validate_model_access(
@@ -405,8 +653,13 @@ class ModelDiscoveryEngine:
     ) -> bool:
         """
         Validates if a specific model is accessible with the given key.
+        Returns False when the provider cannot confirm access (auth failure,
+        busy provider, or unknown model) instead of raising.
         """
-        available = await cls.get_available_models(provider, raw_key)
+        try:
+            available = await cls.get_available_models(provider, raw_key)
+        except Exception:
+            return False
         for m in available:
             if model_name in [
                 m["canonical_model_name"],
@@ -427,3 +680,20 @@ class ModelDiscoveryEngine:
 
 
 model_discovery_engine = ModelDiscoveryEngine()
+
+
+async def warm_model_cache(provider: str, raw_key: str) -> None:
+    """Fire-and-forget cache warmup for background tasks.
+
+    Discovery raises typed errors (auth/busy/unavailable) instead of
+    returning []; background warmups must never propagate those — a failed
+    warmup simply leaves the cache empty for the next live lookup.
+    """
+    try:
+        await model_discovery_engine.get_available_models(provider, raw_key)
+    except Exception as e:
+        logger.debug(
+            "Background model cache warmup skipped for '%s': %s",
+            provider,
+            type(e).__name__,
+        )

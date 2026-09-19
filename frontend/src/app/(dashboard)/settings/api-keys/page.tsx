@@ -182,17 +182,56 @@ export default function ApiKeysSettingsPage() {
   };
 
   const handleValidateAll = async () => {
+    if (validatingAll) return;
+    if (keys.length === 0) {
+      toast({ title: 'No API keys to validate.', type: 'info' });
+      return;
+    }
     setValidatingAll(true);
     try {
       const res = await api.validateAllKeys();
-      const results = res.results;
-      setKeys(prev => prev.map(k => ({
-        ...k,
-        is_valid: results[k.id]?.status === 'success',
-      })));
-      toast({ title: 'All keys validated', type: 'success' });
-    } catch (err) {
-      toast({ title: 'Failed to validate keys', type: 'error' });
+      const results = res.results ?? {};
+      const summary = res.summary ?? { total: keys.length, succeeded: 0, failed: 0, busy: 0 };
+      // Merge per-key outcomes into existing state. Busy (transient)
+      // preserves the previous validity instead of marking keys invalid.
+      setKeys(prev => prev.map(k => {
+        const r = results[k.id];
+        if (!r) return k;
+        if (r.status === 'success') return { ...k, is_valid: true };
+        if (r.status === 'failed') return { ...k, is_valid: false };
+        return k;
+      }));
+      setTestResults(prev => {
+        const next = { ...prev };
+        for (const [id, r] of Object.entries(results)) {
+          next[id] = { status: r.status, message: r.message };
+        }
+        return next;
+      });
+      const parts: string[] = [];
+      if (summary.succeeded > 0) parts.push(`${summary.succeeded} valid`);
+      if (summary.failed > 0) parts.push(`${summary.failed} failed`);
+      if (summary.busy > 0) parts.push(`${summary.busy} temporarily unavailable`);
+      const detail = parts.length > 0 ? parts.join(' · ') : 'No results returned.';
+      const hasProblems = summary.failed > 0 || summary.busy > 0;
+      toast({
+        title: `Validation complete: ${detail}`,
+        type: hasProblems ? 'error' : 'success',
+      });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      if (status === 401) {
+        toast({ title: 'Session expired. Please sign in again.', description: detail, type: 'error' });
+      } else if (err?.code === 'ECONNABORTED' || (typeof err?.message === 'string' && err.message.toLowerCase().includes('timeout'))) {
+        toast({ title: 'Validation timed out. Please try again.', description: detail, type: 'error' });
+      } else if (!err?.response) {
+        toast({ title: 'Unable to reach the validation service.', description: err?.message, type: 'error' });
+      } else if (status >= 500) {
+        toast({ title: 'Validation service encountered an error. Please try again.', description: detail, type: 'error' });
+      } else {
+        toast({ title: detail || 'Validation failed. Please try again.', type: 'error' });
+      }
     } finally {
       setValidatingAll(false);
     }
@@ -400,7 +439,7 @@ export default function ApiKeysSettingsPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleTestKey(key.id)}
-                          disabled={testingKeyId === key.id}
+                          disabled={testingKeyId === key.id || validatingAll}
                           onMouseEnter={() => refreshIconRefs.current[key.id]?.startAnimation()}
                           onMouseLeave={() => refreshIconRefs.current[key.id]?.stopAnimation()}
                           className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold border border-border disabled:opacity-50"
@@ -453,7 +492,9 @@ export default function ApiKeysSettingsPage() {
                     <div className={`mt-3 p-3 border rounded-lg text-xs flex items-start gap-2 ${
                       testResult.status === 'success'
                         ? 'bg-success/10 border-success/30 text-success'
-                        : 'bg-error/10 border-error/30 text-error'
+                        : testResult.status === 'busy'
+                          ? 'bg-warning/10 border-warning/30 text-warning'
+                          : 'bg-error/10 border-error/30 text-error'
                     }`}>
                       {testResult.status === 'success' ? (
                         <CircleCheckIcon size={14} className="shrink-0 mt-0.5" />
@@ -479,7 +520,7 @@ export default function ApiKeysSettingsPage() {
                         <div className="space-y-1">
                           {keyHealth.slice(0, 5).map((h) => (
                             <div key={h.id} className="flex items-center justify-between text-xs">
-                              <span className={`font-medium ${h.status === 'healthy' ? 'text-success' : 'text-error'}`}>{h.status}</span>
+                              <span className={`font-medium ${h.status === 'healthy' ? 'text-success' : h.status === 'busy' ? 'text-warning' : 'text-error'}`}>{h.status}</span>
                               <span className="text-muted-foreground">{h.latency_ms ? `${h.latency_ms.toFixed(0)}ms` : '-'}</span>
                               <span className="text-muted-foreground">{new Date(h.checked_at).toLocaleString()}</span>
                             </div>

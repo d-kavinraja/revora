@@ -566,9 +566,18 @@ async def update_repository_config(
                 for m in db_models
             ]
         else:
-            models = await model_discovery_engine.get_available_models(
-                config.assigned_provider, raw_key
-            )
+            try:
+                models = await model_discovery_engine.get_available_models(
+                    config.assigned_provider, raw_key
+                )
+            except Exception:
+                # Discovery now raises typed errors (auth/busy/unavailable)
+                # instead of returning []. Surface as 400 so model assignment
+                # validation keeps its previous user-facing contract.
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Model '{config.assigned_model}' could not be verified with the selected API key.",
+                )
         target_model = next(
             (
                 m

@@ -225,3 +225,27 @@
   font-family: var(--font-heading);
   letter-spacing: -0.01em;
 }
+
+/*
+ * Repository card light-theme override.
+ * The repository card reuses the exact light-theme token values, scoped to
+ * the card subtree only. Under dark mode the ancestor `.dark` variables
+ * would otherwise restyle the card; re-declaring the `:root` light values
+ * here wins by cascade order and keeps the card white in every theme.
+ * Covered set = every theme variable referenced inside RepositoryCard
+ * (see repositories/page.tsx). Global theme, toggle, and all other
+ * components are unaffected.
+ */
+.repo-card-light {
+  --surface-1: oklch(0.98 0 0);
+  --surface-2: oklch(0.96 0 0);
+  --foreground: oklch(0.145 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --border: oklch(0.922 0 0);
+  --brand: oklch(0.55 0.2 265);
+  --brand-hover: oklch(0.50 0.2 265);
+  --brand-foreground: oklch(0.98 0 0);
+  --success: oklch(0.55 0.18 160);
+  color-scheme: light;
+}
