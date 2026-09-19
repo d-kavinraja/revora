@@ -367,6 +367,17 @@ export interface LLMExecuteResponse {
   is_fallback: boolean;
 }
 
+export interface RepoGithubStats {
+  stars: number;
+  forks: number;
+  open_issues: number;
+  contributors: number;
+  owner_avatar_url: string | null;
+  homepage: string | null;
+  topics: string[];
+  watchers: number;
+}
+
 export interface UsageFilters {
   provider?: string;
   api_key_id?: string;
@@ -420,6 +431,7 @@ export const api = {
     apiClient.get<SyncRun[]>('/repositories/sync-runs', { params: { limit } }).then((r) => r.data),
   syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
   syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),
+  getRepoGithubStats: (id: string) => apiClient.get<RepoGithubStats>(`/repositories/${id}/github-stats`).then((r) => r.data),
   getApiKeys: () => apiClient.get<ApiKey[]>('/api-keys').then((r) => r.data),
   createApiKey: (data: ApiKeyCreate) => apiClient.post<ApiKey>('/api-keys', data).then((r) => r.data),
   updateApiKey: (id: string, data: ApiKeyUpdate) => apiClient.put<ApiKey>(`/api-keys/${id}`, data).then((r) => r.data),
@@ -437,7 +449,17 @@ export const api = {
   rotateApiKey: (id: string, newKey: string) =>
     apiClient.post<ApiKey>(`/api-keys/${id}/rotate`, { api_key: newKey }).then((r) => r.data),
   validateAllKeys: () =>
-    apiClient.post<{ results: Record<string, { status: string; message: string }> }>('/api-keys/validate-all').then((r) => r.data),
+    apiClient.post<{
+      results: Record<string, { status: string; message: string; error_type?: string | null }>;
+      summary: { total: number; succeeded: number; failed: number; busy: number };
+    }>(
+      '/api-keys/validate-all',
+      {},
+      // Bulk validation runs bounded sequential per-key checks server-side
+      // (~22s per key worst case); use an explicit long timeout instead of
+      // the global 15s so legitimate multi-key runs don't false-timeout.
+      { timeout: 100000 },
+    ).then((r) => r.data),
   getKeyHealth: (id: string) =>
     apiClient.get<ApiKeyHealth[]>(`/api-keys/${id}/health`).then((r) => r.data),
 

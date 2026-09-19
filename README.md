@@ -39,13 +39,15 @@ By deeply integrating with GitHub via webhooks and OAuth, Revora automatically c
 
 ## Key Features
 
-- **Repository-Aware Code Review**: Automatically fetches and indexes entire repositories.
+- **Repository-Aware Code Review**: Automatically fetches and indexes entire repositories. Powered by a zero-LLM Repository Intelligence Engine (17 detectors) and an Indexer that generates 7 distinct code graphs.
 - **GitHub-Native Workflow**: Triggered entirely via GitHub Apps & Webhooks, with results published directly to PRs.
 - **Multi-Provider AI Support**: Powered by LiteLLM, dynamically routing to multiple supported LLM providers.
 - **Bring Your Own Key (BYOK)**: Zero-fallback architecture where execution strictly uses the specific user-configured API key and model per review. 
-- **Verification Engine**: Validates AI findings against actual codebase reality to reduce hallucination and false positives.
+- **Verification Engine**: Validates AI findings against actual codebase reality, assigning a deterministic Confidence Score to filter out false positives and attaching a 'Machine Verified' badge to valid findings.
 - **SSE Streaming**: Real-time review progress streaming via Server-Sent Events (SSE) to the frontend UI.
+- **Advanced Frontend Stack**: The "Observatory" dashboard is built with Next.js 16, Zustand, TailwindCSS, and incorporates heavy motion and 3D libraries (Framer Motion, GSAP, Three.js) for a premium, dynamic developer experience.
 - **Review History & Tracking**: Comprehensive history, usage, and tracking of executed reviews, stored in PostgreSQL.
+- **Note on AST Indexing**: Deep AST parsing is currently supported via fallback regex parsing, while native Tree-Sitter semantic structural parsing is in active development.
 
 ## Architecture
 

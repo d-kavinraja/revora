@@ -1,9 +1,10 @@
 'use client';
 
-import { use } from 'react';
+import React, { use } from 'react';
+import dynamic from 'next/dynamic';
 import { api, Review } from '@/lib/api';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
@@ -17,6 +18,53 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { ReviewActions } from '@/components/shared/review-actions';
 import { useReviewStream, reviewStreamUrl } from '@/lib/events';
+
+// Code blocks in AI reviews always render in the light CodeView (white,
+// GitHub-style) regardless of the portal theme. Loaded on demand so the
+// Monaco bundle stays out of the initial page load.
+const CodeView = dynamic(
+  () => import('@/components/shared/code-view').then((m) => m.CodeView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl border border-border bg-surface-1 p-4 font-mono text-xs text-muted-foreground">
+        Loading code viewer…
+      </div>
+    ),
+  },
+);
+
+function codeBlockText(children: React.ReactNode): string {
+  return React.Children.toArray(children)
+    .map((child) =>
+      typeof child === 'string'
+        ? child
+        : codeBlockText(
+            (child as React.ReactElement<{ children?: React.ReactNode }>).props
+              ?.children,
+          ),
+    )
+    .join('');
+}
+
+// Markdown renderers: fenced code blocks use the always-light CodeView;
+// inline code keeps the existing portal chip styling. `pre` renders as a
+// fragment because CodeView provides its own container.
+const markdownComponents: Components = {
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children }) => {
+    const match = /language-([\w+-]+)/.exec(className ?? '');
+    const text = codeBlockText(children).replace(/\n$/, '');
+    if (!match && !text.includes('\n')) {
+      return (
+        <code className="text-brand bg-brand/10 px-1.5 py-0.5 rounded text-sm before:content-none after:content-none">
+          {children}
+        </code>
+      );
+    }
+    return <CodeView code={text} language={match?.[1]} />;
+  },
+};
 
 type TimelineEntry = {
   id: string;
@@ -398,14 +446,13 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             prose-p:text-muted-foreground prose-p:leading-relaxed
             prose-strong:text-foreground
             prose-code:text-brand prose-code:bg-brand/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
-            prose-pre:bg-surface-2 prose-pre:border prose-pre:border-border prose-pre:rounded-xl prose-pre:text-sm
             prose-ul:text-muted-foreground prose-ol:text-muted-foreground
             prose-li:marker:text-brand
             prose-blockquote:border-l-brand prose-blockquote:text-muted-foreground
             prose-a:text-brand prose-a:no-underline hover:prose-a:underline
             prose-table:text-sm prose-th:text-foreground prose-td:text-muted-foreground prose-th:border-border prose-td:border-border
           ">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {review.summary}
             </ReactMarkdown>
           </div>

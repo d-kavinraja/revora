@@ -1,15 +1,35 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { api, Repository, ApiKey, ModelMetadata } from '@/lib/api';
+import Image from 'next/image';
+import { api, Repository, ApiKey, ModelMetadata, RepoGithubStats } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon, CircleCheckIcon } from '@animateicons/react/lucide';
-import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, Power } from 'lucide-react';
+import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, Power, GitFork, CircleDot, Users, Eye, ExternalLink } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+
+const LANG_COLORS: Record<string, string> = {
+  Python: '#3572A5',
+  TypeScript: '#2b7489',
+  JavaScript: '#f1e05a',
+  Go: '#00ADD8',
+  Rust: '#dea584',
+  Java: '#b07219',
+  'C++': '#f34b7d',
+  C: '#555555',
+  Ruby: '#701516',
+  Swift: '#ffac45',
+  Kotlin: '#A97BFF',
+  PHP: '#4F5D95',
+  'C#': '#178600',
+  Shell: '#89e051',
+  Dart: '#00B4AB',
+  Scala: '#c22d40',
+};
 
 function LangBadge({ lang }: { lang: string | null }) {
   if (!lang) return null;
@@ -39,6 +59,101 @@ function timeAgo(iso: string | null | undefined): string | null {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function formatCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
+function GithubRepoStats({ repoId }: { repoId: string }) {
+  const { data, isLoading } = useQuery<RepoGithubStats>({
+    queryKey: ['repo-github-stats', repoId],
+    queryFn: () => api.getRepoGithubStats(repoId),
+    staleTime: 5 * 60 * 1000, // cache for 5 minutes
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-4 text-xs text-muted-foreground animate-pulse">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-muted-foreground/20" />
+            <div className="w-6 h-3 rounded bg-muted-foreground/20" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+      {data.contributors > 0 && (
+        <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Contributors">
+          <Users size={13} className="text-muted-foreground" />
+          {formatCount(data.contributors)}
+        </span>
+      )}
+      <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Open Issues">
+        <CircleDot size={13} className="text-muted-foreground" />
+        {formatCount(data.open_issues)}
+      </span>
+      <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Stars">
+        <Star size={13} className="text-amber-600 fill-amber-600/50" />
+        {formatCount(data.stars)}
+      </span>
+      <span className="flex items-center gap-1 hover:text-foreground transition-colors" title="Forks">
+        <GitFork size={13} className="text-muted-foreground" />
+        {formatCount(data.forks)}
+      </span>
+      {data.homepage && (
+        <a
+          href={data.homepage}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-brand/70 hover:text-brand transition-colors"
+          title="Homepage"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink size={11} />
+          Website
+        </a>
+      )}
+    </div>
+  );
+}
+
+function GithubRepoAvatar({ repoId, fallbackName }: { repoId: string; fallbackName: string }) {
+  const { data } = useQuery<RepoGithubStats>({
+    queryKey: ['repo-github-stats', repoId],
+    queryFn: () => api.getRepoGithubStats(repoId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const initials = fallbackName.split('/')[0]?.charAt(0)?.toUpperCase() ?? '?';
+
+  if (!data?.owner_avatar_url) {
+    return (
+      <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-base font-bold text-muted-foreground shrink-0 select-none">
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-12 h-12 rounded-xl overflow-hidden border border-border shrink-0">
+      <img
+        src={data.owner_avatar_url}
+        alt={`${fallbackName.split('/')[0]} avatar`}
+        className="w-full h-full object-cover"
+        loading="lazy"
+      />
+    </div>
+  );
 }
 
 function ConfigModal({
@@ -381,6 +496,8 @@ function RepositoryCard({
   const isReviewActive = repo.active_review_status === 'queued' || repo.active_review_status === 'pending' || repo.active_review_status === 'running';
 
   const lastSyncText = timeAgo(repo.last_sync?.completed_at ?? repo.last_synced_at);
+  const [owner, repoName] = repo.full_name.split('/');
+  const langColor = repo.language ? (LANG_COLORS[repo.language] ?? '#8b949e') : null;
 
   return (
     <div
@@ -394,87 +511,117 @@ function RepositoryCard({
         reviewsRef.current?.stopAnimation();
         settingsRef.current?.stopAnimation();
       }}
-      className={`cursor-target rounded-xl border border-border bg-surface-1 hover:border-brand/25 transition-all duration-150 p-5 group flex flex-col justify-between ${removed ? 'opacity-75 hover:border-border' : ''}`}
+      className={`repo-card-light cursor-target rounded-xl border border-border bg-surface-1 hover:border-brand/25 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200 group flex flex-col ${removed ? 'opacity-75 hover:border-border' : ''}`}
     >
-      <div>
-        <div className="flex items-start justify-between mb-2 gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <FolderIcon ref={folderRef} size={18} isAnimated={false} className="text-muted-foreground group-hover:text-brand transition-colors shrink-0" />
-            <span className="font-semibold text-foreground text-sm truncate">{repo.full_name}</span>
+      {/* Card Header */}
+      <div className="p-5 flex-1 flex flex-col gap-3">
+        {/* Top Row: owner avatar + repo name */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {!removed && <GithubRepoAvatar repoId={repo.id} fallbackName={repo.full_name} />}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground font-mono">{owner}/</span>
+                <span className="font-bold text-foreground text-sm leading-tight truncate">{repoName}</span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {repo.is_private && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground border border-border/50">
+                    Private
+                  </span>
+                )}
+                {repo.status === 'permission_required' && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                    <ShieldAlert className="w-2.5 h-2.5" />
+                    Permission Required
+                  </span>
+                )}
+                {isReviewActive && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/30 animate-pulse">
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                    Review {repo.active_review_status === 'pending' ? 'Pending' : 'Running'}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {repo.status === 'permission_required' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30" title="The GitHub App installation is missing required permissions — reviews are paused until they are granted.">
-                <ShieldAlert className="w-3 h-3" />
-                Permission Required
-              </span>
-            )}
-            <LangBadge lang={repo.language} />
-            {repo.is_private && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                Private
-              </span>
-            )}
+          {/* Reviews count badge */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground shrink-0" title={`${repo.total_reviews} reviews`}>
+            <ClipboardIcon ref={reviewsRef} size={12} isAnimated={false} />
+            <span>{repo.total_reviews}</span>
           </div>
         </div>
 
-        {repo.description && (
-          <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{repo.description}</p>
+        {/* Description */}
+        {repo.description ? (
+          <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">{repo.description}</p>
+        ) : (
+          <p className="text-muted-foreground/70 text-xs italic">No description</p>
         )}
 
+        {/* Removed notice */}
         {removed && (
-          <div className="mb-2.5">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
-              Removed from Revora {timeAgo(repo.removed_at) ?? ''} — history preserved
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border self-start">
+            Removed {timeAgo(repo.removed_at) ?? ''} — history preserved
+          </span>
         )}
 
-        {isReviewActive && (
-          <div className="mb-2.5">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-              <Lock className="w-3 h-3 text-amber-400" />
-              Review {repo.active_review_status === 'pending' ? 'Pending' : 'Running'} (Locked)
-            </span>
-          </div>
-        )}
-
+        {/* Assigned model */}
         {assignedModel && !removed && (
-          <div className="mb-3">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand/10 text-brand border border-brand/20">
-              {assignedProvider && <ProviderIcon slug={assignedProvider} size={14} />}
-              {assignedProvider && (assignedProvider === 'nvidia' || assignedProvider === 'nvidia_nim' ? 'NVIDIA NIM' : (assignedProvider.charAt(0).toUpperCase() + assignedProvider.slice(1)))}: {assignedModel}{keyLabel}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand/10 text-brand border border-brand/20 self-start max-w-full truncate">
+            {assignedProvider && <ProviderIcon slug={assignedProvider} size={12} />}
+            {assignedProvider && (assignedProvider === 'nvidia' || assignedProvider === 'nvidia_nim' ? 'NVIDIA NIM' : (assignedProvider.charAt(0).toUpperCase() + assignedProvider.slice(1)))}: {assignedModel}{keyLabel}
+          </span>
+        )}
+
+        {/* GitHub Stats Row */}
+        {!removed && <GithubRepoStats repoId={repo.id} />}
+
+        {/* Language + topics row */}
+        {repo.language && (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span
+                className="w-3 h-3 rounded-full shrink-0"
+                style={{ backgroundColor: langColor ?? '#8b949e' }}
+              />
+              {repo.language}
             </span>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <ClipboardIcon ref={reviewsRef} size={14} isAnimated={false} />
-            {repo.total_reviews} reviews
-          </span>
-          {!removed && lastSyncText && (
-            <span className="hidden sm:flex items-center gap-1.5" title="Last time this repository was synchronized with GitHub">
-              <RefreshCw className="w-3 h-3" />
-              Synced {lastSyncText}
-            </span>
-          )}
-        </div>
+      {/* Card Footer - Revora Controls */}
+      {!removed && (
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-surface-2/30 rounded-b-xl">
+          {/* Left: sync time */}
+          <div className="text-xs text-muted-foreground">
+            {lastSyncText ? (
+              <span className="flex items-center gap-1.5">
+                <RefreshCw className="w-3 h-3" />
+                Synced {lastSyncText}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/70 italic">Never synced</span>
+            )}
+          </div>
 
-        {removed ? (
-          <span className="text-xs font-medium text-muted-foreground">
-            Not receiving reviews
-          </span>
-        ) : (
+          {/* Right: Controls */}
           <div className="flex items-center gap-2">
+            {/* Active indicator */}
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${repo.reviews_enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                {repo.reviews_enabled ? 'Active' : 'Off'}
+              </span>
+            </div>
+
+            {/* Configure button */}
             <button
               disabled={configuringRepoId === repo.id || syncingRepoId === repo.id || isReviewActive}
               onClick={() => onConfigure(repo)}
-              className={`p-1.5 rounded-lg transition-colors ${isReviewActive ? 'opacity-40 cursor-not-allowed text-muted-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04] cursor-pointer disabled:opacity-50'}`}
-              title={isReviewActive ? `Model configuration is locked while a review is ${repo.active_review_status} on this repository.` : "Configure model"}
+              className={`p-1.5 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-brand/60 focus-visible:outline-offset-1 ${isReviewActive ? 'opacity-40 cursor-not-allowed text-muted-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04] cursor-pointer disabled:opacity-50'}`}
+              title={isReviewActive ? `Model configuration is locked while a review is ${repo.active_review_status} on this repository.` : 'Configure model'}
             >
               {configuringRepoId === repo.id ? (
                 <LoaderIcon size={14} className="text-muted-foreground" animate />
@@ -483,10 +630,11 @@ function RepositoryCard({
               )}
             </button>
 
+            {/* Sync button */}
             <button
               disabled={syncingRepoId !== null}
               onClick={() => handleSync(repo.id)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground rounded-lg text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground rounded-lg text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-brand/60 focus-visible:outline-offset-1"
             >
               {syncingRepoId === repo.id ? (
                 <>
@@ -500,19 +648,19 @@ function RepositoryCard({
                 </>
               )}
             </button>
-
-            <div className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${repo.reviews_enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
-              <span className="text-xs text-muted-foreground">
-                {repo.reviews_enabled ? 'Active' : 'Off'}
-              </span>
-            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {removed && (
+        <div className="px-5 py-3 border-t border-border bg-surface-2/30 rounded-b-xl">
+          <span className="text-xs font-medium text-muted-foreground">Not receiving reviews</span>
+        </div>
+      )}
     </div>
   );
 }
+
 
 export default function RepositoriesPage() {
   const queryClient = useQueryClient();
