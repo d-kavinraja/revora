@@ -8,6 +8,7 @@ import { GithubIcon, ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateico
 import { useRef } from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
+import { REVORA } from "@/lib/site";
 
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
@@ -102,10 +103,10 @@ export default function LandingPage() {
             className="max-w-4xl space-y-6"
           >
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
-              The Ultimate <span className="text-foreground drop-shadow-sm">AI Code Reviewer</span>
+              Repository-Aware <span className="text-foreground drop-shadow-sm">AI Code Review</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground font-mono max-w-2xl mx-auto leading-relaxed">
-              Supercharge your engineering team with context-aware, repository-wide intelligence. Catch bugs, secure endpoints, and optimize performance before merging.
+              Revora System reviews every GitHub pull request with your whole repository in context. Catch security flaws, performance regressions and code-quality issues before they merge.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
               <a
@@ -120,6 +121,17 @@ export default function LandingPage() {
                 <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
               </a>
             </div>
+            <p className="pt-2 text-sm font-mono text-muted-foreground">
+              Open source and self-hostable.{' '}
+              <a
+                href={REVORA.github.repo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground/80 underline underline-offset-4 transition-colors hover:text-foreground"
+              >
+                Read the source on GitHub
+              </a>
+            </p>
           </motion.div>
         </section>
 
