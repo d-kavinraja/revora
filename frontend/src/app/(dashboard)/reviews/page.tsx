@@ -256,9 +256,8 @@ export default function ReviewsPage() {
 
   /* ─── PR State indicator ─── */
   const PRStateIndicator = ({ state }: { state: string }) => {
-    if (state === 'open') return null;
     if (state === 'unknown') return null;
-    const label = state === 'closed' ? 'Closed' : state === 'merged' ? 'Merged' : state;
+    const label = state === 'open' ? 'Open' : state === 'closed' ? 'Closed' : state === 'merged' ? 'Merged' : state;
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-muted text-muted-foreground border border-border ml-auto shrink-0" title={`PR is ${label}`}>
         <LockIcon size={10} />
@@ -448,8 +447,10 @@ export default function ReviewsPage() {
               <div className="flex-1 min-w-0">
                 <ReviewItem review={review} queuePosition={queuePositionMap.get(review.id)} />
               </div>
-              <PRStateIndicator state={review.github_pr_state} />
-              <ReviewActions review={review} onAction={handleLifecycleAction} isActioning={actioningReview?.id === review.id} actioningAction={actioningReview?.action ?? null} variant="compact" />
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <ReviewActions review={review} onAction={handleLifecycleAction} isActioning={actioningReview?.id === review.id} actioningAction={actioningReview?.action ?? null} variant="compact" />
+                <PRStateIndicator state={review.github_pr_state} />
+              </div>
             </div>
           ))}
           <p className="text-center text-xs text-muted-foreground pt-2">

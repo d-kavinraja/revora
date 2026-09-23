@@ -241,10 +241,10 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
   /* ─── PR State indicator ─── */
   const prState = review.github_pr_state;
-  const prStateIndicator = prState && prState !== 'open' && prState !== 'unknown' ? (
+  const prStateIndicator = prState && prState !== 'unknown' ? (
     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
       <LockIcon size={10} />
-      PR {prState === 'closed' ? 'Closed' : prState === 'merged' ? 'Merged' : prState}
+      PR {prState === 'open' ? 'Open' : prState === 'closed' ? 'Closed' : prState === 'merged' ? 'Merged' : prState}
     </span>
   ) : null;
 
