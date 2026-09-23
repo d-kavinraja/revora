@@ -285,7 +285,13 @@ async def test_recover_stale_reviews_on_startup(test_db, mock_user, monkeypatch)
     await test_db.refresh(stale)
     await test_db.refresh(backed)
     assert stale.status == "failed"
-    assert "Server restarted" in stale.error_message
+    # Error detail lives on the execution row (reviews has no error_message).
+    from app.services.review_execution_service import get_latest_execution
+
+    stale_exec = await get_latest_execution(test_db, stale.id)
+    assert stale_exec is not None
+    assert stale_exec.error_message is not None
+    assert "Server restarted" in stale_exec.error_message
     assert backed.status == "running"
 
 

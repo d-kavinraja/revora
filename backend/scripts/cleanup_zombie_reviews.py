@@ -42,32 +42,48 @@ async def cleanup():
             logger.info("No zombie reviews found.")
             return
 
+        from app.services.review_execution_service import mark_execution_final
+
         for review in zombies:
             # Do not touch reviews that still have a live job
             from app.queue.models import JobStatus, ReviewJob
 
-            job_result = await db.execute(
-                select(ReviewJob.id).where(
-                    ReviewJob.delivery_id.like(f"%-{review.id}"),
-                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+            try:
+                job_result = await db.execute(
+                    select(ReviewJob.id).where(
+                        ReviewJob.delivery_id.like(f"%-{review.id}"),
+                        ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+                    )
                 )
-            )
-            if job_result.scalars().first():
-                logger.info(f"Skipping {review.id} — job still queued/running")
-                continue
+                if job_result.scalars().first():
+                    logger.info(f"Skipping {review.id} — job still queued/running")
+                    continue
 
-            await db.execute(
-                update(Review)
-                .where(Review.id == review.id)
-                .values(
-                    status="cancelled",
+                # NOTE: reviews has no error_message column — detail goes on
+                # the latest execution row.
+                await db.execute(
+                    update(Review)
+                    .where(Review.id == review.id)
+                    .values(
+                        status="cancelled",
+                        completed_at=datetime.now(UTC),
+                    )
+                )
+                await mark_execution_final(
+                    db,
+                    review.id,
+                    "cancelled",
                     error_message="Stale queued review (job never completed) — marked cancelled by cleanup",
-                    completed_at=datetime.now(UTC),
                 )
-            )
-            logger.info(f"Marked zombie review {review.id} as cancelled")
+                await db.commit()
+                logger.info(f"Marked zombie review {review.id} as cancelled")
+            except Exception as e:
+                await db.rollback()
+                logger.error(
+                    f"Failed to clean up zombie review {review.id}: {e}",
+                    exc_info=True,
+                )
 
-        await db.commit()
         logger.info(f"Cleanup done: {len(zombies)} candidate(s) processed.")
 
 

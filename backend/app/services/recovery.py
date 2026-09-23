@@ -29,7 +29,10 @@ async def recover_stale_reviews_on_startup() -> int:
 
     Returns the number of reviews marked failed.
     """
-    from app.services.review_execution_service import mark_execution_final
+    from app.services.review_execution_service import (
+        ensure_execution,
+        mark_execution_final,
+    )
 
     now = datetime.now(UTC)
     failed_count = 0
@@ -78,10 +81,20 @@ async def recover_stale_reviews_on_startup() -> int:
                 continue
 
             review.status = "failed"
-            review.error_message = "Server restarted mid-review — re-run the review."
             review.completed_at = now
             db.add(review)
-            await mark_execution_final(db, review.id, "failed")
+            # Error detail lives on the execution row (reviews has no
+            # error_message column). Guarantee an execution exists so the
+            # failure is always persisted, even if enqueue never ran.
+            await ensure_execution(
+                db, review.id, trigger="recovery", commit_sha=pr.head_sha
+            )
+            await mark_execution_final(
+                db,
+                review.id,
+                "failed",
+                error_message="Server restarted mid-review — re-run the review.",
+            )
             failed_count += 1
 
         # Record this recovery pass in sync_runs (best-effort, audit trail).

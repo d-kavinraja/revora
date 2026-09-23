@@ -1,9 +1,17 @@
 """Dispatcher for enqueuing review jobs with idempotency and lifecycle rules.
 
-Review lifecycle rules (one review row per PR lifecycle):
-  - opened  → create a NEW Review row (first lifecycle)
-  - reopened → create a NEW Review row (old row stays as history)
-  - synchronize → REUSE the latest Review row, supersede any in-flight run
+Review lifecycle rules (ONE Review row per logical pull request):
+  - opened      → create a NEW Review row (first lifecycle). If a Review
+                   already exists for the PR (duplicate redelivery), reuse it.
+  - reopened    → REUSE the existing Review row (reset to pending + new
+                   ReviewExecution with trigger="reopened"). A new Review row
+                   is created ONLY as fallback when the original opened event
+                   was missed and no Review exists yet.
+  - synchronize → REUSE the latest Review row, supersede any in-flight run.
+
+Webhook delivery identity (delivery_id + head_sha) is only used for
+duplicate-delivery protection — it is NEVER the logical Review identity,
+which is (repository + PR number).
 """
 
 import logging
@@ -34,8 +42,9 @@ async def enqueue_review_job(
         payload: GitHub webhook payload.
         delivery_id: X-GitHub-Delivery GUID.
         webhook_action: pull_request action — "opened", "reopened", or
-            "synchronize". Determines whether a new Review row is created
-            (opened/reopened) or the latest row is reused (synchronize).
+            "synchronize". "opened" creates a Review row only for a genuinely
+            new PR; "reopened"/"synchronize" reuse the existing Review row
+            for the PR (reset + new ReviewExecution).
 
     Returns:
         The created ReviewJob, or None if duplicate.
@@ -73,6 +82,26 @@ async def enqueue_review_job(
         )
         db_pr = pr_find.scalars().first()
         if db_pr:
+            # Job-level guard: a queued/running job already covers this exact
+            # commit — a redelivered webhook (new delivery_id, same sha) must
+            # not enqueue a second job for it.
+            existing_job = await session.execute(
+                select(ReviewJob.id)
+                .where(
+                    ReviewJob.repo_id == repo_id,
+                    ReviewJob.pr_number == pr_number,
+                    ReviewJob.head_sha == head_sha,
+                    ReviewJob.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+                )
+                .limit(1)
+            )
+            if existing_job.scalars().first() is not None:
+                logger.info(
+                    f"Job already queued/running for PR #{pr_number} "
+                    f"sha={head_sha[:12]} — skipping webhook enqueue"
+                )
+                return None
+
             active = await session.execute(
                 select(ReviewModel).where(
                     ReviewModel.pr_id == db_pr.id,
@@ -80,12 +109,14 @@ async def enqueue_review_job(
                 )
             )
             if active.scalars().first():
-                if webhook_action == "synchronize":
+                if webhook_action in ("synchronize", "reopened"):
                     # Supersede the in-flight run: cancel its jobs and
-                    # executions, then reuse the same Review row below.
+                    # executions, then reuse the same Review row below so the
+                    # PR keeps exactly ONE Review card.
                     await _supersede_inflight(session, db_pr, payload, head_sha)
                     logger.info(
-                        f"Superseding in-flight review for PR #{pr_number} on new commit"
+                        f"Superseding in-flight review for PR #{pr_number} "
+                        f"(action={webhook_action})"
                     )
                 else:
                     logger.info(
@@ -119,24 +150,33 @@ async def enqueue_review_job(
             f"Enqueued review job {job.id} for PR #{pr_number} (action={webhook_action})"
         )
 
-        # Create/reuse the Review record immediately so UI shows "Pending"
+        # Create/reuse the Review record immediately so UI shows "Pending".
+        # ONE Review row per logical PR: reopened/synchronize always reuse the
+        # existing row; opened creates one only when none exists yet.
         try:
             from app.github.shared import get_or_create_review_records
 
             installation_id = installation.get("id")
             if installation_id:
-                if webhook_action == "synchronize" and db_pr is not None:
+                if db_pr is not None:
                     await _reuse_latest_review_for_pr(
-                        session, db_pr, payload, installation_id, head_sha
+                        session,
+                        db_pr,
+                        payload,
+                        installation_id,
+                        head_sha,
+                        trigger=webhook_action,
                     )
                 else:
+                    # Genuinely new PR (no PullRequest row yet) — full record
+                    # creation (installation/repository/PR/Review + execution).
                     await get_or_create_review_records(
                         installation_id=installation_id,
                         repository=repository,
                         pull_request=pull_request,
                         delivery_id=delivery_id,
                         status="pending",
-                        find_existing_pending=False,  # opened/reopened: always a new row
+                        find_existing_pending=False,
                     )
         except Exception as e:
             logger.error(f"Failed to create pending Review record: {e}", exc_info=True)
@@ -175,15 +215,29 @@ async def _supersede_inflight(
 
 
 async def _reuse_latest_review_for_pr(
-    session, db_pr, payload: dict[str, Any], installation_id: int, head_sha: str
+    session,
+    db_pr,
+    payload: dict[str, Any],
+    installation_id: int,
+    head_sha: str,
+    trigger: str = "webhook",
 ) -> None:
-    """Reuse the latest Review row for a PR (synchronize event).
+    """Reuse the latest Review row for a PR (reopened/synchronize/opened retry).
 
-    Resets the row to 'pending', clears stale content, and creates a new
-    ReviewExecution. If the PR has no Review row yet (first push), creates one.
+    Resets the row to 'pending' and creates a new ReviewExecution, so the PR
+    keeps exactly ONE Review card across its whole lifecycle. If the PR has no
+    Review row yet (the original opened event was missed), creates the initial
+    Review as fallback.
+
+    NOTE: error/summary/stats content lives on ReviewExecution rows, not on
+    Review — the reviews table has no such columns, so only status/timestamps
+    are reset here.
     """
     from app.models.review import Review
-    from app.services.review_execution_service import create_execution
+    from app.services.review_execution_service import (
+        create_execution,
+        get_latest_execution,
+    )
 
     latest = await session.execute(
         select(Review)
@@ -198,23 +252,37 @@ async def _reuse_latest_review_for_pr(
         session.add(db_review)
         await session.flush()
         logger.info(
-            f"Created Review record {db_review.id} for reused PR #{db_pr.pr_number}"
+            f"Created Review record {db_review.id} for PR #{db_pr.pr_number} "
+            f"(fallback, trigger={trigger})"
         )
+
+    # Idempotency: a redelivered webhook (new delivery_id, same sha/trigger)
+    # must not stack a second queued execution onto the same Review.
+    latest_exec = await get_latest_execution(session, db_review.id)
+    if (
+        latest_exec is not None
+        and latest_exec.status in ("queued", "pending")
+        and latest_exec.commit_sha == head_sha
+        and latest_exec.trigger == trigger
+    ):
+        logger.info(
+            f"Review {db_review.id} already has a queued '{trigger}' execution "
+            f"for sha={head_sha[:12]} — not creating another one"
+        )
+        return
 
     db_review.status = "pending"
     db_review.started_at = None
     db_review.completed_at = None
-    db_review.error_message = None
-    db_review.summary = None
     session.add(db_review)
     await session.flush()
 
     await create_execution(
-        session, db_review.id, trigger="webhook", commit_sha=head_sha
+        session, db_review.id, trigger=trigger, commit_sha=head_sha
     )
     await session.commit()
     logger.info(
-        f"Reused Review {db_review.id} for synchronize on PR #{db_pr.pr_number}"
+        f"Reused Review {db_review.id} for {trigger} on PR #{db_pr.pr_number}"
     )
 
 

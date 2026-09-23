@@ -228,7 +228,10 @@ class TestGetOrCreateReviewRecords:
     async def test_find_existing_pending_false_still_creates_new_row(
         self, session_factory
     ):
-        """Dispatcher path (opened/reopened) keeps creating fresh rows."""
+        """Direct shared-helper call with find_existing_pending=False creates
+        a fresh row (genuinely-new-PR path). NOTE: the dispatcher no longer
+        uses this flag for reopened/synchronize — those reuse the existing
+        Review row (see test_pr_reopen_lifecycle.py)."""
         seed = await _seed(session_factory, review_status="completed")
 
         from app.github.shared import get_or_create_review_records

@@ -60,21 +60,33 @@ def _extract_review_id(job) -> str | None:
 
 
 async def _mark_review_failed(job, error_str: str):
-    """Mark the job's review (and its latest execution) as failed."""
+    """Mark the job's review (and its latest execution) as failed.
+
+    NOTE: the reviews table holds only status/timestamps — error detail lives
+    on the ReviewExecution row (reviews has no error_message column).
+    """
     from app.models.review import Review
 
     review_id = _extract_review_id(job)
     try:
         async with AsyncSessionLocal() as db:
+            from app.services.review_execution_service import (
+                ensure_execution,
+                mark_execution_final,
+            )
+
             if review_id:
                 await db.execute(
                     update(Review)
                     .where(Review.id == uuid.UUID(review_id))
                     .values(
                         status="failed",
-                        error_message=error_str,
                         completed_at=datetime.now(UTC),
                     )
+                )
+                await ensure_execution(db, uuid.UUID(review_id))
+                await mark_execution_final(
+                    db, uuid.UUID(review_id), "failed", error_message=error_str
                 )
                 await db.commit()
             else:
@@ -97,21 +109,28 @@ async def _mark_review_failed(job, error_str: str):
                 )
                 db_pr = pr_result.scalars().first()
                 if db_pr:
-                    await db.execute(
-                        update(Review)
-                        .where(Review.pr_id == db_pr.id)
-                        .values(
-                            status="failed",
-                            error_message=error_str,
-                            completed_at=datetime.now(UTC),
+                    failed_ids = (
+                        await db.execute(
+                            update(Review)
+                            .where(
+                                Review.pr_id == db_pr.id,
+                                Review.status.in_(
+                                    ["queued", "pending", "running"]
+                                ),
+                            )
+                            .values(
+                                status="failed",
+                                completed_at=datetime.now(UTC),
+                            )
+                            .returning(Review.id)
                         )
-                    )
+                    ).scalars().all()
+                    for rid in failed_ids:
+                        await ensure_execution(db, rid)
+                        await mark_execution_final(
+                            db, rid, "failed", error_message=error_str
+                        )
                     await db.commit()
-            if review_id:
-                from app.services.review_execution_service import mark_execution_final
-
-                await mark_execution_final(db, uuid.UUID(review_id), "failed")
-                await db.commit()
     except Exception as inner_e:
         logger.error(f"Failed to update Review status to failed: {inner_e}")
 
@@ -246,15 +265,18 @@ async def process_job(job_row) -> bool:
                         .where(Review.id == db_review.id)
                         .values(
                             status="failed",
-                            error_message=error_msg,
                             completed_at=datetime.now(UTC),
                         )
                     )
                     from app.services.review_execution_service import (
+                        ensure_execution,
                         mark_execution_final,
                     )
 
-                    await mark_execution_final(db, db_review.id, "failed")
+                    await ensure_execution(db, db_review.id)
+                    await mark_execution_final(
+                        db, db_review.id, "failed", error_message=error_msg
+                    )
                     await db.commit()
             except Exception as e:
                 logger.error(f"Failed to mark review as failed for MODE 3: {e}")
@@ -308,6 +330,11 @@ async def _fail_job_and_review(session, job, error_message: str):
     job.error_text = error_message
     session.add(job)
 
+    from app.services.review_execution_service import (
+        ensure_execution,
+        mark_execution_final,
+    )
+
     review_id = _extract_review_id(job)
     if review_id:
         await session.execute(
@@ -315,13 +342,13 @@ async def _fail_job_and_review(session, job, error_message: str):
             .where(Review.id == uuid.UUID(review_id))
             .values(
                 status="failed",
-                error_message=error_message,
                 completed_at=datetime.now(UTC),
             )
         )
-        from app.services.review_execution_service import mark_execution_final
-
-        await mark_execution_final(session, uuid.UUID(review_id), "failed")
+        await ensure_execution(session, uuid.UUID(review_id))
+        await mark_execution_final(
+            session, uuid.UUID(review_id), "failed", error_message=error_message
+        )
     else:
         from app.models.github import PullRequest
 
@@ -333,18 +360,25 @@ async def _fail_job_and_review(session, job, error_message: str):
         )
         db_pr = pr_result.scalars().first()
         if db_pr:
-            await session.execute(
-                update(Review)
-                .where(
-                    Review.pr_id == db_pr.id,
-                    Review.status.in_(["pending", "queued", "running"]),
+            failed_ids = (
+                await session.execute(
+                    update(Review)
+                    .where(
+                        Review.pr_id == db_pr.id,
+                        Review.status.in_(["pending", "queued", "running"]),
+                    )
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(UTC),
+                    )
+                    .returning(Review.id)
                 )
-                .values(
-                    status="failed",
-                    error_message=error_message,
-                    completed_at=datetime.now(UTC),
+            ).scalars().all()
+            for rid in failed_ids:
+                await ensure_execution(session, rid)
+                await mark_execution_final(
+                    session, rid, "failed", error_message=error_message
                 )
-            )
 
 
 async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user"):
@@ -385,7 +419,7 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
                                 Review.pr_id == db_pr.id,
                                 Review.status.in_(["queued", "pending", "running"]),
                             )
-                            .values(status="cancelled", error_message=error_message)
+                            .values(status="cancelled")
                             .returning(Review.id)
                         )
                         from app.services.review_execution_service import (
@@ -393,7 +427,12 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
                         )
 
                         for rid in cancelled_result.scalars().all():
-                            await mark_execution_final(session, rid, "cancelled")
+                            await mark_execution_final(
+                                session,
+                                rid,
+                                "cancelled",
+                                error_message=error_message,
+                            )
                         await session.commit()
                         logger.info(
                             f"Marked PR #{pr_number} active review(s) as cancelled (job was cancelled)"
@@ -406,11 +445,16 @@ async def mark_review_cancelled(job_row, error_message: str = "Cancelled by user
             await session.execute(
                 update(Review)
                 .where(Review.id == uuid.UUID(review_id))
-                .values(status="cancelled", error_message=error_message)
+                .values(status="cancelled")
             )
             from app.services.review_execution_service import mark_execution_final
 
-            await mark_execution_final(session, uuid.UUID(review_id), "cancelled")
+            await mark_execution_final(
+                session,
+                uuid.UUID(review_id),
+                "cancelled",
+                error_message=error_message,
+            )
             await session.commit()
             logger.info(f"Marked review {review_id} as cancelled (job was cancelled)")
     except Exception as e:
@@ -464,73 +508,94 @@ async def recover_orphaned_jobs(
                 f"and {len(stale_queued)} stale queued job(s)."
             )
 
-            # Process stale QUEUED jobs (mark as failed immediately — timeout)
+            # Process stale QUEUED jobs (mark as failed immediately — timeout).
+            # Per-job isolation: one bad job is logged + persisted, then the
+            # pass continues with the remaining jobs (never aborts globally).
             for job in stale_queued:
-                await _fail_job_and_review(
-                    session,
-                    job,
-                    f"Job timed out in queue after {queue_timeout_minutes} minutes.",
-                )
-                logger.warning(
-                    f"Crash Recovery: Stale queued job {job.id} for PR #{job.pr_number} "
-                    f"timed out after {queue_timeout_minutes} min. Marked as failed."
-                )
-
-            # Process stale RUNNING jobs (original recovery logic)
-            for job in stale_running:
-                if job.attempt_count < max_retries:
-                    job.attempt_count += 1
-                    job.status = JobStatus.QUEUED
-                    job.worker_id = None
-                    session.add(job)
-
-                    from app.models.github import PullRequest
-                    from app.models.review import Review
-
-                    pr_result = await session.execute(
-                        select(PullRequest).where(
-                            PullRequest.repo_id == job.repo_id,
-                            PullRequest.pr_number == job.pr_number,
-                        )
-                    )
-                    db_pr = pr_result.scalars().first()
-                    if db_pr:
-                        await session.execute(
-                            update(Review)
-                            .where(
-                                Review.pr_id == db_pr.id,
-                                Review.status.in_(["pending", "running"]),
-                            )
-                            .values(status="pending")
-                        )
-                    review_id = _extract_review_id(job)
-                    if review_id:
-                        from app.services.review_execution_service import (
-                            get_latest_execution,
-                        )
-
-                        execution = await get_latest_execution(
-                            session, uuid.UUID(review_id)
-                        )
-                        if execution and execution.status == "running":
-                            execution.status = "queued"
-                            session.add(execution)
-                    logger.info(
-                        f"Crash Recovery: Re-queued stale running job {job.id} for PR #{job.pr_number} "
-                        f"(Attempt {job.attempt_count}/{max_retries})."
-                    )
-                else:
+                job_id, pr_number = job.id, job.pr_number
+                try:
                     await _fail_job_and_review(
                         session,
                         job,
-                        "Server restarted mid-review; retry limit reached.",
+                        f"Job timed out in queue after {queue_timeout_minutes} minutes.",
                     )
+                    await session.commit()
                     logger.warning(
-                        f"Crash Recovery: Job {job.id} for PR #{job.pr_number} "
-                        f"exceeded max retries. Marked as failed."
+                        f"Crash Recovery: Stale queued job {job_id} for PR #{pr_number} "
+                        f"timed out after {queue_timeout_minutes} min. Marked as failed."
+                    )
+                except Exception as job_e:
+                    await session.rollback()
+                    logger.error(
+                        f"Crash Recovery: failed to fail stale queued job "
+                        f"{job_id} (PR #{pr_number}): {job_e}",
+                        exc_info=True,
                     )
 
-            await session.commit()
+            # Process stale RUNNING jobs (original recovery logic)
+            for job in stale_running:
+                job_id, pr_number = job.id, job.pr_number
+                try:
+                    if job.attempt_count < max_retries:
+                        job.attempt_count += 1
+                        job.status = JobStatus.QUEUED
+                        job.worker_id = None
+                        session.add(job)
+
+                        from app.models.github import PullRequest
+                        from app.models.review import Review
+
+                        pr_result = await session.execute(
+                            select(PullRequest).where(
+                                PullRequest.repo_id == job.repo_id,
+                                PullRequest.pr_number == job.pr_number,
+                            )
+                        )
+                        db_pr = pr_result.scalars().first()
+                        if db_pr:
+                            await session.execute(
+                                update(Review)
+                                .where(
+                                    Review.pr_id == db_pr.id,
+                                    Review.status.in_(["pending", "running"]),
+                                )
+                                .values(status="pending")
+                            )
+                        review_id = _extract_review_id(job)
+                        if review_id:
+                            from app.services.review_execution_service import (
+                                get_latest_execution,
+                            )
+
+                            execution = await get_latest_execution(
+                                session, uuid.UUID(review_id)
+                            )
+                            if execution and execution.status == "running":
+                                execution.status = "queued"
+                                session.add(execution)
+                        await session.commit()
+                        logger.info(
+                            f"Crash Recovery: Re-queued stale running job {job_id} for PR #{pr_number} "
+                            f"(Attempt {job.attempt_count}/{max_retries})."
+                        )
+                    else:
+                        await _fail_job_and_review(
+                            session,
+                            job,
+                            "Server restarted mid-review; retry limit reached.",
+                        )
+                        await session.commit()
+                        logger.warning(
+                            f"Crash Recovery: Job {job_id} for PR #{pr_number} "
+                            f"exceeded max retries. Marked as failed."
+                        )
+                except Exception as job_e:
+                    await session.rollback()
+                    logger.error(
+                        f"Crash Recovery: failed to recover stale running job "
+                        f"{job_id} (PR #{pr_number}): {job_e}",
+                        exc_info=True,
+                    )
     except Exception:
         logger.exception("Error during orphaned job recovery")
 
