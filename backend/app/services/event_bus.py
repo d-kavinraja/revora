@@ -39,6 +39,8 @@ async def _poll_review_updates(
     """Return review rows updated after `cursor`, oldest first, filtered by user_id if provided."""
     try:
         async with AsyncSessionLocal() as db:
+            from app.models.execution import ReviewExecution
+
             stmt = select(Review).where(Review.updated_at > cursor)
             if user_id:
                 stmt = (
@@ -50,16 +52,40 @@ async def _poll_review_updates(
 
             stmt = stmt.order_by(Review.updated_at.asc()).limit(BATCH_LIMIT)
             result = await db.execute(stmt)
+            reviews = result.scalars().all()
+            # Error detail lives on ReviewExecution (reviews has no
+            # error_message column) — batch-fetch the latest execution per
+            # review so the event payload shape is unchanged.
+            error_map: dict[str, str | None] = {}
+            if reviews:
+                review_ids = [r.id for r in reviews]
+                execs = (
+                    (
+                        await db.execute(
+                            select(ReviewExecution)
+                            .where(ReviewExecution.review_id.in_(review_ids))
+                            .order_by(
+                                ReviewExecution.review_id,
+                                ReviewExecution.execution_number.desc(),
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for ex in execs:
+                    if ex.review_id not in error_map:
+                        error_map[ex.review_id] = ex.error_message
             return [
                 {
                     "type": "review.updated",
                     "review_id": str(r.id),
                     "pr_id": str(r.pr_id),
                     "status": r.status,
-                    "error_message": r.error_message,
+                    "error_message": error_map.get(r.id),
                     "updated_at": _iso(r.updated_at),
                 }
-                for r in result.scalars().all()
+                for r in reviews
             ]
     except Exception as e:
         logger.error(f"Event bus: failed to poll review updates: {e}", exc_info=True)

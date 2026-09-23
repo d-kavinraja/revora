@@ -88,6 +88,25 @@ async def get_latest_completed_execution(
     return result.scalars().first()
 
 
+async def ensure_execution(
+    db: AsyncSession,
+    review_id,
+    trigger: str = "webhook",
+    commit_sha: str | None = None,
+) -> ReviewExecution:
+    """Return the latest execution, creating a queued one if none exists.
+
+    Guarantees failure/cancel finalization always has a row to persist
+    error detail on, even when enqueue never ran (crash recovery paths).
+    """
+    execution = await get_latest_execution(db, review_id)
+    if execution is None:
+        execution = await create_execution(
+            db, review_id, trigger=trigger, commit_sha=commit_sha
+        )
+    return execution
+
+
 async def mark_execution_running(db: AsyncSession, review_id) -> ReviewExecution | None:
     """Flip the latest execution of a review to 'running'."""
     execution = await get_latest_execution(db, review_id)

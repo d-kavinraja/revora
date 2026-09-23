@@ -146,11 +146,13 @@ class ReviewLifecycleService:
             __import__("sqlalchemy")
             .update(Review)
             .where(Review.id == review_id)
-            .values(status="cancelled", error_message="Cancelled by user")
+            .values(status="cancelled")
         )
         from app.services.review_execution_service import mark_execution_final
 
-        await mark_execution_final(db, review_id, "cancelled")
+        await mark_execution_final(
+            db, review_id, "cancelled", error_message="Cancelled by user"
+        )
 
         pr_result = await db.execute(
             select(PullRequest).where(PullRequest.id == review.pr_id)
@@ -320,12 +322,12 @@ class ReviewLifecycleService:
         key_id = settings.get("assigned_key_id", "")
 
         # Reuse the SAME review row — never insert another one.
+        # (Summary/stats/error content lives on ReviewExecution rows; the last
+        # completed execution stays readable, so the frontend keeps showing
+        # the previous result while the new run is in flight.)
         review.status = "queued"
-        # We purposely DO NOT clear review.summary or review.stats here so that the
-        # frontend can continue displaying the last successful review while running.
         review.started_at = None
         review.completed_at = None
-        review.error_message = None
         db.add(review)
         await db.commit()
         await db.refresh(review)
@@ -401,8 +403,18 @@ class ReviewLifecycleService:
             )
             await db.rollback()
             review.status = "failed"
-            review.error_message = f"Failed to enqueue {action} job: {e}"
             db.add(review)
+            await db.commit()
+            from app.services.review_execution_service import (
+                mark_execution_final as _mark_final,
+            )
+
+            await _mark_final(
+                db,
+                review.id,
+                "failed",
+                error_message=f"Failed to enqueue {action} job: {e}",
+            )
             await db.commit()
 
         await self._audit(
@@ -437,9 +449,10 @@ class ReviewLifecycleService:
     ) -> dict[str, Any]:
         """Return all review lifecycles for the PR plus the current review's executions.
 
-        Reopened PRs create a new review row, so a PR can have several review
-        rows — all of them remain visible here as history. Execution history
-        (rerun/retry/restart/webhook runs) lives in review_executions.
+        ONE Review row per logical PR: reopen/synchronize/rerun/retry/restart
+        reuse the same row and append a ReviewExecution. Older rows can still
+        exist from before the reuse fix — all of them remain visible here as
+        history. Execution history lives in review_executions.
         """
         from sqlalchemy.orm import joinedload
 
