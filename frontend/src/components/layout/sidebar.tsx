@@ -112,7 +112,7 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface-1/80 backdrop-blur-md border-b border-border z-40 flex items-center px-4 justify-between shadow-sm">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
@@ -134,7 +134,7 @@ export function Sidebar() {
       )}
 
       <aside
-        className={`fixed md:sticky top-0 h-[100dvh] ${sidebarWidth} border-r border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col shrink-0 transition-all duration-200 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${
+        className={`fixed md:sticky top-0 h-[100dvh] ${sidebarWidth} border-r border-sidebar-border bg-sidebar flex flex-col shrink-0 transition-all duration-200 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
@@ -273,5 +273,4 @@ export function Sidebar() {
     </>
   );
 }
-
 
