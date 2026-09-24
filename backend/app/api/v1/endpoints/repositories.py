@@ -323,27 +323,58 @@ async def sync_repository(
 
                         if is_bot and body.strip():
                             has_bot_review = True
-                            # Check if we already imported this review
-                            rev_check = await db.execute(
-                                select(Review).where(
-                                    Review.pr_id == db_pr.id, Review.summary == body
-                                )
-                            )
-                            db_review = rev_check.scalars().first()
+                            # Check if we already imported this review.
+                            # Summary/stats live on ReviewExecution (the
+                            # reviews table has no such columns).
+                            from app.models.execution import ReviewExecution
 
-                            if not db_review:
+                            rev_check = await db.execute(
+                                select(ReviewExecution.id)
+                                .join(
+                                    Review, ReviewExecution.review_id == Review.id
+                                )
+                                .where(
+                                    Review.pr_id == db_pr.id,
+                                    ReviewExecution.summary == body,
+                                )
+                                .limit(1)
+                            )
+                            already_imported = rev_check.scalars().first()
+
+                            if not already_imported:
+                                from app.services.review_execution_service import (
+                                    create_execution,
+                                    mark_execution_final,
+                                )
+
                                 db_review = Review(
                                     pr_id=db_pr.id,
                                     status="completed",
-                                    summary=body,
                                     started_at=db_pr.created_at,
                                     completed_at=datetime.now(UTC),
+                                )
+                                db.add(db_review)
+                                await db.flush()
+                                await create_execution(
+                                    db,
+                                    db_review.id,
+                                    trigger="import",
+                                    commit_sha=head_sha,
+                                    provider="imported",
+                                    model=reviewer_login,
+                                )
+                                await mark_execution_final(
+                                    db,
+                                    db_review.id,
+                                    "completed",
+                                    model=reviewer_login,
+                                    provider="imported",
+                                    summary=body,
                                     stats={
                                         "provider": "imported",
                                         "model": reviewer_login,
                                     },
                                 )
-                                db.add(db_review)
                                 await db.commit()
                                 imported_reviews += 1
 
