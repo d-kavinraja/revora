@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User as UserModel
 from app.schemas.user import User, UserCreate
+from app.services.sync_engine import _login_reconciliation
 from app.services.user_service import user_service
 
 router = APIRouter()
@@ -65,7 +66,11 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/github", response_model=dict)
-async def github_login(payload: GitHubLoginRequest, db: AsyncSession = Depends(get_db)):
+async def github_login(
+    payload: GitHubLoginRequest,
+    db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
+):
     """Exchanges a GitHub OAuth code for a JWT, linking or registering the user."""
     if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
         raise HTTPException(
@@ -189,6 +194,10 @@ async def github_login(payload: GitHubLoginRequest, db: AsyncSession = Depends(g
     # 5. Generate JWT token
     access_token_expires = timedelta(minutes=60 * 24)
     jwt_token = create_access_token(subject=user.id, expires_delta=access_token_expires)
+
+    # 6. Trigger lightweight background reconciliation (non-blocking)
+    if background_tasks is not None:
+        background_tasks.add_task(_login_reconciliation, user.id)
 
     return {
         "access_token": jwt_token,

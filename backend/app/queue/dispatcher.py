@@ -31,6 +31,7 @@ async def enqueue_review_job(
     payload: dict[str, Any],
     delivery_id: str,
     webhook_action: str = "opened",
+    commit: bool = True,
 ) -> ReviewJob | None:
     """Enqueue a review job with idempotency and lifecycle-aware review handling.
 
@@ -45,6 +46,12 @@ async def enqueue_review_job(
             "synchronize". "opened" creates a Review row only for a genuinely
             new PR; "reopened"/"synchronize" reuse the existing Review row
             for the PR (reset + new ReviewExecution).
+        commit: When True (default, webhooks/lifecycle), commit the job and
+            Review rows before returning. When False (repository sync),
+            flush only and leave the commit to the caller so a whole
+            repository's discovery batch becomes visible atomically — the
+            worker cannot claim the first job before the remaining PRs are
+            created.
 
     Returns:
         The created ReviewJob, or None if duplicate.
@@ -145,7 +152,12 @@ async def enqueue_review_job(
     job = result.scalar_one_or_none()
 
     if job:
-        await session.commit()
+        # Flush (not commit) first so the caller's transaction sees the row.
+        # The commit below — or the caller's batch commit when commit=False —
+        # is what makes the job visible to the worker. Never let a queued job
+        # become visible before its Pending Review row is part of the same
+        # commit: create the Review first, then commit both together.
+        await session.flush()
         logger.info(
             f"Enqueued review job {job.id} for PR #{pr_number} (action={webhook_action})"
         )
@@ -166,6 +178,7 @@ async def enqueue_review_job(
                         installation_id,
                         head_sha,
                         trigger=webhook_action,
+                        commit=False,
                     )
                 else:
                     # Genuinely new PR (no PullRequest row yet) — full record
@@ -181,6 +194,13 @@ async def enqueue_review_job(
         except Exception as e:
             logger.error(f"Failed to create pending Review record: {e}", exc_info=True)
 
+        if commit:
+            await session.commit()
+        else:
+            # Batched sync mode: leave the commit to the caller so the whole
+            # repository batch (job + Pending Review rows for every PR)
+            # becomes visible in one atomic commit.
+            await session.flush()
         return job
     else:
         logger.info(
@@ -221,6 +241,7 @@ async def _reuse_latest_review_for_pr(
     installation_id: int,
     head_sha: str,
     trigger: str = "webhook",
+    commit: bool = True,
 ) -> None:
     """Reuse the latest Review row for a PR (reopened/synchronize/opened retry).
 
@@ -280,7 +301,10 @@ async def _reuse_latest_review_for_pr(
     await create_execution(
         session, db_review.id, trigger=trigger, commit_sha=head_sha
     )
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     logger.info(
         f"Reused Review {db_review.id} for {trigger} on PR #{db_pr.pr_number}"
     )
@@ -345,7 +369,12 @@ async def supersede_jobs(
 
 
 async def get_pending_jobs(session, limit: int = 1) -> list[ReviewJob]:
-    """Get pending jobs using SELECT FOR UPDATE SKIP LOCKED.
+    """Peek at pending jobs (inspection helper — takes NO locks).
+
+    Returns the oldest queued job per repo ordered least-recently-completed
+    first (same fairness ordering the worker uses when claiming). Claiming
+    itself happens in the worker loop, which additionally takes the per-repo
+    advisory lock plus the row lock.
 
     Args:
         session: Async database session.
@@ -358,23 +387,31 @@ async def get_pending_jobs(session, limit: int = 1) -> list[ReviewJob]:
 
     stmt = text(
         """
-        SELECT j.id, j.repo_id, j.pr_number, j.head_sha, j.delivery_id, j.payload,
-               j.attempt_count, j.created_at
-        FROM review_jobs j
-        WHERE j.status = 'queued'
-          AND (
-              j.repo_id IS NULL OR (
-                  NOT EXISTS (
-                      SELECT 1 FROM review_jobs r
-                      WHERE r.repo_id = j.repo_id
-                        AND r.status = 'running'
-                  )
-                  AND pg_try_advisory_xact_lock(hashtext(j.repo_id::text))
+        WITH per_repo_next AS (
+            SELECT j.id, j.repo_id, j.pr_number, j.head_sha, j.delivery_id, j.payload,
+                   j.attempt_count, j.created_at,
+                   ROW_NUMBER() OVER (PARTITION BY j.repo_id ORDER BY j.created_at ASC) as rn,
+                   COALESCE((
+                       SELECT MAX(completed_at)
+                       FROM review_jobs r2
+                       WHERE r2.repo_id = j.repo_id
+                         AND r2.status = 'completed'
+                   ), '1970-01-01'::timestamptz) as last_completed
+            FROM review_jobs j
+            WHERE j.status = 'queued'
+              AND j.repo_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM review_jobs r
+                  WHERE r.repo_id = j.repo_id
+                    AND r.status = 'running'
               )
-          )
-        ORDER BY j.created_at ASC
+        )
+        SELECT id, repo_id, pr_number, head_sha, delivery_id, payload,
+               attempt_count, created_at
+        FROM per_repo_next
+        WHERE rn = 1
+        ORDER BY last_completed ASC
         LIMIT :limit
-        FOR UPDATE SKIP LOCKED
     """
     )
 

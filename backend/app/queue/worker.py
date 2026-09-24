@@ -6,7 +6,7 @@ import signal
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, select, text, update
+from sqlalchemy import and_, func, select, text, update
 
 from app.db.session import AsyncSessionLocal
 from app.queue.models import JobStatus, ReviewJob
@@ -15,6 +15,23 @@ logger = logging.getLogger(__name__)
 
 _worker_id = str(uuid.uuid4())[:8]
 _shutdown = False
+
+# Global single-flight claim lock for REVIEW EXECUTION only (not repository
+# sync). Distinct from the sync full-pass lock (0x5A9C1024) and from
+# per-repo hashtext(repo_id) locks. Held for one claim transaction only:
+# check no RUNNING job -> pick next fair job -> mark RUNNING -> commit.
+REVIEW_CLAIM_ADVISORY_LOCK_KEY = 0x5A9C1030
+
+# Serializes claim attempts inside one process (uvicorn + accidental second
+# loop). Cross-process safety is the Postgres advisory lock above.
+_claim_slot = asyncio.Lock()
+
+# Worker-liveness signals for queue recovery (P0-2). They distinguish a
+# healthy queued backlog (worker alive and draining, or single-flight
+# legitimately holding jobs behind a running one) from a genuinely stuck
+# worker that will never claim anything again.
+_worker_started_at: datetime | None = None
+_last_claim_at: datetime | None = None
 
 
 def _handle_shutdown(signum, frame):
@@ -508,6 +525,51 @@ async def recover_orphaned_jobs(
                 f"and {len(stale_queued)} stale queued job(s)."
             )
 
+            # Healthy-backlog guard: a QUEUED job is only a recovery candidate
+            # when the queue is provably stuck — no RUNNING job anywhere (a
+            # running job legitimately holds its repo's siblings behind the
+            # per-repo single-flight, and a draining serial worker holds
+            # everyone else's) AND this worker has claimed nothing within the
+            # timeout window. Otherwise the jobs are simply waiting their
+            # turn and must be left alone to drain.
+            skip_queued_timeout = False
+            skip_reason = ""
+            running_count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(ReviewJob)
+                    .where(ReviewJob.status == JobStatus.RUNNING)
+                )
+            ).scalar() or 0
+            if running_count:
+                skip_queued_timeout = True
+                skip_reason = (
+                    f"{running_count} job(s) currently running — "
+                    "queued jobs are waiting behind them, not orphaned"
+                )
+            elif _worker_started_at is not None and (
+                now - _worker_started_at
+            ) < timedelta(minutes=queue_timeout_minutes):
+                skip_queued_timeout = True
+                skip_reason = (
+                    "worker started recently — giving the loop a chance "
+                    "to claim queued jobs first"
+                )
+            elif _last_claim_at is not None and (now - _last_claim_at) < timedelta(
+                minutes=queue_timeout_minutes
+            ):
+                skip_queued_timeout = True
+                skip_reason = (
+                    "worker claimed a job recently — queue is draining, "
+                    "not stuck"
+                )
+            if skip_queued_timeout:
+                logger.info(
+                    f"Crash Recovery: keeping {len(stale_queued)} stale "
+                    f"queued job(s) queued ({skip_reason})."
+                )
+                stale_queued = []
+
             # Process stale QUEUED jobs (mark as failed immediately — timeout).
             # Per-job isolation: one bad job is logged + persisted, then the
             # pass continues with the remaining jobs (never aborts globally).
@@ -600,16 +662,228 @@ async def recover_orphaned_jobs(
         logger.exception("Error during orphaned job recovery")
 
 
+def _is_postgres(session) -> bool:
+    try:
+        return session.get_bind().dialect.name == "postgresql"
+    except Exception:
+        return False
+
+
+async def _acquire_global_claim_lock(session) -> bool:
+    """Best-effort global claim lock. True when safe to proceed.
+
+    Postgres: transaction-scoped advisory lock — serializes claimers across
+    processes. SQLite (tests): returns True (single-threaded fixture).
+    """
+    if not _is_postgres(session):
+        return True
+    try:
+        locked = await session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(:key)"),
+            {"key": REVIEW_CLAIM_ADVISORY_LOCK_KEY},
+        )
+        return bool(locked)
+    except Exception:
+        await session.rollback()
+        return False
+
+
+async def claim_next_job(session) -> tuple | None:
+    """Claim exactly one queued review job under global single-flight.
+
+    Concurrency model:
+      - GLOBAL: at most one ReviewJob may be RUNNING anywhere.
+      - PER-REPO: at most one RUNNING job per repository (unchanged).
+      - Fairness: least-recently-completed repo first, then oldest job
+        (per-repo FIFO preserved).
+
+    All steps run in one transaction while the global claim lock is held:
+      1. Acquire global claim advisory lock (cross-process).
+      2. Abort if any ReviewJob is already RUNNING.
+      3. Fair-order candidate repos (round-robin, no locks yet).
+      4. Claim each candidate's oldest queued job (per-repo lock +
+         FOR UPDATE SKIP LOCKED on Postgres).
+      5. Mark RUNNING and commit (releases the global lock).
+
+    Returns the claimed job row, or None when the global slot is busy or
+    nothing is eligible. On success the session is committed; on failure it
+    is rolled back (locks released).
+    """
+    async with _claim_slot:
+        return await _claim_next_job_locked(session)
+
+
+async def claim_next_job_with_factory(session_factory) -> tuple | None:
+    """Like claim_next_job, but opens the session AFTER the claim slot lock.
+
+    Safe under concurrent callers with a StaticPool SQLite test engine
+    (only one DB connection exists; serializing open→claim avoids checkout
+    races). Production uses claim_next_job(session) from run_worker.
+    """
+    async with _claim_slot:
+        async with session_factory() as session:
+            return await _claim_next_job_locked(session)
+
+
+async def _claim_next_job_locked(session) -> tuple | None:
+    if not await _acquire_global_claim_lock(session):
+        return None
+
+    global_running = await session.scalar(
+        text("SELECT 1 FROM review_jobs WHERE status = 'running' LIMIT 1")
+    )
+    if global_running:
+        await session.rollback()
+        return None
+
+    pg = _is_postgres(session)
+    ts_fallback = "'1970-01-01'::timestamptz" if pg else "'1970-01-01'"
+    order_res = await session.execute(
+        text(
+            f"""
+            WITH per_repo AS (
+                SELECT j.repo_id,
+                       MIN(j.created_at) AS oldest,
+                       COALESCE((
+                           SELECT MAX(completed_at)
+                           FROM review_jobs r2
+                           WHERE r2.repo_id = j.repo_id
+                             AND r2.status = 'completed'
+                       ), {ts_fallback}) AS last_completed
+                FROM review_jobs j
+                WHERE j.status = 'queued'
+                  AND j.repo_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_jobs r
+                      WHERE r.repo_id = j.repo_id
+                        AND r.status = 'running'
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_jobs gr
+                      WHERE gr.status = 'running'
+                  )
+                GROUP BY j.repo_id
+                UNION ALL
+                SELECT NULL AS repo_id,
+                       MIN(j.created_at) AS oldest,
+                       MIN(j.created_at) AS last_completed
+                FROM review_jobs j
+                WHERE j.status = 'queued'
+                  AND j.repo_id IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_jobs gr
+                      WHERE gr.status = 'running'
+                  )
+            )
+            SELECT repo_id FROM per_repo
+            ORDER BY last_completed ASC, oldest ASC
+            """
+        )
+    )
+    candidate_repos = [row[0] for row in order_res.fetchall()]
+
+    job_row = None
+    for candidate_repo_id in candidate_repos:
+        if candidate_repo_id is None:
+            claim = await session.execute(
+                text(
+                    """
+                    SELECT j.id, j.repo_id, j.pr_number, j.head_sha,
+                           j.delivery_id, j.payload,
+                           j.attempt_count, j.created_at
+                    FROM review_jobs j
+                    WHERE j.status = 'queued'
+                      AND j.repo_id IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM review_jobs gr
+                          WHERE gr.status = 'running'
+                      )
+                    ORDER BY j.created_at ASC
+                    LIMIT 1
+                    """
+                    + ("\nFOR UPDATE SKIP LOCKED" if pg else "")
+                )
+            )
+        else:
+            per_repo_gate = (
+                "\n  AND pg_try_advisory_xact_lock(hashtext(j.repo_id::text))"
+                if pg
+                else ""
+            )
+            claim = await session.execute(
+                text(
+                    f"""
+                    SELECT j.id, j.repo_id, j.pr_number, j.head_sha,
+                           j.delivery_id, j.payload,
+                           j.attempt_count, j.created_at
+                    FROM review_jobs j
+                    WHERE j.status = 'queued'
+                      AND j.repo_id = :repo_id
+                      AND NOT EXISTS (
+                          SELECT 1 FROM review_jobs r
+                          WHERE r.repo_id = j.repo_id
+                            AND r.status = 'running'
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM review_jobs gr
+                          WHERE gr.status = 'running'
+                      ){per_repo_gate}
+                    ORDER BY j.created_at ASC
+                    LIMIT 1
+                    """
+                    + ("\nFOR UPDATE SKIP LOCKED" if pg else "")
+                ),
+                {"repo_id": candidate_repo_id},
+            )
+        job_row = claim.fetchone()
+        if job_row is not None:
+            break
+
+    if not job_row:
+        await session.rollback()
+        return None
+
+    # Raw text() returns UUIDs as hex strings; coerce for the UUID column.
+    claimed_id = job_row[0]
+    if isinstance(claimed_id, str):
+        claimed_id = uuid.UUID(claimed_id)
+    normalized = list(job_row)
+    normalized[0] = claimed_id
+    if normalized[1] is not None and isinstance(normalized[1], str):
+        normalized[1] = uuid.UUID(normalized[1])
+    job_row = tuple(normalized)
+
+    await session.execute(
+        update(ReviewJob)
+        .where(ReviewJob.id == claimed_id)
+        .values(
+            status=JobStatus.RUNNING,
+            started_at=datetime.now(UTC),
+            worker_id=_worker_id,
+        )
+    )
+    await session.commit()
+    return job_row
+
+
 async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
     """Main worker loop. Polls for queued jobs and processes them.
 
-    Uses SELECT FOR UPDATE SKIP LOCKED for safe concurrent access.
+    Review execution is globally serial (concurrency = 1): at most one
+    ReviewJob is RUNNING across all repositories. Within that slot the
+    fair scheduler picks the least-recently-completed repo's oldest job
+    (per-repo FIFO + cross-repo fairness).
     """
+    global _worker_started_at
     logger.info(f"Worker {_worker_id} started (poll_interval={poll_interval}s)")
 
     if standalone:
         signal.signal(signal.SIGINT, _handle_shutdown)
         signal.signal(signal.SIGTERM, _handle_shutdown)
+
+    # Liveness anchor: queued jobs newer than the startup grace window are
+    # never age-failed before the loop gets its first chances to claim them.
+    _worker_started_at = datetime.now(UTC)
 
     # Recover any jobs left in 'running' status from a previous server crash
     await recover_orphaned_jobs()
@@ -624,30 +898,7 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
                 last_recovery_check = datetime.now(UTC)
 
             async with AsyncSessionLocal() as session:
-                # Fetch one queued job with row-level locking
-                stmt = text(
-                    """
-                    SELECT j.id, j.repo_id, j.pr_number, j.head_sha, j.delivery_id, j.payload,
-                           j.attempt_count, j.created_at
-                    FROM review_jobs j
-                    WHERE j.status = 'queued'
-                      AND (
-                          j.repo_id IS NULL OR (
-                              NOT EXISTS (
-                                  SELECT 1 FROM review_jobs r
-                                  WHERE r.repo_id = j.repo_id
-                                    AND r.status = 'running'
-                              )
-                              AND pg_try_advisory_xact_lock(hashtext(j.repo_id::text))
-                          )
-                      )
-                    ORDER BY j.created_at ASC
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                """
-                )
-                result = await session.execute(stmt)
-                job_row = result.fetchone()
+                job_row = await claim_next_job(session)
 
                 if not job_row:
                     await asyncio.sleep(poll_interval)
@@ -655,17 +906,11 @@ async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
 
                 job_id = job_row[0]
 
-                # Mark as running
-                await session.execute(
-                    update(ReviewJob)
-                    .where(ReviewJob.id == job_id)
-                    .values(
-                        status=JobStatus.RUNNING,
-                        started_at=datetime.now(UTC),
-                        worker_id=_worker_id,
-                    )
-                )
-                await session.commit()
+                # Liveness signal for queue recovery: a recent claim proves
+                # the worker is draining, so old-but-waiting queued jobs are
+                # healthy backlog, not orphans.
+                global _last_claim_at
+                _last_claim_at = datetime.now(UTC)
 
             # Process outside the session lock — but first re-check status in case
             # it was cancelled by the user between being claimed and execution starting.

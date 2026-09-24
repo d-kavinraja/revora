@@ -495,9 +495,37 @@ function RepositoryCard({
 
   const isReviewActive = repo.active_review_status === 'queued' || repo.active_review_status === 'pending' || repo.active_review_status === 'running';
 
-  const lastSyncText = timeAgo(repo.last_sync?.completed_at ?? repo.last_synced_at);
   const [owner, repoName] = repo.full_name.split('/');
   const langColor = repo.language ? (LANG_COLORS[repo.language] ?? '#8b949e') : null;
+
+  // Determine truthful sync status for display
+  const syncState = repo.sync_state;
+  const lastSyncedAt = repo.last_synced_at;
+  const lastSyncCompletedAt = repo.last_sync?.completed_at;
+  const syncCompletedAt = syncState?.completed_at ?? lastSyncCompletedAt ?? lastSyncedAt;
+
+  const getSyncStatus = (): { label: string; variant: 'danger' | 'warning' | 'info' | 'success' | 'neutral' } => {
+    if (!syncState) {
+      if (lastSyncedAt) return { label: `Synced ${timeAgo(lastSyncedAt)}`, variant: 'success' };
+      return { label: 'Never Synced', variant: 'neutral' };
+    }
+
+    switch (syncState.status) {
+      case 'failed': return { label: `Sync Failed: ${syncState.error?.slice(0, 40) ?? 'Unknown error'}`, variant: 'danger' };
+      case 'stale': return { label: 'Sync Stale', variant: 'warning' };
+      case 'running': return { label: 'Syncing…', variant: 'info' };
+      case 'partial': return { label: 'Sync Partial', variant: 'warning' };
+      case 'queued': return { label: 'Sync Queued', variant: 'info' };
+      case 'success': {
+        const prsFound = syncState?.prs_found ?? 0;
+        if (prsFound === 0) return { label: `Synced ${timeAgo(syncCompletedAt)} — 0 open PRs`, variant: 'success' };
+        return { label: `Synced ${timeAgo(syncCompletedAt)} — ${prsFound} open PRs`, variant: 'success' };
+      }
+      default: return { label: 'Unknown', variant: 'neutral' };
+    }
+  };
+
+  const syncStatus = getSyncStatus();
 
   return (
     <div
@@ -594,15 +622,37 @@ function RepositoryCard({
       {/* Card Footer - Revora Controls */}
       {!removed && (
         <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-surface-2/30 rounded-b-xl">
-          {/* Left: sync time */}
-          <div className="text-xs text-muted-foreground">
-            {lastSyncText ? (
-              <span className="flex items-center gap-1.5">
-                <RefreshCw className="w-3 h-3" />
-                Synced {lastSyncText}
+          {/* Left: sync status */}
+          <div className="text-xs">
+            {syncStatus.variant === 'danger' && (
+              <span className="flex items-center gap-1.5 text-red-400">
+                <AlertTriangle className="w-3 h-3" />
+                {syncStatus.label}
               </span>
-            ) : (
-              <span className="text-muted-foreground/70 italic">Never synced</span>
+            )}
+            {syncStatus.variant === 'warning' && (
+              <span className="flex items-center gap-1.5 text-amber-400">
+                <AlertTriangle className="w-3 h-3" />
+                {syncStatus.label}
+              </span>
+            )}
+            {syncStatus.variant === 'info' && (
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <LoaderIcon size={12} className="animate-spin" />
+                {syncStatus.label}
+              </span>
+            )}
+            {syncStatus.variant === 'success' && (
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <CheckCircle2 className="w-3 h-3" />
+                {syncStatus.label}
+              </span>
+            )}
+            {syncStatus.variant === 'neutral' && (
+              <span className="flex items-center gap-1.5 text-muted-foreground/70 italic">
+                <RefreshCw className="w-3 h-3" />
+                {syncStatus.label}
+              </span>
             )}
           </div>
 
@@ -722,39 +772,128 @@ export default function RepositoriesPage() {
     });
   };
 
+  // Baseline timestamp captured when a background sync starts; the spinner
+  // clears once the polled repository row shows a newer last-synced time.
+  const [syncBaseline, setSyncBaseline] = useState<{ id: string; at: string | null } | null>(null);
+  // Baselines for a global sync: every visible repository must advance.
+  const [syncAllBaseline, setSyncAllBaseline] = useState<{ at: Record<string, string | null> } | null>(null);
+
   const handleSync = async (id: string) => {
+    const repo = (activeQuery.data ?? []).find((r) => r.id === id);
     setSyncingRepoId(id);
     try {
       const result = await api.syncRepository(id);
-      toast({ title: 'Sync completed', description: result.message, type: 'success' });
+      setSyncBaseline({ id, at: repo?.last_sync?.completed_at ?? repo?.last_synced_at ?? null });
+      if (result.status === 'in_progress') {
+        // Duplicate-sync guard fired server-side (double-click / refresh
+        // resend): keep the spinner, do not restart the baseline.
+        toast({ title: 'Sync already running', description: result.message, type: 'success' });
+      } else {
+        toast({ title: 'Sync started', description: result.message, type: 'success' });
+      }
       queryClient.invalidateQueries({ queryKey: ['repositories'] });
+      // Safety net: never leave the spinner stuck if the background pass
+      // fails without updating the timestamp.
+      setTimeout(() => {
+        setSyncingRepoId((current) => (current === id ? null : current));
+        setSyncBaseline((current) => (current?.id === id ? null : current));
+      }, 180000);
     } catch (err: any) {
       toast({
         title: 'Sync failed',
         description: err.response?.data?.detail || err.message,
         type: 'error',
       });
-    } finally {
       setSyncingRepoId(null);
+      setSyncBaseline(null);
     }
   };
 
+  // Refresh durability: the backend owns sync state (sync_state per repo).
+  // After a browser refresh, React state is gone but the sync continues
+  // server-side — re-attach the spinner to the still-running sync instead
+  // of showing idle (and never fire a duplicate sync from here).
+  useEffect(() => {
+    if (syncingRepoId || syncBaseline) return;
+    const running = (activeQuery.data ?? []).find((r) => r.sync_state?.status === 'running');
+    if (running) {
+      setSyncingRepoId(running.id);
+      setSyncBaseline({
+        id: running.id,
+        at: running.last_sync?.completed_at ?? running.last_synced_at ?? null,
+      });
+    }
+  }, [activeQuery.data, syncingRepoId, syncBaseline]);
+
+  // Sync runs in the background: mark it complete once the repository row
+  // (refetched every 5s) shows a newer last-synced timestamp, or the
+  // backend sync_state reaches a terminal status (success/partial/failed).
+  useEffect(() => {
+    if (!syncBaseline) return;
+    const repo = (activeQuery.data ?? []).find((r) => r.id === syncBaseline.id);
+    if (!repo) return;
+    const current = repo?.last_sync?.completed_at ?? repo?.last_synced_at ?? null;
+    const stateStatus = repo?.sync_state?.status ?? null;
+    const stateDone = stateStatus === 'success' || stateStatus === 'partial' || stateStatus === 'failed';
+    if ((current && current !== syncBaseline.at) || stateDone) {
+      setSyncBaseline(null);
+      setSyncingRepoId(null);
+      queryClient.invalidateQueries({ queryKey: ['repositories'] });
+      if (stateStatus === 'failed') {
+        toast({ title: 'Sync failed', description: repo?.sync_state?.error ?? undefined, type: 'error' });
+      } else if (stateStatus === 'partial') {
+        toast({ title: 'Sync completed with errors', description: repo?.sync_state?.error ?? undefined, type: 'error' });
+      } else {
+        toast({ title: 'Sync completed', type: 'success' });
+      }
+    }
+  }, [activeQuery.data, syncBaseline, queryClient]);
+
   const handleSyncAll = async () => {
+    const repos = activeQuery.data ?? [];
+    const at: Record<string, string | null> = {};
+    for (const r of repos) {
+      at[r.id] = r.last_sync?.completed_at ?? r.last_synced_at ?? null;
+    }
+    setSyncAllBaseline({ at });
     setIsSyncingAll(true);
     try {
       const result = await api.syncAllRepositories();
-      toast({ title: 'Global sync completed', description: result.message, type: 'success' });
+      toast({ title: 'Global sync started', description: result.message, type: 'success' });
       queryClient.invalidateQueries({ queryKey: ['repositories'] });
+      // Safety net for the background pass.
+      setTimeout(() => {
+        setIsSyncingAll(false);
+        setSyncAllBaseline(null);
+      }, 180000);
     } catch (err: any) {
       toast({
         title: 'Global sync failed',
         description: err.response?.data?.detail || err.message,
         type: 'error',
       });
-    } finally {
       setIsSyncingAll(false);
+      setSyncAllBaseline(null);
     }
   };
+
+  // Global sync runs in the background: complete once every visible
+  // repository row shows a newer last-synced timestamp.
+  useEffect(() => {
+    if (!syncAllBaseline) return;
+    const repos = activeQuery.data ?? [];
+    if (repos.length === 0) return;
+    const allAdvanced = repos.every((r) => {
+      const current = r.last_sync?.completed_at ?? r.last_synced_at ?? null;
+      return current && current !== (syncAllBaseline.at[r.id] ?? null);
+    });
+    if (allAdvanced) {
+      setSyncAllBaseline(null);
+      setIsSyncingAll(false);
+      queryClient.invalidateQueries({ queryKey: ['repositories'] });
+      toast({ title: 'Global sync completed', type: 'success' });
+    }
+  }, [activeQuery.data, syncAllBaseline, queryClient]);
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
