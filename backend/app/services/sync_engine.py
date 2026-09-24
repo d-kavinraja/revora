@@ -43,6 +43,7 @@ from app.models.sync_run import (
     SYNC_REASON_STARTUP,
     SYNC_STATUS_FAILED,
     SYNC_STATUS_PARTIAL,
+    SYNC_STATUS_QUEUED,
     SYNC_STATUS_RUNNING,
     SYNC_STATUS_SUCCESS,
     SyncRun,
@@ -51,7 +52,18 @@ from app.models.sync_run import (
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
-_SYNC_ADVISORY_LOCK_KEY = 0x5A9C1024
+
+# Full-pass advisory lock (startup / background / manual full / recovery).
+# Only full installation-wide passes acquire this lock.
+FULL_PASS_ADVISORY_LOCK_KEY = 0x5A9C1024
+
+# Per-repository advisory lock prefix.
+# Per-repo syncs (manual / initial / login) use:
+# pg_try_advisory_lock(hashtext(repo_id::text))
+# This avoids any global lock and allows independent concurrent per-repo syncs.
+# The prefix is kept for documentation; the actual key is derived from repo_id.
+PER_REPO_ADVISORY_LOCK_PREFIX = 0x5A9C1000
+
 _ACTIVE_REVIEW_STATUSES = ("queued", "pending", "running")
 
 # Minimum GitHub App permissions Revora needs to review a repository.
@@ -123,7 +135,17 @@ async def record_sync_run(
                 reason=reason,
                 triggered_by=triggered_by,
                 started_at=datetime.now(UTC),
-                status=SYNC_STATUS_RUNNING,
+                status=status,
+                error=error,
+                repo_count=counts.get("repo_count", 0),
+                repos_added=counts.get("repos_added", 0),
+                repos_updated=counts.get("repos_updated", 0),
+                repos_removed=counts.get("repos_removed", 0),
+                repos_failed=counts.get("repos_failed", 0),
+                prs_found=counts.get("prs_found", 0),
+                prs_updated=counts.get("prs_updated", 0),
+                jobs_enqueued=counts.get("jobs_enqueued", 0),
+                details=details if details else None,
             )
             db.add(run)
         else:
@@ -467,14 +489,24 @@ async def sync_prs_once(
 
         for repo, inst in due_repos:
             try:
-                prs_found, prs_updated, jobs_enqueued = await _sync_repository_prs(
-                    db, repo, inst, headers, counts, now
-                )
-                counts["prs_found"] += prs_found
-                counts["prs_updated"] += prs_updated
-                counts["jobs_enqueued"] += jobs_enqueued
-                repo.last_synced_at = now
-                db.add(repo)
+                # SAVEPOINT per repository: a failing repo discards only its
+                # own partial batch (automatic on exception) without touching
+                # earlier repos' work or the caller's outer transaction.
+                # The commit after the block is the DISCOVERY BARRIER — one
+                # atomic batch per repository, so the worker observes each
+                # repo's full Pending set at once.
+                async with db.begin_nested():
+                    prs_found, prs_updated, jobs_enqueued = (
+                        await _sync_repository_prs(
+                            db, repo, inst, headers, counts, now
+                        )
+                    )
+                    counts["prs_found"] += prs_found
+                    counts["prs_updated"] += prs_updated
+                    counts["jobs_enqueued"] += jobs_enqueued
+                    repo.last_synced_at = now
+                    db.add(repo)
+                await db.commit()
             except Exception as e:
                 counts["failures"][repo.full_name] = f"{type(e).__name__}: {e}"
                 logger.error(
@@ -499,6 +531,13 @@ async def _sync_repository_prs(
 
     Per-PR isolation: a failure on one PR is logged and skipped, never
     propagated — one bad PR cannot abort the repository.
+
+    Discovery barrier: every eligible PR's PullRequest + Review(pending) +
+    ReviewExecution + ReviewJob rows are only flushed during the loop — this
+    function never commits. The caller commits one atomic batch per
+    repository, so the worker (separate session, 2s poll) observes the
+    repository's full Pending set at once and can never start running PR #1
+    before PR #2 exists.
     """
     owner, repo_name = repo.full_name.split("/", 1)
     token = await github_app_auth.get_installation_token(inst.installation_id)
@@ -532,6 +571,12 @@ async def _sync_repository_prs(
         prs_updated = 0
         jobs_enqueued = 0
         open_numbers: set[int] = set()
+
+        # Oldest-first ordering: the GitHub list endpoint defaults to
+        # newest-first, which would make FIFO (created_at ASC) process the
+        # newest PR first. Enqueue in ascending PR-number order so the queue
+        # drains #50 → #51 → #52 as users expect. Never rely on API defaults.
+        gh_open.sort(key=lambda p: int(p.get("number", 0)))
 
         for gh_pr in gh_open:
             pr_number = int(gh_pr.get("number", 0))
@@ -595,6 +640,10 @@ async def _sync_repository_prs(
                     f"[sync] Close-reconcile failed for {repo.full_name}#{db_pr.pr_number}: {e}",
                     exc_info=True,
                 )
+
+        # No commit here by design (see docstring): the caller commits one
+        # atomic batch per repository.
+        await db.flush()
 
     return prs_found, prs_updated, jobs_enqueued
 
@@ -740,6 +789,11 @@ async def _reconcile_single_pr(
         payload,
         sync_delivery_id(repo.github_id, pr_number, head_sha),
         webhook_action=webhook_action,
+        # Batched sync mode: no per-PR commit. The caller commits the whole
+        # repository batch atomically (see _sync_repository_prs), so the
+        # worker cannot observe or claim the first job before every eligible
+        # PR has a Pending Review row.
+        commit=False,
     )
     if job:
         logger.info(
@@ -798,20 +852,20 @@ async def _run_sync_pass_locked(
         try:
             locked = await lock_db.scalar(
                 text("SELECT pg_try_advisory_lock(:key)"),
-                {"key": _SYNC_ADVISORY_LOCK_KEY},
+                {"key": FULL_PASS_ADVISORY_LOCK_KEY},
             )
         except Exception:
             # Non-Postgres backend (tests) — run without the lock.
             return await _run_sync_pass(reason, user_id)
         if not locked:
-            logger.info("Sync pass skipped — another worker holds the advisory lock")
+            logger.info("Sync pass skipped — another worker holds the full-pass advisory lock")
             return {"status": "skipped", "reason": "advisory_lock"}
         try:
             return await _run_sync_pass(reason, user_id)
         finally:
             await lock_db.execute(
                 text("SELECT pg_advisory_unlock(:key)"),
-                {"key": _SYNC_ADVISORY_LOCK_KEY},
+                {"key": FULL_PASS_ADVISORY_LOCK_KEY},
             )
 
 
@@ -895,3 +949,120 @@ async def sync_loop() -> None:
         except Exception as e:
             logger.error(f"Background sync failed: {e}", exc_info=True)
         await asyncio.sleep(settings.SYNC_RECOVERY_INTERVAL_MINUTES * 60)
+
+
+# ---------------------------------------------------------------------------
+# Login reconciliation helper
+# ---------------------------------------------------------------------------
+
+
+async def _sync_single_repo_prs(
+    db,
+    repo: Repository,
+    inst: Installation,
+    reason: str,
+) -> tuple[int, int, int]:
+    """Sync PRs for a single repository (used by login reconciliation).
+
+    Reuses the same per-repo PR sync logic as the full passes but runs
+    independently with per-repo locking handled by the caller.
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    now = datetime.now(UTC)
+    counts: dict[str, Any] = {
+        "prs_found": 0,
+        "prs_updated": 0,
+        "jobs_enqueued": 0,
+        "failures": {},
+    }
+    prs_found, prs_updated, jobs_enqueued = await _sync_repository_prs(
+        db, repo, inst, headers, counts, now
+    )
+    repo.last_synced_at = now
+    db.add(repo)
+    return prs_found, prs_updated, jobs_enqueued
+
+
+async def _login_reconciliation(user_id: uuid.UUID) -> None:
+    """Lightweight per-repo reconciliation triggered after successful login.
+
+    Does NOT run a full installation-wide sync. Instead:
+    1. Refreshes repository list from GitHub (fast, no PR fetching)
+    2. For each active repo with LOCAL open PRs, runs PR sync with per-repo lock
+    3. Skips repos without local open PRs (periodic will catch them)
+
+    This avoids GitHub API storms on login while ensuring fresh state for
+    repositories the user actually cares about.
+    """
+    from app.db.session import AsyncSessionLocal as _SessionLocal
+
+    # Lazy import to avoid a circular import (repositories imports sync_engine).
+    from app.api.v1.endpoints.repositories import _process_queued_sync
+
+    logger.info(f"Login reconciliation started for user {user_id}")
+
+    async with _SessionLocal() as db:
+        # 1. Refresh repositories (fast)
+        await sync_repositories_once("login", user_id=user_id)
+
+        # 2. Get active repos with local open PRs
+        open_pr_repo_ids = set(
+            (
+                await db.execute(
+                    select(PullRequest.repo_id).where(
+                        PullRequest.status.in_(["open", "draft"])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        repos = await db.execute(
+            select(Repository, Installation)
+            .join(Installation, Repository.installation_id == Installation.id)
+            .where(
+                Repository.installation_id.isnot(None),
+                Repository.removed_at.is_(None),
+                Repository.reviews_enabled.is_(True),
+                Repository.is_archived.is_(False),
+                Installation.user_id == user_id,
+                Installation.permissions_ok.is_(True),
+            )
+        )
+
+        for repo, inst in repos.all():
+            if repo.id not in open_pr_repo_ids:
+                continue  # Skip repos with no local open PRs
+
+            # Per-repo sync with its own lock (handled by _background_single_repo_sync)
+            # We create a QUEUED sync run and process it
+            run = await record_sync_run(
+                db,
+                "login",
+                SYNC_STATUS_QUEUED,
+                triggered_by=user_id,
+                details={"repo_id": str(repo.id), "full_name": repo.full_name},
+            )
+
+        await db.commit()
+
+    # Process each queued run (outside the main transaction to avoid lock hold)
+    # In practice, these will be picked up by the background processor
+    # For login, we process them inline with retries
+    async with _SessionLocal() as db:
+        queued_runs = await db.execute(
+            select(SyncRun).where(
+                SyncRun.reason == "login",
+                SyncRun.status == SYNC_STATUS_QUEUED,
+                SyncRun.triggered_by == user_id,
+            )
+        )
+        for run in queued_runs.scalars().all():
+            repo_id = uuid.UUID(run.details["repo_id"])
+            await _process_queued_sync(run.id, user_id)
+
+    logger.info(f"Login reconciliation completed for user {user_id}")

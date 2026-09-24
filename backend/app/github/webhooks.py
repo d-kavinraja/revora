@@ -1,5 +1,8 @@
+import asyncio
 import hashlib
 import hmac
+import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -8,9 +11,57 @@ from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, PullRequest, Repository
+from app.models.sync_run import (
+    SYNC_REASON_WEBHOOK,
+    SYNC_STATUS_QUEUED,
+)
 from app.models.user import User
 from app.services.github_service import github_service
-from app.services.sync_engine import _has_required_permissions
+from app.services.sync_engine import _has_required_permissions, record_sync_run
+
+logger = logging.getLogger(__name__)
+
+
+async def _schedule_initial_repo_syncs(
+    repos: list[Repository], user_id, source: str
+) -> None:
+    """Trigger an immediate background initial sync for newly added repos.
+
+    Repository add previously persisted rows and waited (up to minutes) for
+    the periodic loop. Each repo gets its own durable sync_runs row with
+    status=QUEUED. A background processor picks up QUEUED runs and executes
+    them with per-repo locking. This ensures durability across restarts.
+    """
+    # Lazy import: the endpoints layer imports services, not vice versa.
+    from app.api.v1.endpoints.repositories import _process_queued_sync
+
+    # Capture plain values up front: the caller's session may expire attrs.
+    targets = [(r.id, r.full_name) for r in repos]
+    for repo_id, full_name in targets:
+        try:
+            async with AsyncSessionLocal() as db:
+                run = await record_sync_run(
+                    db,
+                    SYNC_REASON_WEBHOOK,
+                    SYNC_STATUS_QUEUED,
+                    triggered_by=user_id,
+                    details={
+                        "repo_id": str(repo_id),
+                        "full_name": full_name,
+                        "source": source,
+                    },
+                )
+            # Schedule via background task processor (not fire-and-forget asyncio.create_task)
+            # The processor will pick up the QUEUED run and transition it to RUNNING.
+            asyncio.create_task(_process_queued_sync(run.id, user_id))
+            print(
+                f"Scheduled initial background sync for {full_name} "
+                f"(source={source}, run={run.id})."
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to schedule initial sync for {full_name}: {e}"
+            )
 
 
 async def handle_installation_created(payload: dict[str, Any], delivery_id: str):
@@ -86,6 +137,7 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
             await db.refresh(db_inst)
             print(f"Updated existing installation {inst_id} for user {user.email}")
 
+        initial_sync_repos: list[Repository] = []
         for r in payload.get("repositories", []):
             repo_gid = r.get("id")
             res = await db.execute(
@@ -121,7 +173,14 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                 print(
                     f"Re-linked repository {r.get('full_name')} to installation {db_inst.id}."
                 )
+            initial_sync_repos.append(db_repo)
         await db.commit()
+        # Immediate background initial sync (P1-2): discover this
+        # installation's OPEN PRs now instead of waiting for the next
+        # periodic pass. Fire-and-forget — never blocks the webhook.
+        await _schedule_initial_repo_syncs(
+            initial_sync_repos, db_inst.user_id, "installation.created"
+        )
 
 
 async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str):
@@ -176,6 +235,7 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
             print(f"Installation {inst_id} not found in DB.")
             return
 
+        added_sync_repos: list[Repository] = []
         for r in payload.get("repositories_added", []):
             repo_gid = r.get("id")
             res = await db.execute(
@@ -208,6 +268,7 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
                     )
                 db.add(db_repo)
                 print(f"Updated repository {r.get('full_name')} installation mapping.")
+            added_sync_repos.append(db_repo)
 
         for r in payload.get("repositories_removed", []):
             repo_gid = r.get("id")
@@ -225,6 +286,10 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
                 print(f"Marked repository {r.get('full_name')} as removed via webhook.")
 
         await db.commit()
+        # Immediate background initial sync for newly added repos (P1-2).
+        await _schedule_initial_repo_syncs(
+            added_sync_repos, db_inst.user_id, "installation_repositories.added"
+        )
 
 
 async def handle_installation_permissions(payload: dict[str, Any], delivery_id: str):

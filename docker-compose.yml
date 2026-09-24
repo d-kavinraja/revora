@@ -46,23 +46,6 @@ services:
       redis:
         condition: service_healthy
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: python -m app.queue
-    volumes:
-      - ./backend:/app
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-revora}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-revora_db}
-      - REDIS_URL=redis://redis:6379/0
-      - APP_ENV=development
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
   frontend:
     build:
       context: ./frontend
