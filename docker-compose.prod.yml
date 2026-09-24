@@ -59,7 +59,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
     ports:
       - "8000:8000"
     environment:
@@ -89,34 +89,6 @@ services:
       resources:
         limits:
           memory: 1G
-    restart: unless-stopped
-
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: python -m app.queue
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379/0
-      - APP_ENV=production
-      - SECRET_KEY=${SECRET_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - GITHUB_APP_ID=${GITHUB_APP_ID}
-      - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
-      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
-    depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 2G
     restart: unless-stopped
 
   frontend:

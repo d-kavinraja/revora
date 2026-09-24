@@ -35,6 +35,7 @@ SYNC_STATUS_RUNNING = "running"
 SYNC_STATUS_SUCCESS = "success"
 SYNC_STATUS_PARTIAL = "partial"
 SYNC_STATUS_FAILED = "failed"
+SYNC_STATUS_QUEUED = "queued"
 
 
 class SyncRun(Base):

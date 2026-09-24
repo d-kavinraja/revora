@@ -108,6 +108,19 @@ export interface Repository {
     error: string | null;
     reason: string | null;
   } | null;
+  // Durable per-repository sync state (backend source of truth — survives
+  // browser refresh). "running" = sync in progress; "queued" = sync requested;
+  // "stale" = orphaned run; "success"/"partial"/"failed" = terminal states.
+  sync_state?: {
+    status: string | null;
+    reason: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    error: string | null;
+    prs_found?: number | null;
+    prs_updated?: number | null;
+    jobs_enqueued?: number | null;
+  } | null;
   settings?: {
     assigned_provider?: string;
     assigned_model?: string;
@@ -117,8 +130,8 @@ export interface Repository {
 
 export interface SyncRun {
   id: string;
-  reason: 'startup' | 'background' | 'manual' | 'webhook' | 'recovery' | string;
-  status: 'running' | 'success' | 'partial' | 'failed' | string;
+  reason: 'startup' | 'background' | 'manual' | 'webhook' | 'recovery' | 'login' | string;
+  status: 'running' | 'success' | 'partial' | 'failed' | 'queued' | 'stale' | string;
   started_at: string | null;
   completed_at: string | null;
   error: string | null;
@@ -429,8 +442,8 @@ export const api = {
     apiClient.get<Repository[]>('/repositories', { params: { include_removed: includeRemoved } }).then((r) => r.data),
   getSyncRuns: (limit = 50) =>
     apiClient.get<SyncRun[]>('/repositories/sync-runs', { params: { limit } }).then((r) => r.data),
-  syncRepository: (id: string) => apiClient.post<{ message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
-  syncAllRepositories: () => apiClient.post<{ message: string }>('/repositories/sync-all').then((r) => r.data),
+  syncRepository: (id: string) => apiClient.post<{ status: string; message: string }>(`/repositories/${id}/sync`).then((r) => r.data),
+  syncAllRepositories: () => apiClient.post<{ status: string; message: string }>('/repositories/sync-all').then((r) => r.data),
   getRepoGithubStats: (id: string) => apiClient.get<RepoGithubStats>(`/repositories/${id}/github-stats`).then((r) => r.data),
   getApiKeys: () => apiClient.get<ApiKey[]>('/api-keys').then((r) => r.data),
   createApiKey: (data: ApiKeyCreate) => apiClient.post<ApiKey>('/api-keys', data).then((r) => r.data),

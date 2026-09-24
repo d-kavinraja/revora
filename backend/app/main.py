@@ -1,20 +1,43 @@
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.ai.model_registry import canonical_registry
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.models.sync_run import SYNC_STATUS_QUEUED, SYNC_STATUS_RUNNING, SyncRun
 from app.queue.worker import run_worker
 from app.services.recovery import recover_stale_reviews_on_startup
-from app.services.sync_engine import SYNC_REASON_STARTUP, run_sync_pass, sync_loop
+from app.services.sync_engine import (
+    SYNC_REASON_STARTUP,
+    record_sync_run,
+    run_sync_pass,
+    sync_loop,
+)
 
 logger = logging.getLogger(__name__)
+
+
+async def _process_queued_sync_on_startup(run_id: uuid.UUID, repo_id: uuid.UUID, user_id: uuid.UUID | None) -> None:
+    """Process a QUEUED sync run on startup (simplified version without full retry loop)."""
+    from app.api.v1.endpoints.repositories import _background_single_repo_sync_with_retry
+
+    async with AsyncSessionLocal() as db:
+        run = await db.execute(select(SyncRun).where(SyncRun.id == run_id))
+        run = run.scalars().first()
+        if not run or run.status != SYNC_STATUS_QUEUED:
+            return
+
+        await record_sync_run(db, run.reason, SYNC_STATUS_RUNNING, run_id=run_id)
+
+    await _background_single_repo_sync_with_retry(repo_id, run_id, user_id)
 
 
 @asynccontextmanager
@@ -36,6 +59,24 @@ async def lifespan(app: FastAPI):
         await recover_stale_reviews_on_startup()
     except Exception:
         logger.exception("Startup recovery failed")
+
+    # Recover orphaned QUEUED sync runs (from webhook initial syncs, login, etc.)
+    # that were created before a restart but never picked up.
+    try:
+        async with AsyncSessionLocal() as db:
+            queued_runs = await db.execute(
+                select(SyncRun).where(
+                    SyncRun.status == SYNC_STATUS_QUEUED,
+                    SyncRun.started_at < datetime.now(UTC) - timedelta(minutes=5),
+                )
+            )
+            for run in queued_runs.scalars().all():
+                # Re-schedule via background processor
+                repo_id = uuid.UUID(run.details["repo_id"])
+                user_id = run.triggered_by
+                asyncio.create_task(_process_queued_sync_on_startup(run.id, repo_id, user_id))
+    except Exception:
+        logger.exception("QUEUED sync recovery failed")
 
     # Automatic recovery after downtime: one full sync pass — discovers new /
     # removed repositories, new / reopened / closed / merged PRs, new commits,
