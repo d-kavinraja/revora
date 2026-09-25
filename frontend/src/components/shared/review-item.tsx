@@ -56,8 +56,8 @@ export function ReviewItem({ review, queuePosition }: { review: Review; queuePos
           <span className="text-muted-foreground/70">{formatDateTimeWithRelative(review.created_at)}</span>
           {review.stats && (review.stats as Record<string, string>).provider && (
             <>
-              <span className="text-border">&#183;</span>
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs uppercase tracking-wider font-semibold text-foreground/80">
+              <span className="hidden text-border md:inline">&#183;</span>
+              <span className="flex w-full items-center gap-1.5 py-1 text-xs uppercase tracking-wider font-semibold text-foreground/80 md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
                 <ProviderIcon slug={(review.stats as Record<string, string>).provider} size={16} />
                 {(review.stats as Record<string, string>).provider} &middot; {(review.stats as Record<string, string>).model}
               </span>
