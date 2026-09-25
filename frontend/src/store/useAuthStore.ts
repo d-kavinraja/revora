@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface User {
+export interface User {
   id: string;
   email: string;
   name: string;
   role: string;
   image?: string;
+  /** GitHub login handle from OAuth (non-secret identity field). */
+  github_username?: string;
 }
 
 interface AuthState {

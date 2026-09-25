@@ -49,6 +49,7 @@ async def login(
             "name": user.name,
             "role": user.role,
             "image": user.avatar_url,
+            "github_username": user.github_username,
         },
     }
 
@@ -208,6 +209,7 @@ async def github_login(
             "name": user.name,
             "role": user.role,
             "image": user.avatar_url,
+            "github_username": user.github_username,
         },
     }
 
