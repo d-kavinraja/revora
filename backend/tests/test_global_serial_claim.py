@@ -479,6 +479,19 @@ class TestGlobalClaimShapeAndTopology:
         # Backend still starts (embedded worker via lifespan).
         assert "uvicorn app.main:app" in text
 
+    def test_run_command_starts_single_embedded_worker(self):
+        """macOS run.command must match run.bat: embedded worker only."""
+        run_command = ROOT / "run.command"
+        assert run_command.exists()
+        text = run_command.read_text(encoding="utf-8")
+        # No standalone worker process (Option 2 single-worker topology).
+        assert "python -m app.queue.worker" not in text
+        assert "app.queue.worker" not in text
+        # Backend still starts (embedded worker via lifespan).
+        assert "uvicorn app.main:app" in text
+        # Local-dev script still runs migrations before services.
+        assert "alembic upgrade head" in text
+
     def test_main_embedded_worker_is_the_single_source(self):
         main_src = (WORKER_PATH.parent.parent / "main.py").read_text(
             encoding="utf-8"
