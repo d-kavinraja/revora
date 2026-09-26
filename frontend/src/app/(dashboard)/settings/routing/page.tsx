@@ -2,12 +2,52 @@
 
 import { useEffect, useState } from 'react';
 import { api, ModelRoute } from '@/lib/api';
-import { GitBranchIcon } from '@animateicons/react/lucide';
+import { CircleCheckIcon, GitBranchIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 
-const FEATURES = ['code_review', 'security_scan', 'documentation', 'testing', 'summarization'];
+type FeatureStatus = 'active' | 'under_development';
+
+interface FeatureMeta {
+  key: string;
+  label: string;
+  status: FeatureStatus;
+  note?: string;
+}
+
+// Single source of truth for routing feature availability on this page.
+// Only 'code_review' is currently wired end-to-end; all other features are
+// intentionally disabled in the UI. To activate a feature later, flip its
+// status to 'active' — controls, chips, and save all activate with no
+// structural change.
+const FEATURES: FeatureMeta[] = [
+  { key: 'code_review', label: 'PR Review', status: 'active' },
+  {
+    key: 'security_scan',
+    label: 'Security Scan',
+    status: 'under_development',
+    note: 'This feature is currently under development. Provider and model routing will be available when it launches.',
+  },
+  {
+    key: 'documentation',
+    label: 'Documentation',
+    status: 'under_development',
+    note: 'This feature is currently under development. Provider and model routing will be available when it launches.',
+  },
+  {
+    key: 'testing',
+    label: 'Testing',
+    status: 'under_development',
+    note: 'This feature is currently under development. Provider and model routing will be available when it launches.',
+  },
+  {
+    key: 'summarization',
+    label: 'Summarization',
+    status: 'under_development',
+    note: 'This feature is currently under development. Provider and model routing will be available when it launches.',
+  },
+];
 
 interface ModelInfo {
   model: string;
@@ -64,17 +104,6 @@ export default function RoutingPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const getFeatureLabel = (f: string) => {
-    const labels: Record<string, string> = {
-      code_review: 'PR Review',
-      security_scan: 'Security Scan',
-      documentation: 'Documentation',
-      testing: 'Testing',
-      summarization: 'Summarization',
-    };
-    return labels[f] || f;
   };
 
   const getProviderDisplayName = (p: string) => {
@@ -152,56 +181,88 @@ export default function RoutingPage() {
       </div>
 
       <div className="space-y-4">
-        {FEATURES.map((feature) => {
+        {FEATURES.map((meta) => {
+          const feature = meta.key;
+          const isActive = meta.status === 'active';
           const selectedProvider = preferences[feature]?.provider || '';
           const modelsForProvider = selectedProvider ? (modelsPerProvider[selectedProvider] || []) : [];
 
           return (
             <div key={feature} className="cursor-target rounded-xl border border-border bg-surface-1 p-5">
-              <h2 className="flex items-center gap-2 font-bold text-foreground mb-3">
-                {selectedProvider && <ProviderIcon slug={selectedProvider} size={18} />}
-                {getFeatureLabel(feature)}
+              <h2 className="flex flex-wrap items-center gap-2 font-bold text-foreground mb-3">
+                {isActive && selectedProvider && <ProviderIcon slug={selectedProvider} size={18} />}
+                {meta.label}
+                {isActive ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-success/10 border border-success/30 text-success">
+                    <CircleCheckIcon size={12} />
+                    Active
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide bg-warning/10 text-warning border border-warning/30">
+                    Under Development
+                  </span>
+                )}
               </h2>
+              {!isActive && (
+                <p id={`${feature}-note`} className="text-xs text-muted-foreground mb-3">
+                  {meta.note}
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Provider</label>
                   <select
-                    value={selectedProvider}
+                    value={isActive ? selectedProvider : ''}
                     onChange={(e) =>
                       setPreferences((prev) => ({
                         ...prev,
                         [feature]: { provider: e.target.value, model: '' },
                       }))
                     }
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors"
+                    disabled={!isActive}
+                    aria-describedby={isActive ? undefined : `${feature}-note`}
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option value="">Default (auto-select)</option>
-                    {availableProviders.map((p) => (
-                      <option key={p} value={p}>{getProviderDisplayName(p)}</option>
-                    ))}
+                    {isActive ? (
+                      <>
+                        <option value="">Default (auto-select)</option>
+                        {availableProviders.map((p) => (
+                          <option key={p} value={p}>{getProviderDisplayName(p)}</option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value="">Not available yet</option>
+                    )}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Model</label>
                   <select
-                    value={preferences[feature]?.model || ''}
+                    value={isActive ? (preferences[feature]?.model || '') : ''}
                     onChange={(e) =>
                       setPreferences((prev) => ({
                         ...prev,
                         [feature]: { ...prev[feature], model: e.target.value },
                       }))
                     }
-                    disabled={!selectedProvider}
+                    disabled={!isActive || !selectedProvider}
+                    aria-describedby={isActive ? undefined : `${feature}-note`}
                     className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option value="">{selectedProvider ? 'Default model' : 'Select provider first'}</option>
-                    {modelsForProvider.map((m) => (
-                      <option key={m.model} value={m.model}>{m.model}</option>
-                    ))}
+                    {isActive ? (
+                      <>
+                        <option value="">{selectedProvider ? 'Default model' : 'Select provider first'}</option>
+                        {modelsForProvider.map((m) => (
+                          <option key={m.model} value={m.model}>{m.model}</option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value="">Not available yet</option>
+                    )}
                   </select>
                 </div>
               </div>
-              {selectedProvider && modelsForProvider.length > 0 && (
+              {isActive && selectedProvider && modelsForProvider.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {modelsForProvider.slice(0, 8).map((m) => (
                     <span key={m.model} className="text-xs font-medium px-2 py-0.5 rounded-full bg-surface-3 text-muted-foreground border border-border">

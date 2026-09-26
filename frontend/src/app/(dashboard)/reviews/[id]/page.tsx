@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import { TriangleAlertIcon, ChevronRightIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
+import { formatDateTimeWithRelative, timeAgo, formatDateTime } from '@/components/shared/time-ago';
 import { SkeletonText } from '@/components/shared/skeleton';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -512,9 +512,12 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 >
                   <StatusBadge status={h.status} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-mono text-muted-foreground">PR #{h.pull_request?.pr_number} · {h.pull_request?.title}</span>
+                    <span className="block text-xs font-mono text-muted-foreground truncate">PR #{h.pull_request?.pr_number} · {h.pull_request?.title}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{formatDateTimeWithRelative(h.created_at)}</span>
+                  <span className="text-xs text-muted-foreground text-right leading-tight shrink-0">
+                    <span className="block whitespace-nowrap">{timeAgo(h.created_at)}</span>
+                    <span className="block whitespace-nowrap">{formatDateTime(h.created_at)}</span>
+                  </span>
                 </Link>
               ))}
             </div>
@@ -526,29 +529,51 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div className="divide-y divide-border">
                   {historyData.executions.map((e) => (
-                    <div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="text-[11px] font-mono text-muted-foreground w-24 shrink-0">#{e.execution_number}</span>
-                      <span className="text-xs text-muted-foreground w-24 shrink-0">{e.trigger}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        e.status === 'completed' ? 'bg-success/10 text-success' :
-                        e.status === 'failed' ? 'bg-error/10 text-error' :
-                        e.status === 'cancelled' ? 'bg-muted/10 text-muted-foreground' :
-                        e.status === 'running' ? 'bg-info/10 text-info' :
-                        'bg-warning/10 text-warning'
-                      }`}>
-                        {e.status}
-                      </span>
-                      {(e.model || e.provider) && (
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs uppercase tracking-wider font-semibold text-foreground/80 truncate">
-                          {e.provider && <ProviderIcon slug={e.provider} size={14} />}
-                          {e.provider && <span>{e.provider} &middot; </span>}
-                          <span>{e.model}</span>
+                    <div
+                      key={e.id}
+                      className="flex flex-col gap-2 px-4 py-2.5 sm:grid sm:grid-cols-[3rem_5.5rem_5.75rem_minmax(0,1fr)_3rem_9rem] sm:items-center sm:gap-3"
+                    >
+                      {/* Mobile line 1: execution # + trigger + status.
+                          At sm+ this wrapper vanishes (contents) and its children
+                          become grid columns 1-3. */}
+                      <div className="flex items-center justify-between gap-3 sm:contents">
+                        <div className="flex items-center gap-3 min-w-0 sm:contents">
+                          <span className="text-[11px] font-mono text-muted-foreground shrink-0">#{e.execution_number}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{e.trigger}</span>
                         </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap justify-self-start ${
+                          e.status === 'completed' ? 'bg-success/10 text-success' :
+                          e.status === 'failed' ? 'bg-error/10 text-error' :
+                          e.status === 'cancelled' ? 'bg-muted/10 text-muted-foreground' :
+                          e.status === 'running' ? 'bg-info/10 text-info' :
+                          'bg-warning/10 text-warning'
+                        }`}>
+                          {e.status}
+                        </span>
+                      </div>
+                      {/* Provider/model cell: own line on mobile, grid column 4 at sm+.
+                          Icon is shrink-proof; only the model name truncates. */}
+                      {(e.model || e.provider) ? (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs uppercase tracking-wider font-semibold text-foreground/80 w-max max-w-full min-w-0 sm:justify-self-start" title={e.model || undefined}>
+                          {e.provider && <ProviderIcon slug={e.provider} size={14} className="shrink-0" />}
+                          {e.provider && <span className="shrink-0">{e.provider} &middot; </span>}
+                          <span className="truncate min-w-0">{e.model}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
-                      {e.duration_ms !== null && (
-                        <span className="text-xs text-muted-foreground ml-auto">{Math.round(e.duration_ms / 1000)}s</span>
-                      )}
-                      <span className="text-xs text-muted-foreground w-32 text-right shrink-0">{formatDateTimeWithRelative(e.started_at)}</span>
+                      {/* Mobile line 3: duration + timestamp.
+                          At sm+ this wrapper vanishes (contents) and its children
+                          become grid columns 5-6. */}
+                      <div className="flex items-center justify-between gap-3 sm:contents">
+                        <span className="text-xs text-muted-foreground text-right justify-self-end">
+                          {e.duration_ms !== null ? `${Math.round(e.duration_ms / 1000)}s` : '—'}
+                        </span>
+                        <span className="text-xs text-muted-foreground text-right leading-tight justify-self-end">
+                          <span className="block whitespace-nowrap">{timeAgo(e.started_at)}</span>
+                          <span className="block whitespace-nowrap">{formatDateTime(e.started_at)}</span>
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
