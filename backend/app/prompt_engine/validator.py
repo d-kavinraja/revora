@@ -25,7 +25,7 @@ PROVIDER_LIMITS = {
     "openai": {"context_window": 128000, "max_output": 4096},
     "anthropic": {"context_window": 200000, "max_output": 8192},
     "deepseek": {"context_window": 128000, "max_output": 4096},
-    "groq": {"context_window": 128000, "max_output": 4096},
+    "groq": {"context_window": 131072, "max_output": 65536},
 }
 
 

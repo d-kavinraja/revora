@@ -91,7 +91,7 @@ Revora supports an extensive array of LLM providers. Thanks to the internal cano
 | **Anthropic** | 🚧 Under Testing | API Key |
 | **OpenAI** | 🚧 Under Testing | API Key |
 | **DeepSeek** | 🚧 Under Testing | API Key |
-| **Groq** | 🚧 Under Testing | API Key |
+| **Groq** | ✅ Available | API Key (`gsk_…`) |
 | **Azure OpenAI** | 🚧 Under Testing | API Key |
 | **Mistral** | 🚧 Under Testing | API Key |
 | **xAI (Grok)** | 🚧 Backend Only | API Key |

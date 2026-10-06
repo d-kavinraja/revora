@@ -35,6 +35,11 @@ async def validate_form_payload(payload: dict[str, Any]):
             "valid": False,
             "errors": {"api_key": "Anthropic keys must start with sk-ant-"},
         }
+    if provider == "groq" and not api_key.startswith("gsk_"):
+        return {
+            "valid": False,
+            "errors": {"api_key": "Groq keys must start with gsk_"},
+        }
     if provider == "grok" and not api_key.startswith("xai-"):
         return {"valid": False, "errors": {"api_key": "Grok keys must start with xai-"}}
     if provider == "nvidia" and not api_key.startswith("nvapi-"):

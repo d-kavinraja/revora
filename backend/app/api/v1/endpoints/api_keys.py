@@ -38,6 +38,7 @@ PER_KEY_VALIDATION_TIMEOUT_SECONDS = 22.0
 _SECRET_PATTERNS = (
     re.compile(r"sk-[A-Za-z0-9_\-./+]{4,}"),
     re.compile(r"sk-ant-[A-Za-z0-9_\-./+]{4,}"),
+    re.compile(r"gsk_[A-Za-z0-9_\-./+]{4,}"),
     re.compile(r"xai-[A-Za-z0-9_\-./+]{4,}"),
     re.compile(r"nvapi-[A-Za-z0-9_\-./+]{4,}"),
     re.compile(r"Bearer\s+[A-Za-z0-9_\-./+=]+", re.IGNORECASE),
@@ -188,6 +189,12 @@ async def create_api_key(
             detail="Anthropic keys must start with sk-ant-",
         )
 
+    if provider == "groq" and not key_in.api_key.startswith("gsk_"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Groq keys must start with gsk_",
+        )
+
     if provider == "grok" and not key_in.api_key.startswith("xai-"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -262,6 +269,12 @@ async def update_api_key(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Anthropic keys must start with sk-ant-",
+            )
+
+        if provider == "groq" and not key_in.api_key.startswith("gsk_"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Groq keys must start with gsk_",
             )
 
         if provider == "grok" and not key_in.api_key.startswith("xai-"):

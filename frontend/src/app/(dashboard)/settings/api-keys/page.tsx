@@ -314,7 +314,7 @@ export default function ApiKeysSettingsPage() {
                     <option value="gemini">Gemini</option>
                     <option value="openai" disabled>OpenAI (Under Testing)</option>
                     <option value="anthropic" disabled>Claude (Under Testing)</option>
-                    <option value="groq" disabled>Groq (Under Testing)</option>
+                    <option value="groq">Groq</option>
                     <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
                     <option value="openrouter">OpenRouter</option>
                     <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
