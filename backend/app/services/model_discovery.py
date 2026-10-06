@@ -207,6 +207,76 @@ class ModelDiscoveryEngine:
         "gemini-2.5-flash-lite",
     ]
 
+    # Groq-specific non-chat families. Groq's Models API
+    # (GET https://api.groq.com/openai/v1/models) returns every active
+    # model including audio, guard, and agentic-system models, and exposes
+    # no modality field — so these are excluded by ID terms. Revora's
+    # code-review pipeline requires chat completions.
+    GROQ_NON_CHAT_TERMS: ClassVar[list[str]] = [
+        "whisper",
+        "tts",
+        "prompt-guard",
+        "llama-guard",
+        "embed",
+        "playai",
+        "orpheus",
+        "compound",
+    ]
+
+    # Groq model IDs retired by Groq for free/developer-tier usage.
+    # Source of truth: https://console.groq.com/docs/deprecations
+    # (verified 2026-10-05; refresh when Groq announces new waves —
+    # roughly monthly, ~30 days notice by email + deprecations page).
+    GROQ_DEPRECATED_IDS: ClassVar[frozenset] = frozenset(
+        {
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile",
+            "qwen/qwen3-32b",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "meta-llama/llama-guard-4-12b",
+            "moonshotai/kimi-k2-instruct-0905",
+            "groq/compound",
+            "groq/compound-mini",
+        }
+    )
+
+    # Curated Groq model metadata supplementing litellm.model_cost.
+    # Pricing: USD per 1M tokens (input/output) from
+    # https://console.groq.com/docs/models (verified 2026-10-05).
+    # Converted to per-token rates in _enrich_model. Only models with
+    # officially published specs are listed here; unknown IDs fall back
+    # to litellm.model_cost. Free-vs-paid: Groq bills per token on every
+    # model (free/developer is an account rate-limit tier, not a
+    # per-model attribute), so no model is marked free — see plan §8.
+    GROQ_MODEL_METADATA: ClassVar[dict[str, dict[str, object]]] = {
+        "openai/gpt-oss-20b": {
+            "context_window": 131072,
+            "max_completion_tokens": 65536,
+            "input_per_1m": 0.075,
+            "output_per_1m": 0.30,
+            "supports_function_calling": True,
+            "supports_reasoning": True,
+        },
+        "openai/gpt-oss-120b": {
+            "context_window": 131072,
+            "max_completion_tokens": 65536,
+            "input_per_1m": 0.15,
+            "output_per_1m": 0.60,
+            "supports_function_calling": True,
+            "supports_reasoning": True,
+        },
+        "openai/gpt-oss-safeguard-20b": {
+            "context_window": 131072,
+            "max_completion_tokens": 65536,
+            "input_per_1m": 0.075,
+            "output_per_1m": 0.30,
+            "supports_function_calling": True,
+            "supports_reasoning": True,
+            "preview": True,
+        },
+    }
+
     DEPRECATED_TERMS: ClassVar[list[str]] = [
         "-001",
         "-0314",
@@ -397,6 +467,14 @@ class ModelDiscoveryEngine:
                 logger.info(f"Skipping rate-limited Gemini model: {model_name}")
                 continue
 
+            # Exclude Groq non-chat families (audio/guard/agentic). The
+            # Groq Models API exposes no modality field, so filter by ID.
+            if provider.lower() == "groq" and any(
+                ex in m_lower for ex in cls.GROQ_NON_CHAT_TERMS
+            ):
+                logger.info(f"Skipping non-chat Groq model: {model_name}")
+                continue
+
             canonical_model = cls._enrich_model(model_name, provider)
             enriched_models.append(canonical_model)
 
@@ -524,6 +602,34 @@ class ModelDiscoveryEngine:
         supports_vision = info.get("supports_vision", False)
         supports_function_calling = info.get("supports_function_calling", False)
         supports_streaming = info.get("supports_streaming", True)
+        supports_reasoning = "reasoning" in m_lower or "o1" in m_lower
+
+        # Groq overlay: official per-model metadata supplements litellm.
+        # Groq retires models frequently; deprecated IDs are forced
+        # deprecated here so validate_model_access rejects them and the
+        # repository picker filters them, per existing convention.
+        if provider_lower == "groq":
+            if (
+                canonical_model_name in cls.GROQ_DEPRECATED_IDS
+                or model_name in cls.GROQ_DEPRECATED_IDS
+            ):
+                is_deprecated = True
+            meta = cls.GROQ_MODEL_METADATA.get(
+                canonical_model_name, cls.GROQ_MODEL_METADATA.get(model_name, {})
+            )
+            if meta:
+                if meta.get("context_window"):
+                    context_window = meta["context_window"]
+                if meta.get("input_per_1m") is not None:
+                    input_cost = float(meta["input_per_1m"]) / 1_000_000
+                if meta.get("output_per_1m") is not None:
+                    output_cost = float(meta["output_per_1m"]) / 1_000_000
+                if meta.get("supports_function_calling"):
+                    supports_function_calling = True
+                if meta.get("supports_reasoning"):
+                    supports_reasoning = True
+                if meta.get("preview"):
+                    is_preview = True
 
         status = "available"
         if is_deprecated:
@@ -551,7 +657,7 @@ class ModelDiscoveryEngine:
             supports_streaming=supports_streaming,
             supports_function_calling=supports_function_calling,
             supports_vision=supports_vision,
-            supports_reasoning="reasoning" in m_lower or "o1" in m_lower,
+            supports_reasoning=supports_reasoning,
             status=status,
             validation_timestamp=datetime.now(UTC).isoformat(),
         )

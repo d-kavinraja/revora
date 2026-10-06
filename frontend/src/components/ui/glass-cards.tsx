@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { cardData } from '@/lib/utils';
+import { useThemeStore } from '@/store/useThemeStore';
 import { CheckCircle2, FolderSync, KeyRound, Workflow, Rocket } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -13,6 +14,7 @@ interface CardProps {
     index: number;
     totalCards: number;
     color: string;
+    isLight: boolean;
 }
 
 const getIcon = (id: number) => {
@@ -26,7 +28,7 @@ const getIcon = (id: number) => {
     }
 };
 
-const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, color }) => {
+const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, color, isLight }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -122,20 +124,28 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                     padding: '2rem',
                     textAlign: 'center',
                     borderRadius: '24px',
-                    background: `
-                        linear-gradient(145deg, 
-                            rgba(255, 255, 255, 0.1), 
+                    background: isLight
+                        ? `linear-gradient(145deg,
+                            rgba(15, 23, 42, 0.06),
+                            rgba(15, 23, 42, 0.03)
+                        )`
+                        : `linear-gradient(145deg,
+                            rgba(255, 255, 255, 0.1),
                             rgba(255, 255, 255, 0.05)
-                        )
-                    `,
+                        )`,
                     backdropFilter: 'blur(25px) saturate(180%)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    boxShadow: `
-                        0 8px 32px rgba(0, 0, 0, 0.3),
-                        0 2px 8px rgba(0, 0, 0, 0.2),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                        inset 0 -1px 0 rgba(255, 255, 255, 0.1)
-                    `,
+                    border: isLight
+                        ? '1px solid rgba(15, 23, 42, 0.12)'
+                        : '1px solid rgba(255, 255, 255, 0.2)',
+                    boxShadow: isLight
+                        ? `0 8px 32px rgba(15, 23, 42, 0.12),
+                           0 2px 8px rgba(15, 23, 42, 0.08),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                           inset 0 -1px 0 rgba(15, 23, 42, 0.05)`
+                        : `0 8px 32px rgba(0, 0, 0, 0.3),
+                           0 2px 8px rgba(0, 0, 0, 0.2),
+                           inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                           inset 0 -1px 0 rgba(255, 255, 255, 0.1)`,
                     overflow: 'hidden'
                 }}>
                     
@@ -147,7 +157,7 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                             backgroundImage: `url(https://images.unsplash.com/photo-1550439062-609e1531270e?q=80&w=2000&auto=format&fit=crop)`,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center',
-                            opacity: 0.15,
+                            opacity: isLight ? 0.07 : 0.15,
                             zIndex: -1
                         }}
                     />
@@ -159,7 +169,9 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                         left: 0,
                         right: 0,
                         height: '60%',
-                        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)',
+                        background: isLight
+                            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 50%, transparent 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)',
                         pointerEvents: 'none',
                         borderRadius: '24px 24px 0 0'
                     }} />
@@ -173,7 +185,8 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                         height: '2px',
                         background: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.6) 50%, transparent 100%)',
                         borderRadius: '1px',
-                        pointerEvents: 'none'
+                        pointerEvents: 'none',
+                        opacity: isLight ? 0.5 : 1
                     }} />
 
                     {/* Side glass reflection */}
@@ -203,7 +216,7 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                         backgroundSize: '30px 30px, 25px 25px, 35px 35px',
                         pointerEvents: 'none',
                         borderRadius: '24px',
-                        opacity: 0.7
+                        opacity: isLight ? 0.35 : 0.7
                     }} />
                     
                     {/* Rendered Text Content */}
@@ -217,10 +230,10 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
                         >
                             {getIcon(id)}
                         </div>
-                        <h2 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
+                        <h2 className={`text-3xl font-bold tracking-tight drop-shadow-md ${isLight ? 'text-foreground' : 'text-white'}`}>
                             {title}
                         </h2>
-                        <p className="text-lg text-white/80 max-w-lg drop-shadow-sm">
+                        <p className={`text-lg max-w-lg drop-shadow-sm ${isLight ? 'text-muted-foreground' : 'text-white/80'}`}>
                             {description}
                         </p>
                     </div>
@@ -232,6 +245,10 @@ const Card: React.FC<CardProps> = ({ id, title, description, index, totalCards, 
 
 export const StackedCards: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
+    // Existing Revora theme mechanism (same as dashboard layout / home /
+    // setup-guide): live-switches with the global theme toggle.
+    const { theme } = useThemeStore();
+    const isLight = theme === 'light';
 
     useEffect(() => {
         const container = containerRef.current;
@@ -248,15 +265,17 @@ export const StackedCards: React.FC = () => {
     }, []);
 
     return (
-        <main ref={containerRef} style={{ background: '#0a0a0a', minHeight: '100vh' }}>
+        // Transparent: the (dashboard) layout behind this page already
+        // renders the standard Revora background (theme-aware shell plus
+        // the shared DotGrid), exactly like the review/repositories pages.
+        <main ref={containerRef} style={{ background: 'transparent', minHeight: '100vh' }}>
             {/* Hero Section */}
-            <section style={{
+            <section className={isLight ? 'text-foreground' : 'text-white'} style={{
                 height: '70vh',
                 width: '100%',
                 display: 'grid',
                 placeContent: 'center',
-                position: 'relative',
-                color: '#ffffff'
+                position: 'relative'
             }}>
                 <div style={{
                     position: 'absolute',
@@ -264,10 +283,11 @@ export const StackedCards: React.FC = () => {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    backgroundImage: `
-                        linear-gradient(to right, rgba(79, 79, 79, 0.18) 1px, transparent 1px),
-                        linear-gradient(to bottom, rgba(79, 79, 79, 0.18) 1px, transparent 1px)
-                    `,
+                    backgroundImage: isLight
+                        ? `linear-gradient(to right, rgba(100, 116, 139, 0.20) 1px, transparent 1px),
+                           linear-gradient(to bottom, rgba(100, 116, 139, 0.20) 1px, transparent 1px)`
+                        : `linear-gradient(to right, rgba(79, 79, 79, 0.18) 1px, transparent 1px),
+                           linear-gradient(to bottom, rgba(79, 79, 79, 0.18) 1px, transparent 1px)`,
                     backgroundSize: '54px 54px',
                     maskImage: 'radial-gradient(ellipse 60% 50% at 50% 0%, #000 70%, transparent 100%)'
                 }} />
@@ -285,8 +305,7 @@ export const StackedCards: React.FC = () => {
             </section>
 
             {/* Cards Section */}
-            <section style={{
-                color: '#ffffff',
+            <section className={isLight ? 'text-foreground' : 'text-white'} style={{
                 width: '100%',
                 paddingBottom: '20vh'
             }}>
@@ -300,6 +319,7 @@ export const StackedCards: React.FC = () => {
                             index={index}
                             totalCards={cardData.length}
                             color={card.color}
+                            isLight={isLight}
                         />
                     );
                 })}

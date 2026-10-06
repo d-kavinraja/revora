@@ -73,9 +73,6 @@ export function ConnectedProviders({ providers, loading }: ConnectedProvidersPro
                     Active
                   </span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5 truncate font-mono">
-                  {provider.default_model}
-                </div>
               </div>
 
               {/* Kebab menu — routes to the provider's management page (real action) */}

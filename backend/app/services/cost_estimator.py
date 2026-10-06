@@ -11,7 +11,7 @@ PROVIDER_COST_TABLE = {
     "openai": {"input": 0.0025, "output": 0.01},  # GPT-4o
     "anthropic": {"input": 0.003, "output": 0.015},  # Claude Sonnet
     "gemini": {"input": 0.000125, "output": 0.0005},  # Gemini 2.5 Flash
-    "groq": {"input": 0.00059, "output": 0.00079},  # Llama 3.3
+    "groq": {"input": 0.00015, "output": 0.0006},  # GPT-OSS 120B flagship rate
     "deepseek": {"input": 0.00014, "output": 0.00028},  # DeepSeek Chat
     "openrouter": {"input": 0.003, "output": 0.015},  # Varies by model
     "azure_openai": {"input": 0.0025, "output": 0.01},  # Same as OpenAI

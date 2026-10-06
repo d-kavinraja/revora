@@ -1,4 +1,5 @@
 import { MailIcon } from 'lucide-react';
+import MicroSlats from '@/components/ui/MicroSlats';
 import type { User } from '@/store/useAuthStore';
 
 interface ProfileCardProps {
@@ -32,6 +33,31 @@ export function ProfileCard({ user }: ProfileCardProps) {
       <div aria-hidden="true" className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl" />
       <div aria-hidden="true" className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-sky-500/10 blur-3xl" />
 
+      {/* MicroSlats animated background — decorative layer confined to this
+          card (clipped by overflow-hidden + rounded-2xl above). Transparent
+          so the surface/gradient wash shows through; the relative content
+          row below paints above it by DOM order. Cursor interaction only
+          takes effect inside this card (see MicroSlats locate/inside gate). */}
+      <div aria-hidden="true" className="absolute inset-0 opacity-70 dark:opacity-60">
+        <MicroSlats
+          preset="swell"
+          color="#8B5CF6"
+          glintColor="#ffffff"
+          backgroundColor="transparent"
+          slatWidth={10}
+          slatHeight={25}
+          gap={3}
+          roundness={0.75}
+          interactive
+          cursorStrength={0.7}
+          cursorSize={40}
+          swirl={0}
+          trail={1.4}
+          lean={0}
+          intro
+        />
+      </div>
+
       {/* Content row — horizontal on desktop */}
       <div className="relative p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4 md:gap-5">
         {/* Avatar */}
@@ -59,11 +85,11 @@ export function ProfileCard({ user }: ProfileCardProps) {
         <div className="flex-1 min-w-0">
           {/* Name + role */}
           <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-            <h2 className="text-xl md:text-2xl font-heading font-bold tracking-tight text-foreground break-words min-w-0">
+            <h2 className="text-xl md:text-2xl font-heading font-bold tracking-tight text-foreground break-words min-w-0 [text-shadow:0_1px_10px_rgb(0_0_0/0.4)]">
               {displayName}
             </h2>
             {user.role && (
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand/15 text-brand border border-brand/25 capitalize shrink-0">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand text-brand-foreground border border-brand capitalize shrink-0">
                 {user.role}
               </span>
             )}
@@ -74,14 +100,14 @@ export function ProfileCard({ user }: ProfileCardProps) {
               state (see note above). */}
           <div className="mt-3 flex flex-col sm:flex-row sm:items-stretch gap-3 sm:gap-0 min-w-0">
             <span className="flex items-center gap-2.5 min-w-0 sm:pr-5">
-              <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-surface-1/80 border border-border text-muted-foreground">
+              <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-surface-1/90 border border-border text-foreground/80">
                 <MailIcon size={14} aria-hidden="true" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-tight">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight [text-shadow:0_1px_6px_rgb(0_0_0/0.35)]">
                   Email
                 </span>
-                <span className="block text-sm font-medium text-foreground/90 truncate">{user.email}</span>
+                <span className="block text-sm font-medium text-foreground/90 truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]">{user.email}</span>
               </span>
             </span>
 
@@ -89,11 +115,11 @@ export function ProfileCard({ user }: ProfileCardProps) {
               <>
                 <span aria-hidden="true" className="hidden sm:block w-px bg-border shrink-0" />
                 <span className="flex items-center gap-2.5 min-w-0 sm:pl-5">
-                  <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-surface-1/80 border border-border text-foreground/80">
+                  <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-surface-1/90 border border-border text-foreground/80">
                     <GithubMarkIcon size={15} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-tight">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight [text-shadow:0_1px_6px_rgb(0_0_0/0.35)]">
                       GitHub
                     </span>
                     {githubUrl ? (
@@ -101,13 +127,13 @@ export function ProfileCard({ user }: ProfileCardProps) {
                         href={githubUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-sm font-semibold text-foreground hover:text-brand transition-colors truncate"
+                        className="block text-sm font-semibold text-foreground hover:text-brand transition-colors truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]"
                         aria-label={`GitHub profile: ${githubUsername}`}
                       >
                         @{githubUsername}
                       </a>
                     ) : (
-                      <span className="block text-sm font-semibold text-foreground truncate">@{githubUsername}</span>
+                      <span className="block text-sm font-semibold text-foreground truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]">@{githubUsername}</span>
                     )}
                   </span>
                 </span>

@@ -103,18 +103,18 @@ async def test_update_api_key(client: TestClient, test_db: AsyncSession, mock_us
         f"/api/v1/api-keys/{key.id}",
         json={
             "label": "Groq Updated",
-            "api_key": "newgroqkey12345",
+            "api_key": "gsk_newgroqkey12345",
         },
     )
     assert response.status_code == 200
     data = response.json()
     assert data["label"] == "Groq Updated"
-    assert data["masked_key"] == "newg...2345"
+    assert data["masked_key"] == "gsk_...2345"
 
     # Verify updated encryption in DB
     await test_db.refresh(key)
     decrypted = encryption_service.decrypt(key.encrypted_key)
-    assert decrypted == "newgroqkey12345"
+    assert decrypted == "gsk_newgroqkey12345"
 
 
 @pytest.mark.asyncio
