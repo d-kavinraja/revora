@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 
+import { backendApiBase } from '@/lib/backend-origin';
 import { relaySetCookies } from '@/lib/bff-cookies';
 
 /**
@@ -27,10 +28,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiBase =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8000/api/v1';
+  const apiBase = backendApiBase();
 
   const body = JSON.stringify({
     code: payload.code,
