@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, Clapperboard, Database, Proportions, Upload, Video, XCircle } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import type { Phase, SelectedVideo } from './types';
-import { fmtBytes, fmtDuration } from './types';
+import { fmtBytes, fmtDuration, isSafeMediaUrl } from './types';
 
 function fileFormat(filename: string): string {
   const m = filename.match(/\.([a-z0-9]{2,5})$/i);
@@ -46,13 +46,19 @@ export function OriginalVideoCard({
   onMetadata,
 }: OriginalVideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Trust boundary (CodeQL js/xss-through-dom): only allowlisted media
+  // URLs reach the <video> src below. Anything else keeps loadState at
+  // 'error', so the existing error UI renders instead (fail-closed).
+  const safeSrc = isSafeMediaUrl(selected.objectUrl) ? selected.objectUrl : null;
   // Per-video load state. Render-phase reset on identity change so the
   // loader shows immediately for the new video (never the old frame).
-  const [loadedUrl, setLoadedUrl] = useState(selected.objectUrl);
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
-  if (loadedUrl !== selected.objectUrl) {
-    setLoadedUrl(selected.objectUrl);
-    setLoadState('loading');
+  const [loadedUrl, setLoadedUrl] = useState(safeSrc);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(
+    safeSrc ? 'loading' : 'error',
+  );
+  if (loadedUrl !== safeSrc) {
+    setLoadedUrl(safeSrc);
+    setLoadState(safeSrc ? 'loading' : 'error');
   }
   const retryLoad = () => {
     setLoadState('loading');
@@ -83,27 +89,29 @@ export function OriginalVideoCard({
       </div>
 
       <div className="relative">
-        <video
-          key={selected.objectUrl}
-          ref={videoRef}
-          src={selected.objectUrl}
-          controls
-          playsInline
-          preload="metadata"
-          className="w-full rounded-lg bg-black aspect-video"
-          onLoadStart={() => setLoadState('loading')}
-          onLoadedMetadata={(e) => {
-            const el = e.currentTarget;
-            onMetadata(
-              el.duration || null,
-              el.videoWidth && el.videoHeight
-                ? `${el.videoWidth}x${el.videoHeight}`
-                : null,
-            );
-          }}
-          onCanPlay={() => setLoadState('ready')}
-          onError={() => setLoadState('error')}
-        />
+        {safeSrc ? (
+          <video
+            key={safeSrc}
+            ref={videoRef}
+            src={safeSrc}
+            controls
+            playsInline
+            preload="metadata"
+            className="w-full rounded-lg bg-black aspect-video"
+            onLoadStart={() => setLoadState('loading')}
+            onLoadedMetadata={(e) => {
+              const el = e.currentTarget;
+              onMetadata(
+                el.duration || null,
+                el.videoWidth && el.videoHeight
+                  ? `${el.videoWidth}x${el.videoHeight}`
+                  : null,
+              );
+            }}
+            onCanPlay={() => setLoadState('ready')}
+            onError={() => setLoadState('error')}
+          />
+        ) : null}
         {loadState !== 'ready' && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg bg-black/70 px-4 text-center"

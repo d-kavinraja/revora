@@ -71,6 +71,47 @@ export function metric(v: string | number | null | undefined) {
   return String(v);
 }
 
+/** Schemes a media element is ever allowed to load in Model Lab. `blob:`
+ *  covers every legitimate source (upload, recording, and dataset bytes
+ *  all reach the UI as URL.createObjectURL results); `https:` covers
+ *  backend-served media. `http:` is deliberately excluded — no code path
+ *  needs it, so an explicit change here is required before one ever can.
+ *  Everything else (javascript:, data:, vbscript:, file:, …) is rejected.
+ */
+const SAFE_MEDIA_SCHEMES: ReadonlySet<string> = new Set(['blob:', 'https:']);
+
+/**
+ * Trust boundary for media element sources (CodeQL js/xss-through-dom).
+ * Only browser-generated blob URLs and https URLs may reach a
+ * <video>/<audio> `src`. Anything else — non-strings, empty values,
+ * whitespace/control-character tricks, schemeless or malformed URLs, and
+ * non-allowlisted schemes — is rejected so callers fail closed into
+ * their existing error UI instead of handing the string to the DOM.
+ */
+export function isSafeMediaUrl(url: unknown): url is string {
+  if (typeof url !== 'string') return false;
+  const v = url.trim();
+  if (!v) return false;
+  // Raw spaces, quotes, angle brackets, backticks, and backslashes are
+  // never valid unencoded in a URL: reject before parsing so parser
+  // leniency (e.g. stripped newlines) cannot smuggle a scheme through.
+  if (/[\s<>"'`\\]/.test(v)) return false;
+  let parsed: URL;
+  try {
+    // Relative URLs throw without a base (correct: no relative media
+    // source exists in this app); opaque blob: URLs parse normally.
+    parsed = new URL(v);
+  } catch {
+    return false;
+  }
+  const scheme = parsed.protocol.toLowerCase();
+  if (!SAFE_MEDIA_SCHEMES.has(scheme)) return false;
+  // A bare `blob:` (empty path) can never come from createObjectURL and
+  // loads nothing: require a fully-formed URL so only real media passes.
+  if (scheme === 'blob:' && !parsed.pathname) return false;
+  return true;
+}
+
 export function friendlyError(err: unknown): string {
   const axiosErr = err as {
     code?: unknown;

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Crop, ScanEye } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { MODEL_INPUT } from './types';
+import { MODEL_INPUT, isSafeMediaUrl } from './types';
 
 export type VizMode = 'crop' | 'full';
 
@@ -29,11 +29,17 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
   const cropRef = useRef<HTMLCanvasElement>(null);
   // Per-video paint state. Render-phase reset when the video identity
   // changes (the approved alternative to setState inside an effect).
-  const [paintUrl, setPaintUrl] = useState(objectUrl);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  if (paintUrl !== objectUrl) {
-    setPaintUrl(objectUrl);
-    setStatus('loading');
+  // Trust boundary (CodeQL js/xss-through-dom): only allowlisted media
+  // URLs reach the hidden <video> src below. Anything else keeps status
+  // at 'error', so the existing error UI renders instead (fail-closed).
+  const safeSrc = isSafeMediaUrl(objectUrl) ? objectUrl : null;
+  const [paintUrl, setPaintUrl] = useState(safeSrc);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
+    safeSrc ? 'loading' : 'error',
+  );
+  if (paintUrl !== safeSrc) {
+    setPaintUrl(safeSrc);
+    setStatus(safeSrc ? 'loading' : 'error');
   }
 
   const clearCanvases = useCallback(() => {
@@ -211,6 +217,11 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
 
   const retry = () => {
     const video = videoRef.current;
+    if (!video) {
+      // No source element (rejected URL): stay on the error UI.
+      setStatus('error');
+      return;
+    }
     setStatus('loading');
     clearCanvases();
     try {
@@ -223,15 +234,17 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
   return (
     <div className="rounded-lg bg-surface-2 p-3">
       {/* Hidden source video: same bytes as the selected video. */}
-      <video
-        ref={videoRef}
-        src={objectUrl}
-        preload="auto"
-        muted
-        playsInline
-        aria-hidden="true"
-        className="hidden"
-      />
+      {safeSrc ? (
+        <video
+          ref={videoRef}
+          src={safeSrc}
+          preload="auto"
+          muted
+          playsInline
+          aria-hidden="true"
+          className="hidden"
+        />
+      ) : null}
 
       {!inBounds && (
         <p className="mb-2 text-xs text-warning leading-relaxed" role="note">
