@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { isIndexableDeployment } from '@/lib/site';
+import { isSafeInternalPath } from '@/lib/safe-redirect';
 
 /**
  * Routes that require a signed-in user. Unchanged behaviour: anonymous visitors are
@@ -61,18 +62,23 @@ export function proxy(request: NextRequest) {
   // Protect application routes
   if (matchesPrefix(pathname, AUTHENTICATED_ROUTE_PREFIXES)) {
     if (!token) {
-      return withRobotsPolicy(
-        NextResponse.redirect(new URL('/login', request.url)),
-        pathname
-      );
+      // Preserve the originally requested path so the login flow can return
+      // the user here (instead of always landing on /dashboard).
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return withRobotsPolicy(NextResponse.redirect(loginUrl), pathname);
     }
   }
 
   // Redirect /login to dashboard if already authenticated
   if (pathname.startsWith('/login') || pathname === '/') {
     if (token) {
+      // Honour a preserved destination when it is a safe internal path;
+      // otherwise fall back to the dashboard.
+      const requested = request.nextUrl.searchParams.get('redirect');
+      const destination = isSafeInternalPath(requested) ? requested : '/dashboard';
       return withRobotsPolicy(
-        NextResponse.redirect(new URL('/dashboard', request.url)),
+        NextResponse.redirect(new URL(destination, request.url)),
         pathname
       );
     }

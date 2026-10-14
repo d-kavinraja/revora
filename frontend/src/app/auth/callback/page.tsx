@@ -7,6 +7,7 @@ import type { User } from '@/store/useAuthStore';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { SoftAurora } from '@/components/ui/SoftAurora';
 import { useThemeStore } from '@/store/useThemeStore';
+import { isSafeInternalPath } from '@/lib/safe-redirect';
 import { motion } from 'framer-motion';
 
 function CallbackHandler() {
@@ -87,7 +88,11 @@ function CallbackHandler() {
         // In-memory token for this tab only. The durable session is the
         // backend-set HttpOnly cookie — page JS never touches it.
         setAuth(access_token, user);
-        router.push('/dashboard');
+        // Return the user to the page they originally requested (the guard
+        // appended ?redirect= and login stashed it); default to the dashboard.
+        const intended = sessionStorage.getItem('revora_post_login_redirect');
+        sessionStorage.removeItem('revora_post_login_redirect');
+        router.push(isSafeInternalPath(intended) ? intended : '/dashboard');
       } catch (err: unknown) {
         console.error('[Callback] Auth exchange failed:', err);
         let message =

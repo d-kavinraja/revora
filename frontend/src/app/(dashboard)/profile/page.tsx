@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { HomeIcon, ChevronRightIcon } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, Provider, ApiKey } from '@/lib/api';
@@ -10,17 +9,20 @@ import { ProfileCard } from './_components/ProfileCard';
 import { ConnectedProviders } from './_components/ConnectedProviders';
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, sessionChecked } = useAuthStore();
 
   const [activeProviders, setActiveProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
+    // Load only once the session restore has settled AND a user is present.
+    // This page deliberately does NOT redirect on its own: the (dashboard)
+    // layout's guard already waits for sessionChecked and routes unauthorized
+    // sessions to /login and unreachable backends to /waking-up. Redirecting
+    // here on the transient `user === null` that the auth store serves on the
+    // first client render after a hard refresh is what bounced a refreshed
+    // /profile through /login (which the edge then rewrote to /dashboard).
+    if (!sessionChecked || !user) return;
 
     const fetchData = async () => {
       setLoading(true);
@@ -39,7 +41,7 @@ export default function ProfilePage() {
     };
 
     fetchData();
-  }, [user, router]);
+  }, [sessionChecked, user]);
 
   if (!user) return null;
 

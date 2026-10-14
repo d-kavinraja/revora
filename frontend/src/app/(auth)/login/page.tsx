@@ -13,6 +13,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { useThemeStore } from '@/store/useThemeStore';
+import { isSafeInternalPath } from '@/lib/safe-redirect';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,6 +25,16 @@ export default function LoginPage() {
   const handleGitHubLogin = async () => {
     setLoadingConfig(true);
     try {
+      // Remember where the user was headed (guards append ?redirect=) so the
+      // OAuth round-trip can return them there instead of always going to the
+      // dashboard. Only safe internal paths are kept; anything else is cleared.
+      const intended = new URLSearchParams(window.location.search).get('redirect');
+      if (isSafeInternalPath(intended)) {
+        sessionStorage.setItem('revora_post_login_redirect', intended);
+      } else {
+        sessionStorage.removeItem('revora_post_login_redirect');
+      }
+
       const config = await api.getAuthConfig();
       const clientId = config.github_client_id;
       if (!clientId) {

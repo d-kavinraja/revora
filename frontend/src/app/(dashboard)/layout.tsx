@@ -42,7 +42,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
     void (async () => {
       await logout({ revoke: false });
-      router.replace('/login');
+      // Preserve the originally requested route through the login flow.
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     })();
   }, [sessionChecked, isAuthenticated, restoreReason, logout, router, pathname]);
 
