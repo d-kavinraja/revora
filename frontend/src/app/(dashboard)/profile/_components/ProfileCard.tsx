@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { MailIcon } from 'lucide-react';
-import MicroSlats from '@/components/ui/MicroSlats';
+import Aurora from '@/components/ui/Aurora';
+import { useThemeStore } from '@/store/useThemeStore';
 import type { User } from '@/store/useAuthStore';
 
 interface ProfileCardProps {
@@ -16,7 +17,7 @@ const GithubMarkIcon = ({ size = 20, className = '' }: { size?: number; classNam
 
 /**
  * Full-width landscape identity card — reference-image layout:
- * banner backdrop, avatar on the left, name/role/email/GitHub
+ * avatar on the left, name/role/email/GitHub
  * arranged horizontally on desktop, stacked on mobile.
  *
  * The GitHub username renders ONLY when it actually exists on the user
@@ -25,6 +26,8 @@ const GithubMarkIcon = ({ size = 20, className = '' }: { size?: number; classNam
  * so the GitHub block is hidden today — conditional, never fabricated.
  */
 export function ProfileCard({ user }: ProfileCardProps) {
+  const { theme } = useThemeStore();
+  const isLight = theme === 'light';
   const githubUsername = typeof user.github_username === 'string' ? user.github_username.trim() : '';
   const githubUrl = githubUsername ? `https://github.com/${githubUsername}` : '';
   const displayName = user.name?.trim() || 'User';
@@ -37,38 +40,36 @@ export function ProfileCard({ user }: ProfileCardProps) {
 
   return (
     <section aria-label="Profile" className="relative rounded-2xl border border-border bg-surface-1 shadow-sm overflow-hidden">
-      {/* Banner backdrop — soft sky→indigo→purple wash with subtle abstract shapes */}
-      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/15" />
-      <div aria-hidden="true" className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl" />
-      <div aria-hidden="true" className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-sky-500/10 blur-3xl" />
-
-      {/* MicroSlats animated background — decorative layer confined to this
-          card (clipped by overflow-hidden + rounded-2xl above). Transparent
-          so the surface/gradient wash shows through; the relative content
-          row below paints above it by DOM order. Cursor interaction only
-          takes effect inside this card (see MicroSlats locate/inside gate). */}
-      <div aria-hidden="true" className="absolute inset-0 opacity-70 dark:opacity-60">
-        <MicroSlats
-          preset="swell"
-          color="#8B5CF6"
-          glintColor="#ffffff"
-          backgroundColor="transparent"
-          slatWidth={10}
-          slatHeight={25}
-          gap={3}
-          roundness={0.75}
-          interactive
-          cursorStrength={0.7}
-          cursorSize={40}
-          swirl={0}
-          trail={1.4}
-          lean={0}
+      {/* Aurora background — decorative layer confined to this card (clipped by
+          overflow-hidden + rounded-2xl). pointer-events-none so it never
+          intercepts card interactions; the component's own cursor reach still
+          works via its window-level listeners. The relative content row below
+          paints above it by DOM order. */}
+      <div aria-hidden="true" className="absolute inset-0 z-0 pointer-events-none">
+        <Aurora
+          colorStops={
+            isLight
+              ? ['#ef4444', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed']
+              : ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7']
+          }
+          height={0.85}
+          amplitude={1}
+          blend={0.6}
+          speed={1}
+          scale={1.15}
+          glow={0.7}
+          brightness={isLight ? 1.05 : 1.1}
+          layers={3}
+          direction="top"
+          mouseInteraction
           intro
+          lightMode={isLight}
+          opacity={isLight ? 0.62 : 0.5}
         />
       </div>
 
       {/* Content row — horizontal on desktop */}
-      <div className="relative p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4 md:gap-5">
+      <div className="relative z-10 p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4 md:gap-5">
         {/* Avatar */}
         <div className="shrink-0">
           {avatarSrc ? (
@@ -95,7 +96,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
         <div className="flex-1 min-w-0">
           {/* Name + role */}
           <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-            <h2 className="text-xl md:text-2xl font-heading font-bold tracking-tight text-foreground break-words min-w-0 [text-shadow:0_1px_10px_rgb(0_0_0/0.4)]">
+            <h2 className="text-xl md:text-2xl font-heading font-bold tracking-tight text-foreground break-words min-w-0">
               {displayName}
             </h2>
             {user.role && (
@@ -114,10 +115,10 @@ export function ProfileCard({ user }: ProfileCardProps) {
                 <MailIcon size={14} aria-hidden="true" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight [text-shadow:0_1px_6px_rgb(0_0_0/0.35)]">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight">
                   Email
                 </span>
-                <span className="block text-sm font-medium text-foreground/90 truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]">{user.email}</span>
+                <span className="block text-sm font-medium text-foreground/90 truncate">{user.email}</span>
               </span>
             </span>
 
@@ -129,7 +130,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
                     <GithubMarkIcon size={15} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight [text-shadow:0_1px_6px_rgb(0_0_0/0.35)]">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight">
                       GitHub
                     </span>
                     {githubUrl ? (
@@ -137,13 +138,13 @@ export function ProfileCard({ user }: ProfileCardProps) {
                         href={githubUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-sm font-semibold text-foreground hover:text-brand transition-colors truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]"
+                        className="block text-sm font-semibold text-foreground hover:text-brand transition-colors truncate"
                         aria-label={`GitHub profile: ${githubUsername}`}
                       >
                         @{githubUsername}
                       </a>
                     ) : (
-                      <span className="block text-sm font-semibold text-foreground truncate [text-shadow:0_1px_8px_rgb(0_0_0/0.4)]">@{githubUsername}</span>
+                      <span className="block text-sm font-semibold text-foreground truncate">@{githubUsername}</span>
                     )}
                   </span>
                 </span>
