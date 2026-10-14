@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
   }
 
   const apiBase =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8000/api/v1';
 
   const body = JSON.stringify({
     code: payload.code,

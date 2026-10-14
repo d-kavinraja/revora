@@ -532,6 +532,7 @@ html.motion-pending .ds-demo-card {
     width: auto;
     height: auto;
     padding: 10px 0 0;
+    border-left: 0;
   }
 
   .ds-sign-up {
@@ -610,6 +611,7 @@ html.motion-pending .ds-demo-card {
     width: auto;
     height: auto;
     padding: 10px 0 0;
+    border-left: 0;
   }
 
   .ds-sign-up {
@@ -645,11 +647,24 @@ html.motion-pending .ds-demo-card {
     width: auto;
   }
 
+  .ds-hero {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(20px, 4svh, 32px);
+    padding: calc(var(--header-top) + 72px) var(--gutter-end) var(--hero-bottom)
+      var(--gutter-start);
+  }
+
+  .ds-hero-content {
+    position: static;
+    max-width: 100%;
+  }
+
   .ds-demo-card {
-    right: var(--gutter-end);
-    top: clamp(176px, 32svh, 300px);
-    bottom: auto;
-    width: min(280px, 62vw);
+    position: static;
+    width: min(100%, 400px);
+    aspect-ratio: auto;
   }
 }
 

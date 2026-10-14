@@ -96,7 +96,7 @@ const Waves = ({
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   const boundingRef = useRef({ width: 0, height: 0, left: 0, top: 0 });
-  const noiseRef = useRef(new Noise(Math.random()));
+  const noiseRef = useRef(null);
   const linesRef = useRef([]);
   const mouseRef = useRef({
     x: -10,
@@ -140,10 +140,11 @@ const Waves = ({
   }, [lineColor, waveSpeedX, waveSpeedY, waveAmpX, waveAmpY, friction, tension, maxCursorMove, xGap, yGap]);
 
   useEffect(() => {
-    console.log('Waves mounted');
     const canvas = canvasRef.current;
     const container = containerRef.current;
     ctxRef.current = canvas.getContext('2d');
+    // Seeded per mount inside the effect (render must stay pure).
+    noiseRef.current = new Noise(Math.random());
 
     function setSize() {
       boundingRef.current = container.getBoundingClientRect();

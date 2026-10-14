@@ -12,7 +12,9 @@ import { relaySetCookies } from '@/lib/bff-cookies';
  */
 export async function GET(request: NextRequest) {
   const apiBase =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8000/api/v1';
 
   const cookieHeader = request.headers.get('cookie');
 

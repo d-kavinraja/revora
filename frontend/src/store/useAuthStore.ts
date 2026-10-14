@@ -72,10 +72,18 @@ interface AuthState {
    *  failure). Guards must wait for this before redirecting, otherwise a
    *  valid refresh would bounce to /login during the async restore. */
   sessionChecked: boolean;
+  /** Why the last restore failed (null = fresh or last restore succeeded).
+   *  Lets guards route `unauthorized` to /login and `unreachable`
+   *  (backend asleep/down) to the waking-up flow instead of signing out. */
+  restoreReason: null | 'unauthorized' | 'unreachable';
   setAuth: (token: string, user: User) => void;
   markSessionChecked: () => void;
-  logout: () => Promise<void>;
+  logout: (opts?: { revoke?: boolean }) => Promise<void>;
 }
+
+// Single-flight across concurrent 401s: every overlapping caller shares
+// one POST + one state transition instead of revoking N times.
+let logoutInFlight: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -84,20 +92,39 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       sessionChecked: false,
+      restoreReason: null,
       setAuth: (token, user) =>
         set({ token, user: normalizeUserProfile(user), isAuthenticated: true }),
       markSessionChecked: () => set({ sessionChecked: true }),
-      logout: async () => {
-        // Server-side revocation (bumps token_version) + cookie deletion,
-        // both routed through the same-origin BFF so the browser actually
-        // processes the Set-Cookie (first-party, SameSite=Lax in dev).
-        // Local state clears regardless of the network result.
-        try {
-          await fetch('/api/auth/logout', { method: 'POST' });
-        } catch {
-          // network errors must not block local sign-out
-        }
-        set({ token: null, user: null, isAuthenticated: false });
+      logout: (opts) => {
+        if (logoutInFlight) return logoutInFlight;
+        // revoke=false clears local state + the frontend cookie WITHOUT
+        // bumping token_version: a failed restore or a dead backend must
+        // never destroy a session that may still be valid server-side.
+        // Only an explicit user sign-out passes revoke (the default).
+        const revoke = opts?.revoke !== false;
+        logoutInFlight = (async () => {
+          // Server-side revocation (bumps token_version) + cookie deletion,
+          // both routed through the same-origin BFF so the browser actually
+          // processes the Set-Cookie (first-party, SameSite=Lax in dev).
+          // Local state clears regardless of the network result.
+          try {
+            await fetch(`/api/auth/logout${revoke ? '' : '?revoke=0'}`, {
+              method: 'POST',
+            });
+          } catch {
+            // network errors must not block local sign-out
+          }
+          set({
+            token: null,
+            user: null,
+            isAuthenticated: false,
+            restoreReason: null,
+          });
+        })().finally(() => {
+          logoutInFlight = null;
+        });
+        return logoutInFlight;
       },
     }),
     {
@@ -115,6 +142,7 @@ export const useAuthStore = create<AuthState>()(
         token: null,
         isAuthenticated: false,
         sessionChecked: false,
+        restoreReason: null,
         user: (persisted as { user?: User | null } | null)?.user ?? null,
       }),
     }

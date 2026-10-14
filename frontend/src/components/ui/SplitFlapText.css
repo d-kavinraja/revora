@@ -192,3 +192,22 @@
   --board-tile: #141a26;
   --board-text: #f8fafc;
 }
+
+/* Responsive footer board: the inline font-size/gap props target desktop,
+ * so scale the tile geometry down on narrow screens (scoped to the board —
+ * other SplitFlapText instances are untouched). 16 tiles at 18px/3px gap
+ * ≈ 279px wide (fits 320px viewports); at 22px/4px ≈ 346px (fits 401px+).
+ * Same words, same flip animation — only the tile size changes. */
+@media (max-width: 400px) {
+  .split-flap-board .split-flap-text {
+    --split-flap-font-size: 18px !important;
+    --split-flap-gap: 3px !important;
+  }
+}
+
+@media (min-width: 401px) and (max-width: 560px) {
+  .split-flap-board .split-flap-text {
+    --split-flap-font-size: 22px !important;
+    --split-flap-gap: 4px !important;
+  }
+}
