@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 
+import { backendApiBase } from '@/lib/backend-origin';
 import { relaySetCookies } from '@/lib/bff-cookies';
 
 /**
@@ -11,10 +12,10 @@ import { relaySetCookies } from '@/lib/bff-cookies';
  * browser started the flow instead of silently skipping verification.
  */
 export async function GET(request: NextRequest) {
-  const apiBase =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8000/api/v1';
+  // Normalized to .../api/v1 regardless of BACKEND_ORIGIN shape (bare
+  // origin vs suffixed URL) — a bare origin here previously produced
+  // upstream /auth/... paths that FastAPI answers with 404.
+  const apiBase = backendApiBase();
 
   const cookieHeader = request.headers.get('cookie');
 

@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 
+import { backendApiBase } from '@/lib/backend-origin';
 import { relaySetCookies } from '@/lib/bff-cookies';
 
 /**
@@ -23,10 +24,11 @@ function clearSessionCookie(headers: Headers, secure: boolean): void {
 }
 
 export async function POST(request: NextRequest) {
-  const apiBase =
-    process.env.BACKEND_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8000/api/v1';
+  // backendApiBase() guarantees the /api/v1 suffix: with a bare
+  // BACKEND_ORIGIN the old inline fallback produced upstream
+  // /auth/logout paths that FastAPI answers with 404, silently
+  // skipping server-side session revocation on explicit sign-out.
+  const apiBase = backendApiBase();
 
   const cookieHeader = request.headers.get('cookie');
   const secure = request.nextUrl.protocol === 'https:';
