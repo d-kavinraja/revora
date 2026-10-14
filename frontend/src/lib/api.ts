@@ -1,7 +1,26 @@
 import axios from 'axios';
 import { useAuthStore, normalizeUserProfile } from '@/store/useAuthStore';
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+// Marks the session-restore request so the 401 interceptor skips it —
+// restore failures belong to the dashboard guard (which routes
+// `unauthorized` to /login and `unreachable` to the waking-up flow),
+// never to the auto-logout path.
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    __revoraRestore?: boolean;
+  }
+}
+
+// Same-origin proxy (P0-A): when NEXT_PUBLIC_USE_API_PROXY is 'true', every
+// apiClient call, health ping, SSE stream, and media URL goes to /api/v1 on
+// the frontend host — carrying the HttpOnly session cookie — and the Next
+// rewrite (next.config.ts, BACKEND_ORIGIN-gated) forwards to Render.
+// Disabled by default so local dev keeps its absolute localhost base,
+// where the same-host cookie already flows without a proxy.
+const USE_API_PROXY = process.env.NEXT_PUBLIC_USE_API_PROXY === 'true';
+export const API_BASE = USE_API_PROXY
+  ? '/api/v1'
+  : process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -42,7 +61,22 @@ apiClient.interceptors.request.use((config) => {
  * `/auth/me` proves the cookie is valid and repopulates the non-secret
  * profile. Safe to call at app start — resolves false when logged out.
  */
-export async function restoreSession(): Promise<boolean> {
+/**
+ * Result of a session-restore attempt. `unauthorized` means the backend
+ * rejected the credential (genuinely signed out / expired / revoked);
+ * `unreachable` means no answer arrived at all (backend asleep, cold
+ * start, timeout, network error) — never treat this as expiry.
+ */
+export type RestoreOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'unauthorized' | 'unreachable' };
+
+// One bounded restore attempt with a cold-start-tolerant timeout (Render
+// Free Tier regularly needs 30-60s to wake). Retry UX belongs to the
+// waking-up page, not to a polling loop here.
+const RESTORE_TIMEOUT_MS = 60_000;
+
+export async function restoreSession(): Promise<RestoreOutcome> {
   try {
     const res = await apiClient.get<{
       id: string;
@@ -54,15 +88,19 @@ export async function restoreSession(): Promise<boolean> {
       // normalizeUserProfile maps it so refresh keeps the avatar.
       avatar_url?: string | null;
       github_username?: string;
-    }>('/auth/me');
+    }>('/auth/me', { timeout: RESTORE_TIMEOUT_MS, __revoraRestore: true });
     useAuthStore.setState({
       token: null, // never reintroduce a JS-readable token
       user: normalizeUserProfile(res.data),
       isAuthenticated: true,
+      restoreReason: null,
     });
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    const reason = status === 401 || status === 403 ? 'unauthorized' : 'unreachable';
+    useAuthStore.setState({ restoreReason: reason });
+    return { ok: false, reason };
   } finally {
     // Unblock auth guards: the restore attempt has settled either way.
     useAuthStore.getState().markSessionChecked();
@@ -84,28 +122,50 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-// Auto-logout on 401. Clears local state and, when we're on a protected
-// route, forces a hard navigation to /login so a revoked/expired session can
-// never strand the user on a screen stuck retrying failed requests.
+// Auto-logout on 401 — local-only by default: a failed request must never
+// revoke a session that may still be valid server-side (e.g. the cookie
+// never reached us, or the backend hiccupped). Server-side revocation
+// happens solely on explicit user sign-out. Clears local state and, when
+// on a protected route, hard-navigates to /login so a revoked/expired
+// session can never strand the user on a screen stuck retrying requests.
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
+      const url =
+        typeof error.config?.url === 'string' ? error.config.url : '';
+      const isRestore = !!error.config?.__revoraRestore;
+      // Public endpoint: no session expected, nothing to clear.
+      const isPublic = url.includes('/auth/config');
+      const state = useAuthStore.getState();
       const onProtected =
         typeof window !== 'undefined' &&
         isProtectedPath(window.location.pathname);
-      // Await the cookie-clearing logout BEFORE any hard navigation, so the
-      // edge gate cannot bounce us straight back to the dashboard.
-      void (async () => {
-        await useAuthStore.getState().logout();
-        if (
-          onProtected &&
-          typeof window !== 'undefined' &&
-          window.location.pathname !== '/login'
-        ) {
-          window.location.assign('/login');
-        }
-      })();
+      // Restore failures belong to the dashboard guard; public endpoints
+      // and already-signed-out states need no logout round-trip. Logout
+      // itself is single-flighted in the store, so concurrent 401s share
+      // one clearing pass instead of stampeding.
+      if (!isRestore && !isPublic && state.isAuthenticated) {
+        // Await the cookie-clearing logout BEFORE any hard navigation, so the
+        // edge gate cannot bounce us straight back to the dashboard.
+        void (async () => {
+          await useAuthStore.getState().logout({ revoke: false });
+          if (
+            onProtected &&
+            typeof window !== 'undefined' &&
+            window.location.pathname !== '/login'
+          ) {
+            window.location.assign('/login');
+          }
+        })();
+      } else if (
+        !state.isAuthenticated &&
+        onProtected &&
+        typeof window !== 'undefined' &&
+        window.location.pathname !== '/login'
+      ) {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   }

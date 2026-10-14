@@ -24,25 +24,37 @@ function clearSessionCookie(headers: Headers, secure: boolean): void {
 
 export async function POST(request: NextRequest) {
   const apiBase =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    process.env.BACKEND_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8000/api/v1';
 
   const cookieHeader = request.headers.get('cookie');
   const secure = request.nextUrl.protocol === 'https:';
 
   const headers = new Headers({ 'Content-Type': 'application/json' });
 
+  // ?revoke=0 performs a LOCAL-ONLY sign-out: the frontend cookie is
+  // deleted below, but the backend is never asked to bump token_version.
+  // Used by the dashboard guard and the 401 interceptor, where the
+  // session may still be valid server-side (missing credential, flaky
+  // backend) and revoking it would destroy a good session. Only an
+  // explicit user sign-out revokes.
+  const revoke = request.nextUrl.searchParams.get('revoke') !== '0';
+
   let upstream: Response | null = null;
-  try {
-    upstream = await fetch(`${apiBase}/auth/logout`, {
-      method: 'POST',
-      headers: cookieHeader ? { cookie: cookieHeader } : {},
-      signal: AbortSignal.timeout(10_000),
-      cache: 'no-store',
-    });
-  } catch {
-    // Backend unreachable: still clear the local cookie below so the client
-    // is never trapped in a signed-in shell.
-    upstream = null;
+  if (revoke) {
+    try {
+      upstream = await fetch(`${apiBase}/auth/logout`, {
+        method: 'POST',
+        headers: cookieHeader ? { cookie: cookieHeader } : {},
+        signal: AbortSignal.timeout(10_000),
+        cache: 'no-store',
+      });
+    } catch {
+      // Backend unreachable: still clear the local cookie below so the client
+      // is never trapped in a signed-in shell.
+      upstream = null;
+    }
   }
 
   if (upstream) {

@@ -14,7 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isLight = theme === 'light';
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, sessionChecked, logout } = useAuthStore();
+  const { isAuthenticated, sessionChecked, restoreReason, logout } = useAuthStore();
 
   // On mount, check if the backend is alive.
   // If it's sleeping (Render free tier), send user to the wake-up splash page.
@@ -28,16 +28,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []); // Only run once on mount
 
   // Client-side auth guard. Waits for the session restore to settle
-  // (sessionChecked) so a valid refresh is not bounced. When the session is
-  // gone, clears any lingering cookie first (so the edge gate cannot redirect
-  // back here) and leaves the protected shell.
+  // (sessionChecked) so a valid refresh is not bounced.
+  // - `unreachable` (backend asleep/down, timeout): send to the waking-up
+  //   flow, which already polls with retry UX — NEVER sign out, and never
+  //   revoke a session that may still be valid server-side.
+  // - anything else unauthenticated: local-only clear (no revocation) so
+  //   the edge gate cannot redirect back here, then leave to /login.
   useEffect(() => {
     if (!sessionChecked || isAuthenticated) return;
+    if (restoreReason === 'unreachable') {
+      router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+      return;
+    }
     void (async () => {
-      await logout();
+      await logout({ revoke: false });
       router.replace('/login');
     })();
-  }, [sessionChecked, isAuthenticated, logout, router]);
+  }, [sessionChecked, isAuthenticated, restoreReason, logout, router, pathname]);
 
   const isModelLab = pathname.startsWith('/model-lab');
 
