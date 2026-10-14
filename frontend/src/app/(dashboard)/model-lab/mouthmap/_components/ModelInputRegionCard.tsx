@@ -6,7 +6,7 @@ import { MODEL_INPUT } from './types';
 import { MouthRegionViz, type VizMode } from './MouthRegionViz';
 
 interface ModelInputRegionCardProps {
-  mediaBlob: Blob | null;
+  objectUrl: string;
   frameSize: { w: number; h: number } | null;
 }
 
@@ -17,7 +17,7 @@ const DETAILS: { icon: typeof Ruler; label: string; value: string }[] = [
   { icon: Scissors, label: 'Source', value: 'Fixed Crop' },
 ];
 
-export function ModelInputRegionCard({ mediaBlob, frameSize }: ModelInputRegionCardProps) {
+export function ModelInputRegionCard({ objectUrl, frameSize }: ModelInputRegionCardProps) {
   const [mode, setMode] = useState<VizMode>('crop');
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const onTabKeyDown = (
@@ -99,7 +99,7 @@ export function ModelInputRegionCard({ mediaBlob, frameSize }: ModelInputRegionC
         id="ml-viz-panel"
         aria-labelledby={mode === 'crop' ? 'ml-viz-tab-crop' : 'ml-viz-tab-full'}
       >
-        <MouthRegionViz mediaBlob={mediaBlob} frameSize={frameSize} mode={mode} />
+        <MouthRegionViz objectUrl={objectUrl} frameSize={frameSize} mode={mode} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">

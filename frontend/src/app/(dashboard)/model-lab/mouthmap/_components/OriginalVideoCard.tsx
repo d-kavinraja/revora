@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, Clapperboard, Database, Proportions, Upload, Video, XCircle } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import type { Phase, SelectedVideo } from './types';
-import { fmtBytes, fmtDuration } from './types';
+import { fmtBytes, fmtDuration, isSafeMediaUrl } from './types';
 
 function fileFormat(filename: string): string {
   const m = filename.match(/\.([a-z0-9]{2,5})$/i);
@@ -46,27 +46,19 @@ export function OriginalVideoCard({
   onMetadata,
 }: OriginalVideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // The video element is fed the Blob object directly via srcObject —
-  // no URL string ever reaches the DOM, so there is no string sink for
-  // user-influenced text to flow into (CodeQL js/xss-through-dom).
-  // A missing Blob keeps loadState at 'error' (fail-closed).
-  const mediaBlob = selected.blob ?? null;
-  const setVideoRef = useCallback(
-    (el: HTMLVideoElement | null) => {
-      videoRef.current = el;
-      if (el) el.srcObject = mediaBlob;
-    },
-    [mediaBlob],
-  );
+  // Trust boundary (CodeQL js/xss-through-dom): only allowlisted media
+  // URLs reach the <video> src below. Anything else keeps loadState at
+  // 'error', so the existing error UI renders instead (fail-closed).
+  const safeSrc = isSafeMediaUrl(selected.objectUrl) ? selected.objectUrl : null;
   // Per-video load state. Render-phase reset on identity change so the
   // loader shows immediately for the new video (never the old frame).
-  const [loadedBlob, setLoadedBlob] = useState<Blob | null>(mediaBlob);
+  const [loadedUrl, setLoadedUrl] = useState(safeSrc);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(
-    mediaBlob ? 'loading' : 'error',
+    safeSrc ? 'loading' : 'error',
   );
-  if (loadedBlob !== mediaBlob) {
-    setLoadedBlob(mediaBlob);
-    setLoadState(mediaBlob ? 'loading' : 'error');
+  if (loadedUrl !== safeSrc) {
+    setLoadedUrl(safeSrc);
+    setLoadState(safeSrc ? 'loading' : 'error');
   }
   const retryLoad = () => {
     setLoadState('loading');
@@ -97,10 +89,11 @@ export function OriginalVideoCard({
       </div>
 
       <div className="relative">
-        {mediaBlob ? (
+        {safeSrc ? (
           <video
-            key={selected.objectUrl}
-            ref={setVideoRef}
+            key={safeSrc}
+            ref={videoRef}
+            src={safeSrc}
             controls
             playsInline
             preload="metadata"

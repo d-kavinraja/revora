@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Crop, ScanEye } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { MODEL_INPUT } from './types';
+import { MODEL_INPUT, isSafeMediaUrl } from './types';
 
 export type VizMode = 'crop' | 'full';
 
 interface MouthRegionVizProps {
-  /** The selected video bytes. Fed to the element via srcObject, so no
-   *  URL string ever reaches the DOM (CodeQL js/xss-through-dom). */
-  mediaBlob: Blob | null;
+  /** Object URL of the actual selected video (same bytes sent to inference). */
+  objectUrl: string;
   /** Natural frame size, when known (for bounds checking + rect scaling). */
   frameSize: { w: number; h: number } | null;
   /** Which panels to show: both (frame + crop) or only the original frame. */
@@ -24,31 +23,24 @@ interface MouthRegionVizProps {
  * preprocessing crop — never presented as detected landmarks.
  * Card chrome, title, and tabs live in ModelInputRegionCard.
  */
-export function MouthRegionViz({ mediaBlob, frameSize, mode }: MouthRegionVizProps) {
+export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLCanvasElement>(null);
   const cropRef = useRef<HTMLCanvasElement>(null);
   // Per-video paint state. Render-phase reset when the video identity
   // changes (the approved alternative to setState inside an effect).
-  // A missing Blob keeps status at 'error' (fail-closed).
-  const [paintBlob, setPaintBlob] = useState<Blob | null>(mediaBlob);
+  // Trust boundary (CodeQL js/xss-through-dom): only allowlisted media
+  // URLs reach the hidden <video> src below. Anything else keeps status
+  // at 'error', so the existing error UI renders instead (fail-closed).
+  const safeSrc = isSafeMediaUrl(objectUrl) ? objectUrl : null;
+  const [paintUrl, setPaintUrl] = useState(safeSrc);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
-    mediaBlob ? 'loading' : 'error',
+    safeSrc ? 'loading' : 'error',
   );
-  if (paintBlob !== mediaBlob) {
-    setPaintBlob(mediaBlob);
-    setStatus(mediaBlob ? 'loading' : 'error');
+  if (paintUrl !== safeSrc) {
+    setPaintUrl(safeSrc);
+    setStatus(safeSrc ? 'loading' : 'error');
   }
-
-  // The element is fed the Blob object directly via srcObject — no URL
-  // string ever reaches the DOM (CodeQL js/xss-through-dom).
-  const setVideoRef = useCallback(
-    (el: HTMLVideoElement | null) => {
-      videoRef.current = el;
-      if (el) el.srcObject = mediaBlob;
-    },
-    [mediaBlob],
-  );
 
   const clearCanvases = useCallback(() => {
     // Resetting width collapses the bitmap without changing layout size
@@ -216,7 +208,7 @@ export function MouthRegionViz({ mediaBlob, frameSize, mode }: MouthRegionVizPro
       video.removeEventListener('pause', stopLoop);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [mediaBlob, draw, clearCanvases]);
+  }, [objectUrl, draw, clearCanvases]);
 
   const inBounds =
     !frameSize ||
@@ -242,9 +234,10 @@ export function MouthRegionViz({ mediaBlob, frameSize, mode }: MouthRegionVizPro
   return (
     <div className="rounded-lg bg-surface-2 p-3">
       {/* Hidden source video: same bytes as the selected video. */}
-      {mediaBlob ? (
+      {safeSrc ? (
         <video
-          ref={setVideoRef}
+          ref={videoRef}
+          src={safeSrc}
           preload="auto"
           muted
           playsInline
