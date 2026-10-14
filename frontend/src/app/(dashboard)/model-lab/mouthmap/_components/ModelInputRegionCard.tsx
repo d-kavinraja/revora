@@ -37,19 +37,21 @@ export function ModelInputRegionCard({ objectUrl, frameSize }: ModelInputRegionC
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-ai-purple/30 flex flex-col">
-      <div className="flex items-center gap-2 flex-wrap mb-3">
-        <span className="w-8 h-8 rounded-lg bg-ai-purple/10 text-ai-purple flex items-center justify-center shrink-0">
-          <ScanEye size={16} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-xl leading-tight">Model Input Region</h3>
-          <p className="text-sm text-foreground/70 leading-relaxed mt-0.5">
-            MouthMap preprocessing — what the model actually sees
-          </p>
+    <div className="rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-ai-purple/30 flex flex-col min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0 sm:flex-1">
+          <span className="w-8 h-8 rounded-lg bg-ai-purple/10 text-ai-purple flex items-center justify-center shrink-0">
+            <ScanEye size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-xl leading-tight">Model Input Region</h3>
+            <p className="text-sm text-foreground/70 leading-relaxed mt-0.5">
+              MouthMap preprocessing — what the model actually sees
+            </p>
+          </div>
         </div>
         <div
-          className="flex gap-1 p-0.5 rounded-lg bg-surface-2 border border-border shrink-0"
+          className="flex gap-1 p-0.5 rounded-lg bg-surface-2 border border-border w-full sm:w-auto min-w-0"
           role="tablist"
           aria-label="Visualization mode"
         >
@@ -71,7 +73,7 @@ export function ModelInputRegionCard({ objectUrl, frameSize }: ModelInputRegionC
               tabIndex={mode === t.id ? 0 : -1}
               onKeyDown={(e) => onTabKeyDown(e, i, arr)}
               onClick={() => setMode(t.id)}
-              className={`px-3 min-h-[40px] inline-flex items-center rounded-md text-xs font-medium transition-colors ${
+              className={`flex-1 justify-center whitespace-nowrap px-3 min-h-[40px] inline-flex items-center rounded-md text-xs font-medium transition-colors ${
                 mode === t.id
                   ? 'bg-surface-1 text-foreground shadow-sm border border-border'
                   : 'text-foreground/60 hover:text-foreground'

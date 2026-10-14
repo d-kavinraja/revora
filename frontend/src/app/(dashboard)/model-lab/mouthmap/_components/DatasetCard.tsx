@@ -59,15 +59,18 @@ export function DatasetCard({
   return (
     <section
       aria-label="Test dataset"
-      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 flex flex-col h-full min-h-0 relative transition-colors hover:border-ai-purple/30"
+      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 flex flex-col h-full min-h-0 min-w-0 relative transition-colors hover:border-ai-purple/30"
     >
-      <div className="shrink-0 flex items-center gap-2 pb-3">
+      {/* Header wraps on narrow screens so the title is never squeezed by
+          the "Add Video" button. Subtitle is hidden on phones to keep the
+          header a single compact line. */}
+      <div className="shrink-0 flex items-center gap-2 flex-wrap pb-3">
         <span className="w-8 h-8 rounded-lg bg-ai-purple/10 text-ai-purple flex items-center justify-center shrink-0">
           <Database size={20} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-xl tracking-tight leading-tight">Test Dataset</h2>
-          <p className="text-sm text-foreground/70 leading-relaxed mt-0.5">
+          <h2 className="font-semibold text-lg sm:text-xl tracking-tight leading-tight">Test Dataset</h2>
+          <p className="hidden sm:block text-sm text-foreground/70 leading-relaxed mt-0.5">
             Manage and select test videos for inference.
           </p>
         </div>
@@ -79,7 +82,7 @@ export function DatasetCard({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden max-h-[264px] pr-0.5 space-y-2">
+      <div className="min-h-0 flex-1 overflow-y-auto max-h-[300px] sm:max-h-[264px] pr-0.5 space-y-2">
         {dataset.length === 0 ? (
           <EmptyState
             icon={<Database size={24} />}
@@ -114,7 +117,7 @@ export function DatasetCard({
                 role="button"
                 tabIndex={busy ? -1 : 0}
                 aria-label={`Select ${v.filename} for inference`}
-                className={`flex items-center gap-2.5 rounded-lg border p-2 transition-colors ${
+                className={`flex items-start gap-2.5 rounded-lg border p-2 transition-colors ${
                   busy ? 'cursor-wait opacity-70' : 'cursor-pointer'
                 } ${
                   active
@@ -124,26 +127,30 @@ export function DatasetCard({
               >
                 <RowThumbnail url={thumbs[v.id]} filename={v.filename} />
                 <div className="min-w-0 flex-1">
-                 <p className="text-sm font-semibold truncate leading-tight">
-                     {v.filename}
-                   </p>
-                   <p className="text-xs text-foreground/65 truncate leading-relaxed">
-                     {v.resolution ?? fmtBytes(v.size_bytes)}
-                     {v.ground_truth ? ` · “${v.ground_truth}”` : ''}
-                   </p>
+                  <p className="text-sm font-semibold truncate leading-tight">
+                    {v.filename}
+                  </p>
+                  <p className="text-xs text-foreground/65 truncate leading-relaxed">
+                    {v.resolution ?? fmtBytes(v.size_bytes)}
+                    {v.ground_truth ? ` · “${v.ground_truth}”` : ''}
+                  </p>
+                  {/* Duration + status live under the filename so they wrap
+                      instead of being clipped on narrow screens. */}
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full bg-surface-3 border border-border text-xs text-foreground/75 tabular-nums">
+                      {fmtClock(durations[v.id])}
+                    </span>
+                    {rowStatus === 'ready' ? (
+                      <span className="inline-flex items-center rounded-full font-medium border px-2.5 py-0.5 text-xs gap-1.5 bg-success/10 text-success border-success/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                        Ready
+                      </span>
+                    ) : (
+                      <StatusBadge status={rowStatus} />
+                    )}
+                  </div>
                 </div>
-                <span className="shrink-0 px-2 py-0.5 rounded-full bg-surface-3 border border-border text-xs text-foreground/75 tabular-nums">
-                  {fmtClock(durations[v.id])}
-                </span>
-                {rowStatus === 'ready' ? (
-                  <span className="inline-flex items-center rounded-full font-medium border px-2.5 py-0.5 text-xs gap-1.5 bg-success/10 text-success border-success/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                    Ready
-                  </span>
-                ) : (
-                  <StatusBadge status={rowStatus} />
-                )}
-                <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="relative shrink-0 self-start" onClick={(e) => e.stopPropagation()}>
                   <button
                     ref={(el) => {
                       triggerRefs.current[v.id] = el;

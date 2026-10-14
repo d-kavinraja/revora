@@ -72,14 +72,14 @@ export function UploadCard(props: UploadCardProps) {
   return (
     <section
       aria-label="Upload test video"
-      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 flex flex-col h-full transition-colors hover:border-brand/30"
+      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 flex flex-col h-full min-w-0 transition-colors hover:border-brand/30"
     >
       <div className="flex items-center gap-2">
         <span className="w-8 h-8 rounded-lg bg-ai-purple/10 text-ai-purple flex items-center justify-center shrink-0">
           <Upload size={20} />
         </span>
         <div className="min-w-0">
-          <h2 className="font-semibold text-xl tracking-tight leading-tight">Upload Test Video</h2>
+          <h2 className="font-semibold text-lg sm:text-xl tracking-tight leading-tight">Upload Test Video</h2>
           <p className="text-sm text-foreground/70 leading-relaxed mt-0.5">
             Upload a video to test the MouthMap model.
           </p>
@@ -149,7 +149,7 @@ export function UploadCard(props: UploadCardProps) {
                role="button"
                tabIndex={0}
                aria-label="Drag and drop a video file here, or click to browse"
-               className={`flex-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 text-center transition-all cursor-pointer ${
+                className={`flex-1 flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-3 sm:p-4 text-center transition-all cursor-pointer ${
                  dragOver
                    ? 'border-ai-purple bg-ai-purple/5 scale-[1.01]'
                    : 'border-border bg-surface-2 hover:border-ai-purple/40'

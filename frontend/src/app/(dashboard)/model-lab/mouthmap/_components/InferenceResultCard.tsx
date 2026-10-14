@@ -13,7 +13,7 @@ export function InferenceResultCard({ result }: InferenceResultCardProps) {
   const reduce = useReducedMotion();
 
   return (
-    <div className="rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-ai-purple/30 flex flex-col">
+    <div className="rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-ai-purple/30 flex flex-col min-w-0">
       <div className="flex items-center gap-2 mb-3">
         <span className="w-8 h-8 rounded-lg bg-ai-purple/10 text-ai-purple flex items-center justify-center shrink-0">
           <BrainIcon size={20} />

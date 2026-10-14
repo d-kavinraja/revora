@@ -64,7 +64,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
   return (
     <section
       aria-label="Video analysis and results"
-      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 transition-colors hover:border-ai-purple/30"
+      className="rounded-xl border border-border bg-surface-1 p-4 md:p-5 min-w-0 transition-colors hover:border-ai-purple/30"
     >
       {/* Section header — spans the complete width. */}
       <div className="flex items-center gap-2 flex-wrap">

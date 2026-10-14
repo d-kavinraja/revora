@@ -539,7 +539,7 @@ export default function ModelLabPage() {
   const loaderOpen = running || phase === 'preparing' || probing;
 
   return (
-    <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-5 md:space-y-6">
+    <div className="w-full min-w-0 max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-5 md:space-y-6 overflow-x-clip">
       <ModelLabHero />
 
       {loading ? (
@@ -547,7 +547,7 @@ export default function ModelLabPage() {
       ) : (
         <>
           <div className="grid gap-4 md:gap-5 md:grid-cols-2">
-            <div id="model-lab-upload" className="scroll-mt-4 h-full">
+            <div id="model-lab-upload" className="scroll-mt-4 h-full min-w-0">
               <UploadCard
                 config={config}
                 mode={uploadMode}
@@ -566,7 +566,7 @@ export default function ModelLabPage() {
                 onStopRecording={stopRecording}
               />
             </div>
-            <div className="h-full">
+            <div className="h-full min-w-0">
               <DatasetCard
                 dataset={dataset}
                 selectedId={selected?.testVideoId}
@@ -581,7 +581,7 @@ export default function ModelLabPage() {
             </div>
           </div>
 
-          <div id="model-lab-analysis" className="scroll-mt-4">
+          <div id="model-lab-analysis" className="scroll-mt-4 min-w-0">
             <AnalysisSection
               selected={selected}
               phase={phase}
