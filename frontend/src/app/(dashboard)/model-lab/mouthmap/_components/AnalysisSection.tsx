@@ -130,7 +130,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             />
             <ModelInputRegionCard
               key={`model-input-${selected.testVideoId ?? selected.objectUrl}`}
-              objectUrl={selected.objectUrl}
+              mediaBlob={selected.blob ?? null}
               frameSize={parseSize(selected.resolution)}
             />
           </div>
