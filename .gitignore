@@ -120,3 +120,10 @@ backend/test.py
 PRODUCT.md
 .impeccable/
 DESIGN.md
+
+# Local-only: reference docs, HF Space service, agent state, build logs
+docs/
+hf-space/
+.kilo/
+frontend/build_out.txt
+*_out.txt

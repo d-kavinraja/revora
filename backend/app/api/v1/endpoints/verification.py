@@ -9,9 +9,14 @@ from app.ai.git_utils import GitService
 from app.api.v1.endpoints.reviews import _ensure_review_ownership
 from app.core.deps import get_current_user
 from app.db.session import AsyncSessionLocal
+from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
-from app.models.verification import HallucinationReportModel, VerificationMetricModel
+from app.models.verification import (
+    HallucinationReportModel,
+    VerificationMetricModel,
+    VerificationResultModel,
+)
 from app.schemas.verification import VerificationRequest
 from app.verification.cache import verification_cache
 from app.verification.engine import verification_engine
@@ -75,10 +80,58 @@ async def verify_review(
 @router.get("/metrics", response_model=dict[str, Any])
 async def get_global_metrics(current_user: User = Depends(get_current_user)):
     """
-    Retrieves global verification metrics aggregated across all reviews.
+    Retrieves verification metrics scoped to the current user's installations.
     """
     try:
         async with AsyncSessionLocal() as db:
+            installs = await db.execute(
+                select(Installation.id).where(
+                    Installation.user_id == current_user.id
+                )
+            )
+            installation_ids = list(installs.scalars().all())
+            if not installation_ids:
+                return {
+                    "total_findings": 0,
+                    "verified_count": 0,
+                    "rejected_count": 0,
+                    "avg_confidence": 0.0,
+                }
+            repos = await db.execute(
+                select(Repository.id).where(
+                    Repository.installation_id.in_(installation_ids)
+                )
+            )
+            repo_ids = list(repos.scalars().all())
+            if not repo_ids:
+                return {
+                    "total_findings": 0,
+                    "verified_count": 0,
+                    "rejected_count": 0,
+                    "avg_confidence": 0.0,
+                }
+            prs = await db.execute(
+                select(PullRequest.id).where(PullRequest.repo_id.in_(repo_ids))
+            )
+            pr_ids = list(prs.scalars().all())
+            if not pr_ids:
+                return {
+                    "total_findings": 0,
+                    "verified_count": 0,
+                    "rejected_count": 0,
+                    "avg_confidence": 0.0,
+                }
+            reviews = await db.execute(
+                select(Review.id).where(Review.pr_id.in_(pr_ids))
+            )
+            review_ids = list(reviews.scalars().all())
+            if not review_ids:
+                return {
+                    "total_findings": 0,
+                    "verified_count": 0,
+                    "rejected_count": 0,
+                    "avg_confidence": 0.0,
+                }
             result = await db.execute(
                 select(
                     func.sum(VerificationMetricModel.total_findings).label("total"),
@@ -91,7 +144,7 @@ async def get_global_metrics(current_user: User = Depends(get_current_user)):
                     func.avg(VerificationMetricModel.avg_confidence).label(
                         "avg_confidence"
                     ),
-                )
+                ).where(VerificationMetricModel.review_id.in_(review_ids))
             )
             row = result.first()
             return {
@@ -113,12 +166,54 @@ async def get_global_hallucinations(
     limit: int = 50, current_user: User = Depends(get_current_user)
 ):
     """
-    Retrieves a global list of recent hallucination reports.
+    Retrieves recent hallucination reports for the current user's reviews.
     """
+    limit = max(1, min(int(limit or 50), 100))
     try:
         async with AsyncSessionLocal() as db:
+            installs = await db.execute(
+                select(Installation.id).where(
+                    Installation.user_id == current_user.id
+                )
+            )
+            installation_ids = list(installs.scalars().all())
+            if not installation_ids:
+                return []
+            repos = await db.execute(
+                select(Repository.id).where(
+                    Repository.installation_id.in_(installation_ids)
+                )
+            )
+            repo_ids = list(repos.scalars().all())
+            if not repo_ids:
+                return []
+            prs = await db.execute(
+                select(PullRequest.id).where(PullRequest.repo_id.in_(repo_ids))
+            )
+            pr_ids = list(prs.scalars().all())
+            if not pr_ids:
+                return []
+            reviews = await db.execute(
+                select(Review.id).where(Review.pr_id.in_(pr_ids))
+            )
+            review_ids = list(reviews.scalars().all())
+            if not review_ids:
+                return []
+            results = await db.execute(
+                select(VerificationResultModel.id).where(
+                    VerificationResultModel.review_id.in_(review_ids)
+                )
+            )
+            verification_ids = list(results.scalars().all())
+            if not verification_ids:
+                return []
             result = await db.execute(
                 select(HallucinationReportModel)
+                .where(
+                    HallucinationReportModel.verification_result_id.in_(
+                        verification_ids
+                    )
+                )
                 .order_by(HallucinationReportModel.id.desc())
                 .limit(limit)
             )

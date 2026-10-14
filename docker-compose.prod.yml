@@ -44,7 +44,9 @@ services:
     restart: unless-stopped
 
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    # Pinned (was :latest — unpinned proxies can drift between deploys).
+    # Owner: confirm this tag exists on Docker Hub before first prod up.
+    image: edoburu/pgbouncer:1.20.1-p2
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - MAX_CLIENT_CONN=100

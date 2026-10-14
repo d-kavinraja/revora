@@ -486,9 +486,8 @@ class GitHubWebhookService:
             f"Received webhook: event={event}, action={action}, delivery_id={delivery_id}"
         )
 
-        import json
-
-        print(f"Webhook payload detail:\n{json.dumps(payload, indent=2)}")
+        # Never dump full payloads: they carry installation tokens, repo
+        # contents, and PII into stdout/log aggregators.
 
         handlers = {
             ("pull_request", "opened"): lambda p, d: handle_pr_opened(p, d, "opened"),

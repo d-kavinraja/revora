@@ -38,6 +38,8 @@ class RepoWalker:
         skip_extensions: set[str] | None = None,
     ):
         self.repo_path = os.path.abspath(repo_path)
+        # Canonical root for symlink-escape checks (HIGH 3 fix).
+        self._real_root = os.path.realpath(self.repo_path)
         self.skip_dirs = skip_dirs or set(SKIP_DIRS)
         self.skip_extensions = skip_extensions or set(SKIP_EXTENSIONS)
 
@@ -67,12 +69,20 @@ class RepoWalker:
         file_paths = []
         extensions: dict[str, int] = defaultdict(int)
 
-        for root, dirs, files in os.walk(self.repo_path):
+        for root, dirs, files in os.walk(self.repo_path, followlinks=False):
             # Filter out skipped directories (in-place modification)
             # NOTE: not filtering d.startswith(".") because legitimate
             # directories like .github/workflows must be traversed.
             # SKIP_DIRS covers specific hidden dirs to exclude (.git, .env, etc.)
             dirs[:] = [d for d in dirs if d not in self.skip_dirs]
+            # Do not descend through symlinked directories: they can point
+            # outside the checkout (e.g. /etc) and leak server files into
+            # the analysis context.
+            dirs[:] = [
+                d
+                for d in dirs
+                if not os.path.islink(os.path.join(root, d))
+            ]
 
             for filename in files:
                 # Skip skipped extensions
@@ -85,6 +95,18 @@ class RepoWalker:
                     continue
 
                 full_path = os.path.join(root, filename)
+                # Skip symlinked files and anything resolving outside the
+                # checkout root.
+                if os.path.islink(full_path):
+                    logger.warning(f"Skipping symlinked file: {full_path}")
+                    continue
+                real_path = os.path.realpath(full_path)
+                if (
+                    real_path != self._real_root
+                    and not real_path.startswith(self._real_root + os.sep)
+                ):
+                    logger.warning(f"Skipping path escaping checkout: {full_path}")
+                    continue
                 rel_path = os.path.relpath(full_path, self.repo_path)
 
                 file_paths.append(rel_path)
@@ -139,6 +161,22 @@ class RepoWalker:
             return self._file_contents[cache_key]
 
         full_path = os.path.join(self.repo_path, file_path)
+        # Never read through symlinks or outside the checkout root, even
+        # when the caller passes a path that walk() already indexed.
+        try:
+            if os.path.islink(full_path):
+                logger.warning(f"Refusing symlinked read: {file_path}")
+                return ""
+            real_root = getattr(self, "_real_root", None) or os.path.realpath(
+                self.repo_path
+            )
+            real_path = os.path.realpath(full_path)
+            if real_path != real_root and not real_path.startswith(real_root + os.sep):
+                logger.warning(f"Refusing escaping read: {file_path}")
+                return ""
+        except OSError as e:
+            logger.debug(f"Failed to validate {file_path}: {e}")
+            return ""
 
         try:
             # Check file size before reading

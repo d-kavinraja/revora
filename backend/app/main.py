@@ -125,12 +125,26 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.middleware.correlation import CorrelationIdMiddleware
-from app.middleware.rate_limit import limiter
-from app.middleware.size_limit import RequestSizeLimitMiddleware
+from app.middleware.rate_limit import SlowAPIMiddleware, limiter
+from app.middleware.size_limit import OriginCheckMiddleware, RequestSizeLimitMiddleware
 
 # Configure Middleware
 app.state.limiter = limiter
+# Origin allow-list consumed by OriginCheckMiddleware (CSRF layer 2).
+# Values are netlocs (host[:port]) so both full origins and scheme-less
+# entries are comparable against the Origin header.
+from urllib.parse import urlparse as _urlparse
+
+
+def _netloc_or_raw(u: str) -> str:
+    p = _urlparse(u)
+    return p.netloc or p.path
+
+
+app.state.cors_origins = [_netloc_or_raw(o) for o in settings.CORS_ORIGINS]
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_upload_size=10 * 1024 * 1024)
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
@@ -138,7 +152,16 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Hub-Signature-256",
+        "X-GitHub-Delivery",
+        "X-GitHub-Event",
+        "X-Request-ID",
+        "X-Correlation-ID",
+        "ngrok-skip-browser-warning",
+    ],
 )
 
 app.include_router(api_router, prefix="/api/v1")
@@ -168,15 +191,16 @@ async def readiness():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
-    except Exception as e:
+    except Exception:
         from fastapi.responses import JSONResponse
 
+        # Generic message: never reflect driver/host details to callers.
+        logger.warning("Readiness probe: database unreachable", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
                 "database": "disconnected",
-                "error": str(e),
             },
         )
 
