@@ -85,7 +85,7 @@ function WakingUpContent() {
         </div>
 
         <PixelCard variant="default" colors="#18181b,#27272a,#3f3f46" className="relative z-10 max-w-md w-full rounded-3xl bg-zinc-950/95 border border-zinc-800 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
-          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center font-mono">
+          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center">
           {/* Logo / Icon */}
           <div className="relative">
             <div
@@ -158,7 +158,7 @@ function WakingUpContent() {
                   }}
                 />
               </div>
-              <p className="text-xs text-zinc-400 mt-3 font-medium">
+              <p className="text-xs text-zinc-400 mt-3 font-medium font-mono">
                 Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
               </p>
             </div>

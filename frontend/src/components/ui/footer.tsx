@@ -4,6 +4,7 @@ import React, { useState, type FC, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import SplitFlapText from '@/components/ui/SplitFlapText';
 import { REVORA } from '@/lib/site';
 
 const GithubIcon = () => (
@@ -50,8 +51,6 @@ export const Footer: FC<FooterProps> = ({
   usefulLinks = [
     { label: 'GitHub Repository', href: REVORA.github.repo },
     { label: 'Install GitHub App', href: REVORA.github.app },
-    { label: 'Documentation', href: REVORA.github.readme },
-    { label: 'MIT License', href: REVORA.github.license },
   ],
   socialLinks = [
     { label: 'GitHub', href: REVORA.github.repo, icon: <GithubIcon /> },
@@ -93,7 +92,21 @@ export const Footer: FC<FooterProps> = ({
 
   return (
     <footer className={cn('bg-muted/50 text-foreground border-t border-border mt-auto', className)} {...props}>
-      <div className="container mx-auto grid grid-cols-1 gap-8 px-6 py-16 md:grid-cols-2 lg:grid-cols-4 lg:gap-12">
+      <div className="split-flap-board">
+        <SplitFlapText
+          words={['REPOSITORY AWARE', 'MACHINE VERIFIED', 'AI CODE REVIEW']}
+          loop
+          cycleDelay={2600}
+          flipDuration={0.12}
+          stagger={0.05}
+          fontSize={30}
+          gap={5}
+          padTo={16}
+          tileColor="var(--board-tile)"
+          textColor="var(--board-text)"
+        />
+      </div>
+      <div className="container mx-auto grid grid-cols-1 gap-8 px-6 pt-6 pb-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-10">
         {/* Company Info */}
         <div className="flex flex-col items-start gap-4">
           <div className="flex items-center gap-3">
@@ -182,7 +195,7 @@ export const Footer: FC<FooterProps> = ({
       </div>
 
       {/* Bottom Copyright */}
-      <div className="border-t border-border py-6 text-center text-sm text-muted-foreground">
+      <div className="border-t border-border py-4 text-center text-sm text-muted-foreground">
         © {new Date().getFullYear()} {companyName}. All rights reserved.
       </div>
     </footer>

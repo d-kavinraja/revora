@@ -1,21 +1,15 @@
 'use client';
 
 import { motion } from "framer-motion";
-import Link from "next/link";
-import Image from "next/image";
-import { buttonVariants } from "@/components/ui/button";
-import { GithubIcon, ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateicons/react/lucide";
-import { useRef } from "react";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { ShieldCheckIcon, ZapIcon, GitBranchIcon } from "@animateicons/react/lucide";
 import { cn } from "@/lib/utils";
-import { REVORA } from "@/lib/site";
 
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
-import { Header } from '@/components/layout/header';
 import Waves from '@/components/ui/Waves';
 import { Footer } from '@/components/ui/footer';
+import { DataSignalHero } from '@/components/home/data-signal-hero';
 import { LogoLoop } from '@/components/ui/logo-loop';
 import { Gemini, OpenAI, Claude, DeepSeek, Groq, OpenRouter, Azure, Mistral, Cohere, Ollama } from '@lobehub/icons';
 
@@ -51,7 +45,6 @@ const features = [
 ];
 
 export default function LandingPage() {
-  const githubIconRef = useRef<any>(null);
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
 
@@ -91,49 +84,9 @@ export default function LandingPage() {
 
 
 
-      <Header />
+      <DataSignalHero />
 
-      <main className="flex-1 z-10 space-y-12">
-        {/* Hero */}
-        <section className="flex flex-col items-center justify-center p-6 pt-16 pb-16 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="max-w-4xl space-y-6"
-          >
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1]" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
-              Repository-Aware <span className="text-foreground drop-shadow-sm">AI Code Review</span>
-            </h1>
-            <p className="text-lg md:text-xl text-muted-foreground font-mono max-w-2xl mx-auto leading-relaxed">
-              Revora System reviews every GitHub pull request with your whole repository in context. Catch security flaws, performance regressions and code-quality issues before they merge.
-            </p>
-            <div className="flex items-center justify-center gap-4 pt-4">
-              <a
-                href="https://github.com/apps/revora-pr"
-                target="_blank"
-                rel="noopener noreferrer"
-                onMouseEnter={() => githubIconRef.current?.startAnimation()}
-                onMouseLeave={() => githubIconRef.current?.stopAnimation()}
-                className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 text-base bg-foreground text-background hover:bg-foreground/90 border-0 transition-all hover:scale-[1.02] gap-2 shadow-xl shadow-black/10 font-semibold")}
-              >
-                Install Revora-PR App
-                <GithubIcon ref={githubIconRef} size={18} isAnimated={false} />
-              </a>
-            </div>
-            <p className="pt-2 text-sm font-mono text-muted-foreground">
-              Open source and self-hostable.{' '}
-              <a
-                href={REVORA.github.repo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-foreground/80 underline underline-offset-4 transition-colors hover:text-foreground"
-              >
-                Read the source on GitHub
-              </a>
-            </p>
-          </motion.div>
-        </section>
+      <main className="flex-1 z-10 space-y-12" id="setup">
 
         {/* Supported AI Models Loop */}
         <section className="w-full overflow-hidden pb-12 pt-4">

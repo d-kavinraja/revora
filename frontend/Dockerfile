@@ -9,8 +9,11 @@ RUN npm ci
 # Copy application code
 COPY . .
 
+# Build Next.js production bundle, then serve it (was: dev server).
+RUN npm run build
+
 # Next.js telemetry disable
 ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV production
 
-# Start the dev server
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

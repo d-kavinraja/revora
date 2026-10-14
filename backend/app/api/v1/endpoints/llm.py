@@ -1,4 +1,5 @@
 ﻿import hashlib
+import logging
 import time
 import uuid
 
@@ -12,6 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.security.content_guard import detect_injection, sanitize_messages
 from app.services.cost_estimator import cost_estimator
+from app.services.model_discovery import classify_provider_error
 from app.services.model_router import model_router
 from app.services.retry_failover import retry_failover
 from app.services.token_manager import token_manager
@@ -151,6 +153,13 @@ async def execute_llm(
         return result
 
     except Exception as e:
+        # Never surface raw provider output: classify first, then return and
+        # persist only the safe message. Raw detail stays server-side in logs.
+        error_type, safe_message, _ = classify_provider_error(e)
+        logger_safe = logging.getLogger(__name__)
+        logger_safe.warning(
+            "LLM execute failed type=%s exc=%s", error_type, type(e).__name__
+        )
         if settings.USAGE_ANALYTICS_ENABLED:
             # Log failed request
             await usage_tracker.log_request(
@@ -167,7 +176,7 @@ async def execute_llm(
                 output_tokens=0,
                 cost_usd=0,
                 started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-                error_type=type(e).__name__,
-                error_message=str(e),
+                error_type=error_type,
+                error_message=safe_message,
             )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=safe_message)

@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono, ui-monospace, monospace);
+  --font-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-jetbrains-mono, ui-monospace, monospace);
   --font-heading: var(--font-oxanium, ui-sans-serif);
 
   /* Surface levels */
@@ -27,6 +27,12 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-info: var(--info);
+
+  /* AI accent colors (Model Lab scope) */
+  --color-ai-purple: var(--ai-purple);
+  --color-ai-purple-hover: var(--ai-purple-hover);
+  --color-ai-cyan: var(--ai-cyan);
+  --color-ai-cyan-hover: var(--ai-cyan-hover);
 
   /* Sidebar */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -89,6 +95,14 @@
   --brand-hover: oklch(0.50 0.2 265);
   --brand-foreground: oklch(0.98 0 0);
 
+  /* AI accent colors (Model Lab scope) - AI/Chatbot Platform palette adapted for light mode */
+  --ai-purple: oklch(0.45 0.2 280);
+  --ai-purple-hover: oklch(0.52 0.22 280);
+  --ai-purple-soft: oklch(0.55 0.2 280 / 0.1);
+  --ai-cyan: oklch(0.55 0.12 210);
+  --ai-cyan-hover: oklch(0.62 0.14 210);
+  --ai-cyan-soft: oklch(0.55 0.12 210 / 0.1);
+
   --primary: oklch(0.55 0.2 265);
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.96 0 0);
@@ -143,6 +157,14 @@
   --brand-hover: oklch(0.68 0.2 265);
   --brand-foreground: oklch(0.98 0 0);
 
+  /* AI accent colors (Model Lab scope) - adapted for dark OLED mode */
+  --ai-purple: oklch(0.65 0.22 280);
+  --ai-purple-hover: oklch(0.75 0.25 280);
+  --ai-purple-soft: oklch(0.65 0.22 280 / 0.15);
+  --ai-cyan: oklch(0.65 0.12 210);
+  --ai-cyan-hover: oklch(0.75 0.14 210);
+  --ai-cyan-soft: oklch(0.65 0.12 210 / 0.15);
+
   --primary: oklch(0.62 0.2 265);
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.16 0.008 270);
@@ -190,6 +212,12 @@
 
   html {
     @apply font-sans;
+  }
+
+  /* Instrument lock-in: visible keyboard focus everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
@@ -248,4 +276,252 @@
   --brand-foreground: oklch(0.98 0 0);
   --success: oklch(0.55 0.18 160);
   color-scheme: light;
+}
+
+/*
+ * Model Lab sidebar premium "New" badge + card treatment.
+ * Scoped to the Model Lab nav item only; global theme tokens are untouched.
+ * Theme-aware via the project's existing :root / .dark CSS variables.
+ */
+
+:root {
+  --model-lab-new-bg: linear-gradient(
+    105deg,
+    oklch(0.56 0.2 270) 0%,
+    oklch(0.55 0.2 262) 45%,
+    oklch(0.58 0.16 245) 100%
+  ); /* indigo → blue launch gradient (signal family only, no magenta stop) */
+  --model-lab-new-text: oklch(0.98 0 0);
+  --model-lab-new-border: oklch(0.98 0 0 / 40%);
+  --model-lab-new-ring: oklch(0.985 0 0); /* light sidebar surface */
+  --model-lab-card-border: oklch(0.55 0.2 265 / 25%);
+}
+
+.dark {
+  --model-lab-new-bg: linear-gradient(
+    105deg,
+    oklch(0.62 0.2 270) 0%,
+    oklch(0.62 0.2 262) 45%,
+    oklch(0.65 0.16 245) 100%
+  ); /* slightly luminous variant so gradient survives the dark sidebar */
+  --model-lab-new-text: oklch(0.98 0 0);
+  --model-lab-new-border: oklch(0.98 0 0 / 45%);
+  --model-lab-new-ring: oklch(0.11 0.005 270); /* dark sidebar surface ring */
+  --model-lab-card-border: oklch(0.65 0.2 265 / 25%);
+}
+
+/* ---- Premium badge pill (floats above the item; no layout impact) ---- */
+
+.model-lab-new-badge {
+  position: absolute;
+  top: -7px;
+  right: -2px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 2px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  border-radius: 9999px;
+  background: var(--model-lab-new-bg);
+  color: var(--model-lab-new-text);
+  border: 1px solid var(--model-lab-new-border);
+  box-shadow:
+    0 0 0 1.5px var(--model-lab-new-ring),
+    0 1px 3px oklch(0.09 0.005 270 / 25%);
+  pointer-events: none;
+  animation: model-lab-new-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Text entrance: subtle fade + settle (once, not looping) */
+.model-lab-new-badge .model-lab-new-label {
+  animation: model-lab-new-text-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes model-lab-new-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes model-lab-new-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Sparkle (✦): static ornament; the badge entrance is the one authored moment ---- */
+
+.model-lab-new-sparkle {
+  display: inline-block;
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+/* ---- Premium card treatment (Model Lab item only) ---- */
+
+.model-lab-card {
+  border: 1px solid var(--model-lab-card-border);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.model-lab-card:hover {
+  transform: translateY(-1px);
+  border-color: oklch(0.55 0.2 265 / 30%);
+}
+
+.model-lab-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--model-lab-card-border);
+}
+
+/* Collapsed sidebar: small dot variant, top-right of the icon tile */
+.model-lab-new-badge--dot {
+  padding: 0;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  top: 2px;
+  right: 2px;
+  gap: 0;
+  border-radius: 9999px;
+}
+
+.model-lab-new-badge--dot .model-lab-new-label,
+.model-lab-new-badge--dot .model-lab-new-sparkle {
+  display: none;
+}
+
+/* Respect reduced motion: static premium appearance, no pulse/entrance. */
+@media (prefers-reduced-motion: reduce) {
+  .model-lab-new-badge,
+  .model-lab-new-badge .model-lab-new-label,
+  .model-lab-new-sparkle {
+    animation: none;
+  }
+  .model-lab-new-sparkle {
+    opacity: 1;
+    transform: none;
+  }
+  .model-lab-card,
+  .model-lab-card:hover,
+  .model-lab-card:focus-visible {
+    transform: none;
+  }
+}
+
+/*
+ * MouthMap Model Lab hero surface. Flat instrument surface with a 2px
+ * signal tick at the top edge (the stat-card silhouette) — gradients
+ * are lamps, never wallpaper.
+ */
+.model-lab-hero {
+  position: relative;
+  background: var(--surface-1);
+  overflow: clip;
+}
+
+.model-lab-hero::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand), transparent 70%);
+  pointer-events: none;
+}
+
+/*
+ * Model Lab hero entrance: tile pop, then the title block,
+ * then the highlight cards cascade with a capped total delay.
+ * Covered by the reduced-motion rule below (kills all animation).
+ */
+.model-lab-hero .ml-anim-tile {
+  animation: ml-hero-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.model-lab-hero .ml-anim-text {
+  animation: ml-hero-rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+.model-lab-hero .ml-anim-card {
+  animation: ml-hero-rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.model-lab-hero .ml-anim-card:nth-child(1) {
+  animation-delay: 0.15s;
+}
+
+.model-lab-hero .ml-anim-card:nth-child(2) {
+  animation-delay: 0.22s;
+}
+
+.model-lab-hero .ml-anim-card:nth-child(3) {
+  animation-delay: 0.29s;
+}
+
+@keyframes ml-hero-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ml-hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Model Lab hero micro-details: instrument ring on the mark instead of a
+ * shadow, caption-voice Beta pill, input-radius chips.
+ */
+.model-lab-hero .ml-hero-mark {
+  box-shadow: none;
+  border: 1px solid color-mix(in oklch, var(--brand) 25%, transparent);
+}
+
+.model-lab-hero .ml-hero-chip {
+  border-radius: 0.6rem;
+}
+
+.model-lab-hero .ml-hero-beta {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-lab-hero *,
+  .model-lab-hero {
+    animation: none;
+    transition: none;
+  }
 }

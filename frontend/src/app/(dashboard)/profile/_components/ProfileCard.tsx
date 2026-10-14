@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { MailIcon } from 'lucide-react';
 import MicroSlats from '@/components/ui/MicroSlats';
 import type { User } from '@/store/useAuthStore';
@@ -25,6 +28,12 @@ export function ProfileCard({ user }: ProfileCardProps) {
   const githubUsername = typeof user.github_username === 'string' ? user.github_username.trim() : '';
   const githubUrl = githubUsername ? `https://github.com/${githubUsername}` : '';
   const displayName = user.name?.trim() || 'User';
+  const [brokenAvatarSrc, setBrokenAvatarSrc] = useState<string | null>(null);
+  // A broken avatar URL degrades to the initial without a retry loop: the
+  // failed src is remembered, while any new user/image is attempted fresh.
+  // Render-derived (no effect), so no cascading renders.
+  const avatarSrc =
+    user.image && user.image !== brokenAvatarSrc ? user.image : null;
 
   return (
     <section aria-label="Profile" className="relative rounded-2xl border border-border bg-surface-1 shadow-sm overflow-hidden">
@@ -62,13 +71,14 @@ export function ProfileCard({ user }: ProfileCardProps) {
       <div className="relative p-5 md:p-6 flex flex-col sm:flex-row sm:items-center gap-4 md:gap-5">
         {/* Avatar */}
         <div className="shrink-0">
-          {user.image ? (
+          {avatarSrc ? (
             // Plain <img> like the sidebar avatar — the GitHub avatar host is not
             // whitelisted in next.config images.
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={user.image}
+              src={avatarSrc}
               alt={displayName}
+              onError={() => setBrokenAvatarSrc(avatarSrc)}
               className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-surface-1 shadow-md bg-surface-2"
             />
           ) : (

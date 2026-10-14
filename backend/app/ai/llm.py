@@ -85,14 +85,12 @@ class LLMService:
             )
 
             if isinstance(response, dict):
-                logger.warning(f"litellm returned dict for {display_model}: {response}")
-                error_msg = (
-                    response.get("error", {}).get("message", "")
-                    if isinstance(response.get("error"), dict)
-                    else str(response.get("error", ""))
+                logger.warning(
+                    "litellm returned dict for %s (keys suppressed)", display_model
                 )
                 raise RuntimeError(  # noqa: TRY004
-                    f"LLM provider returned error response: {error_msg or response}"
+                    "LLM provider returned an error response for "
+                    f"'{display_model}'. Please try again later."
                 )
 
             if (
@@ -129,7 +127,7 @@ class LLMService:
             elif "429" in error_str or "rate" in error_str or "quota" in error_str:
                 raise RuntimeError(
                     f"Rate limit exceeded for model '{display_model}'. "
-                    f"Provider error: {e}"
+                    f"Please wait a moment and try again."
                 ) from e
             elif "401" in error_str or "unauthorized" in error_str:
                 raise RuntimeError(
@@ -163,7 +161,8 @@ class LLMService:
                 ) from e
             else:
                 raise RuntimeError(
-                    f"AI provider error for '{display_model}': {e}"
+                    f"AI provider error for '{display_model}'. "
+                    f"Please try again later."
                 ) from e
 
     async def _resolve_api_key(

@@ -23,6 +23,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     default_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    token_version: Mapped[int] = mapped_column(
+        default=0, server_default="0", nullable=False
+    )
     settings: Mapped[dict[str, Any]] = mapped_column(
         JSON_TYPE, default=dict, server_default="{}"
     )

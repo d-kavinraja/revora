@@ -1,0 +1,699 @@
+/* Data Signal hero — Revora-skinned. Scoped to .ds-viewport only. */
+
+.ds-viewport {
+  font-family: "Inter Tight", "Reference Sans", Arial, sans-serif;
+  position: relative;
+  isolation: isolate;
+  background: #000;
+  color: #fff;
+  color-scheme: dark;
+  overflow: clip;
+  border-bottom: 1px solid oklch(1 0 0 / 8%);
+  min-height: min(96vh, 900px);
+  display: flex;
+}
+
+.ds-screen {
+  --gutter-start: clamp(36px, 4.177vw, 96px);
+  --gutter-end: clamp(36px, 4.04vw, 96px);
+  --header-top: clamp(20px, 2.264vh, 30px);
+  --hero-bottom: clamp(34px, 5.19vh, 64px);
+  --display-size: clamp(58px, 7.64vh, 88px);
+  --display-leading: clamp(72px, 9.34vh, 106px);
+  --copy-size: clamp(14px, 1.7vh, 19px);
+  --copy-leading: clamp(19px, 2.17vh, 24px);
+  --title-copy-gap: clamp(15px, 2.08vh, 24px);
+  --copy-cta-gap: clamp(24px, 3.11vh, 36px);
+  --cta-width: clamp(200px, 15.09vh + 60px, 244px);
+  --cta-height: clamp(38px, 3.96vh, 44px);
+  --compact-control-font-size: clamp(17px, 1.75vh, 19px);
+  --action-control-font-size: clamp(17px, 1.78vh, 19.5px);
+  --primary-control-font-size: clamp(17px, 1.77vh, 19.25px);
+  --control-inline-nudge: -1px;
+  --control-baseline-shift: clamp(1px, 0.19vh, 2px);
+  --copy-optical-shift: clamp(0px, 0.1vh, 1px);
+  --watch-baseline-shift: clamp(2px, 0.38vh, 4px);
+  --card-width: clamp(260px, 34vh, 340px);
+
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: inherit;
+  background: #000;
+}
+
+.ds-background {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ds-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.03), transparent 24%, transparent 82%, rgba(0, 0, 0, 0.05)),
+    radial-gradient(ellipse at 44% 54%, transparent 30%, rgba(0, 0, 0, 0.055) 100%);
+}
+
+/* ---------- Header ---------- */
+
+.ds-header {
+  position: absolute;
+  inset: var(--header-top) var(--gutter-end) auto var(--gutter-start);
+  height: 48px;
+  display: flex;
+  align-items: flex-start;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.ds-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  top: 10px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.ds-brand-logo {
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.ds-brand-name {
+  font-size: var(--compact-control-font-size);
+  font-weight: 460;
+  letter-spacing: -0.34px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.ds-header-actions {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  margin-left: clamp(36px, 3.03vw, 48px);
+}
+
+.ds-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(32px, 2.9vw, 43px);
+  margin-left: 0;
+  position: relative;
+  top: 9px;
+}
+
+.ds-nav-link {
+  font-size: 16px;
+  font-weight: 430;
+  letter-spacing: -0.36px;
+  color: rgba(229, 229, 230, 0.77);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.ds-nav-fourth {
+  margin-left: 1px;
+}
+
+.ds-nav-link:first-child {
+  top: -3px;
+}
+
+.ds-nav-link:hover {
+  color: #fff;
+}
+
+.ds-nav-link-active {
+  color: #fff;
+}
+
+.ds-nav-link-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 44px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 2px;
+}
+
+.ds-time-panel {
+  margin-left: auto;
+  width: 211px;
+  height: 48px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(230, 230, 230, 0.52);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ds-time-label {
+  font-size: 15px;
+  font-weight: 420;
+  color: rgba(240, 240, 240, 0.77);
+}
+
+.ds-time-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 440;
+  color: rgba(255, 255, 255, 0.93);
+  white-space: nowrap;
+}
+
+.ds-signup-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ds-theme-wrap {
+  margin-left: clamp(20px, 1.95vw, 29px);
+  position: relative;
+  top: 2px;
+  color: rgba(229, 229, 230, 0.77);
+}
+
+.ds-theme-wrap button {
+  color: rgba(229, 229, 230, 0.77);
+}
+
+.ds-theme-wrap button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ds-sign-up {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 109px;
+  height: 42px;
+  margin-left: clamp(20px, 1.95vw, 29px);
+  border-radius: 7px;
+  background: #fff;
+  color: #101010;
+  font-size: var(--action-control-font-size);
+  font-weight: 460;
+  letter-spacing: -0.34px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 5px rgba(0, 0, 0, 0.34);
+  position: relative;
+  top: var(--control-baseline-shift);
+}
+
+.ds-toggle-wrap {
+  display: none;
+  margin-left: auto;
+}
+
+.ds-menu-toggle {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.21);
+  background: linear-gradient(145deg, rgba(26, 34, 36, 0.86), rgba(16, 29, 33, 0.9));
+  backdrop-filter: blur(14px);
+}
+
+/* ---------- Hero ---------- */
+
+.ds-hero {
+  position: absolute;
+  inset: auto 0 var(--hero-bottom) 0;
+  z-index: 1;
+}
+
+.ds-hero-content {
+  position: absolute;
+  left: var(--gutter-start);
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: min(640px, calc(100vw - var(--gutter-start) - var(--gutter-end) - var(--card-width) - 48px));
+}
+
+.ds-hero-title {
+  font-family: "Source Serif 4", "Reference Display", "Reference Sans", Georgia, serif;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-size: var(--display-size);
+  line-height: var(--display-leading);
+  letter-spacing: -2.1px;
+  -webkit-text-stroke: 0.12px currentColor;
+  text-shadow: 0 2px 2px rgba(0, 0, 0, 0.44);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.ds-line {
+  display: block;
+  overflow: hidden;
+  transform-origin: left center;
+}
+
+.ds-line-one {
+  color: #fff;
+  transform: scaleX(0.775);
+}
+
+.ds-line-two {
+  color: rgba(211, 207, 207, 0.78);
+  transform: scaleX(0.793);
+}
+
+.ds-line-reveal {
+  display: block;
+  will-change: transform;
+}
+
+.ds-hero-copy {
+  margin-top: var(--title-copy-gap);
+  width: clamp(390px, 31.67vw, 500px);
+  max-width: 100%;
+  position: relative;
+  left: 1px;
+  transform: translateY(var(--copy-optical-shift));
+  color: rgba(226, 229, 228, 0.84);
+  font-size: var(--copy-size);
+  line-height: var(--copy-leading);
+  font-weight: 350;
+  letter-spacing: 0.13px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.ds-cta-wrap {
+  margin-top: var(--copy-cta-gap);
+}
+
+.ds-primary-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: var(--cta-width);
+  height: var(--cta-height);
+  border-radius: 7px;
+  background: #fff;
+  color: #111;
+  font-size: var(--primary-control-font-size);
+  font-weight: 450;
+  letter-spacing: -0.3px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.38);
+  left: var(--control-inline-nudge);
+}
+
+.ds-primary-cta .ds-label {
+  position: absolute;
+  left: 8.125%;
+  white-space: nowrap;
+}
+
+.ds-arrow-box {
+  position: absolute;
+  right: 3.125%;
+  top: 14.286%;
+  width: 20.625%;
+  height: 71.429%;
+  max-width: 40px;
+  border-radius: 7px;
+  background: #070909;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Demo card ---------- */
+
+.ds-demo-card {
+  position: absolute;
+  right: var(--gutter-end);
+  bottom: 0;
+  width: var(--card-width);
+  aspect-ratio: 201 / 265;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  transform-origin: 82% 50%;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: clamp(12px, 1.52vh, 18px);
+  background: linear-gradient(145deg, rgba(24, 22, 20, 0.8), rgba(5, 12, 14, 0.86));
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.44),
+    0 0 0 3px rgba(255, 255, 255, 0.035) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(14px) saturate(108%);
+  overflow: hidden;
+}
+
+/* ---------- Motion ---------- */
+
+.ds-viewport button,
+.ds-viewport a {
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+.ds-viewport button:hover,
+.ds-viewport a:hover {
+  filter: brightness(1.08);
+}
+
+.ds-viewport :focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+@keyframes ds-entrance-brand {
+  from { opacity: 0; transform: translateY(7px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ds-entrance-nav {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ds-entrance-action {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ds-entrance-line {
+  from { transform: translate3d(0, 110%, 0) skewY(2deg); }
+  to { transform: translate3d(0, 0, 0) skewY(0); }
+}
+
+@keyframes ds-entrance-copy {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(var(--copy-optical-shift)); }
+}
+
+@keyframes ds-entrance-card {
+  from { opacity: 0; transform: translateY(12px) scale(0.968); }
+  to { opacity: 1; transform: none; }
+}
+
+html.motion-pending .ds-entrance-brand {
+  animation: ds-entrance-brand 580ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+
+html.motion-pending .ds-entrance-nav {
+  animation: ds-entrance-nav 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html.motion-pending .ds-entrance-action {
+  animation: ds-entrance-action 560ms cubic-bezier(0.16, 1, 0.3, 1) 960ms both;
+}
+
+html.motion-pending .ds-signup-wrap {
+  animation-duration: 520ms;
+}
+
+html.motion-pending .ds-toggle-wrap {
+  animation-delay: 140ms;
+  animation-duration: 520ms;
+}
+
+html.motion-pending .ds-line-reveal-one {
+  animation: ds-entrance-line 800ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
+}
+
+html.motion-pending .ds-line-reveal-two {
+  animation: ds-entrance-line 850ms cubic-bezier(0.22, 1, 0.36, 1) 440ms both;
+}
+
+html.motion-pending .ds-entrance-copy {
+  animation: ds-entrance-copy 620ms cubic-bezier(0.16, 1, 0.3, 1) 740ms both;
+}
+
+html.motion-pending .ds-demo-card {
+  animation: ds-entrance-card 920ms cubic-bezier(0.22, 1, 0.36, 1) 1040ms both;
+}
+
+/* Open dropdown: signup row spans full width */
+.ds-header.menu-open .ds-signup-wrap {
+  width: 100%;
+}
+
+.ds-header.menu-open .ds-sign-up {
+  flex: 1;
+}
+
+.ds-header.menu-open .ds-theme-wrap {
+  margin-left: 0;
+  top: 0;
+}
+
+/* ---------- Tablet ---------- */
+
+@media (min-width: 620px) and (max-width: 790px),
+  (min-width: 620px) and (max-width: 1100px) and (orientation: portrait) {
+  .ds-nav,
+  .ds-time-panel,
+  .ds-signup-wrap {
+    display: none;
+  }
+
+  .ds-toggle-wrap {
+    display: block;
+  }
+
+  .ds-header-actions {
+    position: absolute;
+    top: 56px;
+    right: 0;
+    width: min(324px, calc(100vw - var(--gutter-start) - var(--gutter-end)));
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    background: linear-gradient(145deg, rgba(24, 22, 20, 0.92), rgba(5, 12, 14, 0.94));
+    backdrop-filter: blur(18px) saturate(108%);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px) scale(0.985);
+    transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+  }
+
+  .ds-header.menu-open .ds-header-actions {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+
+  .ds-header.menu-open .ds-nav,
+  .ds-header.menu-open .ds-time-panel,
+  .ds-header.menu-open .ds-signup-wrap {
+    display: flex;
+  }
+
+  .ds-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    top: 0;
+  }
+
+  .ds-nav-link:first-child {
+    top: 0;
+  }
+
+  .ds-time-panel {
+    margin: 0;
+    width: auto;
+    height: auto;
+    padding: 10px 0 0;
+  }
+
+  .ds-sign-up {
+    margin: 0;
+    width: 100%;
+  }
+
+  .ds-theme-wrap {
+    margin-left: 0;
+  }
+}
+
+/* ---------- Mobile ---------- */
+
+@media (max-width: 619px) {
+  .ds-screen {
+    --display-size: clamp(44px, 13vw, 58px);
+    --display-leading: clamp(52px, 15vw, 68px);
+  }
+
+  .ds-nav,
+  .ds-time-panel,
+  .ds-signup-wrap {
+    display: none;
+  }
+
+  .ds-toggle-wrap {
+    display: block;
+  }
+
+  .ds-header-actions {
+    position: absolute;
+    top: 56px;
+    right: 0;
+    width: min(340px, calc(100vw - var(--gutter-start) - var(--gutter-end)));
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    background: linear-gradient(145deg, rgba(24, 22, 20, 0.92), rgba(5, 12, 14, 0.94));
+    backdrop-filter: blur(18px) saturate(108%);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px) scale(0.985);
+    transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+  }
+
+  .ds-header.menu-open .ds-header-actions {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+
+  .ds-header.menu-open .ds-nav,
+  .ds-header.menu-open .ds-time-panel,
+  .ds-header.menu-open .ds-signup-wrap {
+    display: flex;
+  }
+
+  .ds-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    top: 0;
+  }
+
+  .ds-nav-link:first-child {
+    top: 0;
+  }
+
+  .ds-time-panel {
+    margin: 0;
+    width: auto;
+    height: auto;
+    padding: 10px 0 0;
+  }
+
+  .ds-sign-up {
+    margin: 0;
+    width: 100%;
+  }
+
+  .ds-theme-wrap {
+    margin-left: 0;
+  }
+
+  .ds-viewport {
+    min-height: 100svh;
+  }
+
+  .ds-hero-content {
+    max-width: calc(100vw - var(--gutter-start) - var(--gutter-end));
+  }
+
+  .ds-line-one {
+    transform: scaleX(0.78);
+  }
+
+  .ds-line-two {
+    transform: scaleX(0.55);
+  }
+
+  .ds-hero-copy br {
+    display: none;
+  }
+
+  .ds-hero-copy {
+    width: auto;
+  }
+
+  .ds-demo-card {
+    right: var(--gutter-end);
+    top: clamp(176px, 32svh, 300px);
+    bottom: auto;
+    width: min(280px, 62vw);
+  }
+}
+
+/* ---------- Short + landscape overrides ---------- */
+
+@media (max-height: 500px) and (min-width: 620px) {
+  .ds-screen {
+    --hero-bottom: 20px;
+    --header-top: 12px;
+    --display-size: clamp(40px, 9vh, 58px);
+    --display-leading: clamp(48px, 10.5vh, 66px);
+    --title-copy-gap: 10px;
+    --copy-cta-gap: 14px;
+  }
+
+  .ds-viewport {
+    min-height: 100svh;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) and (max-height: 500px) {
+  .ds-hero-content {
+    max-width: calc(100vw - var(--gutter-start) - var(--gutter-end) - var(--card-width) - 32px);
+  }
+
+  .ds-demo-card {
+    width: min(250px, 34vw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.motion-pending .ds-entrance-brand,
+  html.motion-pending .ds-entrance-nav,
+  html.motion-pending .ds-entrance-action,
+  html.motion-pending .ds-line-reveal-one,
+  html.motion-pending .ds-line-reveal-two,
+  html.motion-pending .ds-entrance-copy,
+  html.motion-pending .ds-demo-card {
+    animation: none;
+  }
+
+  .ds-viewport *,
+  .ds-viewport {
+    animation: none !important;
+    transition: none !important;
+  }
+}

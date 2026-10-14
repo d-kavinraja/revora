@@ -1,10 +1,14 @@
 import axios from 'axios';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useAuthStore, normalizeUserProfile } from '@/store/useAuthStore';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
+  // Cookie-based session: the HttpOnly revora_auth_token cookie rides along
+  // on every request (cross-origin). The Bearer header below is only the
+  // in-memory token for the current tab — never persisted anywhere.
+  withCredentials: true,
   headers: { 
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true'
@@ -22,7 +26,8 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
-// Attach JWT token on every request
+// Attach JWT token on every request (in-memory only; HttpOnly cookie is
+// attached automatically via withCredentials for post-reload restores).
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) {
@@ -31,12 +36,76 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-logout on 401
+/**
+ * Restore the session after a full page reload. The JWT lives only in the
+ * HttpOnly cookie (never localStorage), so the store starts with no token;
+ * `/auth/me` proves the cookie is valid and repopulates the non-secret
+ * profile. Safe to call at app start — resolves false when logged out.
+ */
+export async function restoreSession(): Promise<boolean> {
+  try {
+    const res = await apiClient.get<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      image?: string;
+      // GET /auth/me serializes the DB field name, not `image`.
+      // normalizeUserProfile maps it so refresh keeps the avatar.
+      avatar_url?: string | null;
+      github_username?: string;
+    }>('/auth/me');
+    useAuthStore.setState({
+      token: null, // never reintroduce a JS-readable token
+      user: normalizeUserProfile(res.data),
+      isAuthenticated: true,
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    // Unblock auth guards: the restore attempt has settled either way.
+    useAuthStore.getState().markSessionChecked();
+  }
+}
+
+/** Routes that require a session; mirrors proxy.ts AUTHENTICATED_ROUTE_PREFIXES. */
+const PROTECTED_ROUTE_PREFIXES = [
+  '/dashboard',
+  '/settings',
+  '/repositories',
+  '/reviews',
+  '/model-lab',
+];
+
+function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+// Auto-logout on 401. Clears local state and, when we're on a protected
+// route, forces a hard navigation to /login so a revoked/expired session can
+// never strand the user on a screen stuck retrying failed requests.
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
+      const onProtected =
+        typeof window !== 'undefined' &&
+        isProtectedPath(window.location.pathname);
+      // Await the cookie-clearing logout BEFORE any hard navigation, so the
+      // edge gate cannot bounce us straight back to the dashboard.
+      void (async () => {
+        await useAuthStore.getState().logout();
+        if (
+          onProtected &&
+          typeof window !== 'undefined' &&
+          window.location.pathname !== '/login'
+        ) {
+          window.location.assign('/login');
+        }
+      })();
     }
     return Promise.reject(error);
   }
@@ -458,6 +527,9 @@ export const api = {
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
   getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
 
+  // OAuth login-CSRF state (single-use; verified at POST /auth/github)
+  startOAuthState: () => apiClient.get<{ state: string }>('/auth/oauth/start').then((r) => r.data),
+
   // API Keys - Enhanced
   rotateApiKey: (id: string, newKey: string) =>
     apiClient.post<ApiKey>(`/api-keys/${id}/rotate`, { api_key: newKey }).then((r) => r.data),
@@ -566,6 +638,100 @@ export const api = {
     }
     return apiClient.get<Array<{ provider: string; request_count: number; success_rate: number; avg_latency_ms: number; total_cost_usd: number; total_tokens: number }>>(query).then((r) => r.data);
   },
+};
+
+export interface MouthMapConfig {
+  model: string;
+  model_version: string;
+  input_frames: number;
+  input_resolution: string;
+  provider: string;
+  compute: string;
+  max_upload_mb: number;
+  allowed_extensions: string[];
+}
+
+export interface MouthMapTestVideo {
+  id: string;
+  filename: string;
+  duration_s: number | null;
+  resolution: string | null;
+  size_bytes: number | null;
+  ground_truth: string | null;
+  has_alignment: boolean;
+  status: string;
+}
+
+export interface MouthMapInferenceResult {
+  prediction: string;
+  model: string;
+  model_version: string | null;
+  confidence: number | null;
+  inference_time_ms: number | null;
+  frames_processed: number | null;
+  status: string;
+  expected: string | null;
+  is_match: boolean | null;
+  raw: Record<string, unknown>;
+}
+
+export interface MouthMapHistoryItem {
+  id: string;
+  video_filename: string;
+  source: string;
+  test_video_id: string | null;
+  prediction: string | null;
+  expected: string | null;
+  is_match: boolean | null;
+  confidence: number | null;
+  inference_time_ms: number | null;
+  frames_processed: number | null;
+  model_version: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+export const mouthmapApi = {
+  getConfig: () => apiClient.get<MouthMapConfig>('/mouthmap/config').then((r) => r.data),
+  getHealth: () =>
+    apiClient.get<{ status: string; endpoint: string; detail: string | null }>('/mouthmap/health').then((r) => r.data),
+  getDataset: () => apiClient.get<MouthMapTestVideo[]>('/mouthmap/dataset').then((r) => r.data),
+  streamUrl: (id: string) => `${API_BASE}/mouthmap/dataset/${encodeURIComponent(id)}/stream`,
+  runInference: (file: Blob, filename: string, opts?: { test_video_id?: string; source?: string; signal?: AbortSignal }, onUploadProgress?: (pct: number, uploadComplete: boolean) => void) => {
+    const form = new FormData();
+    form.append('video', file, filename);
+    if (opts?.test_video_id) form.append('test_video_id', opts.test_video_id);
+    form.append('source', opts?.source ?? 'upload');
+    return apiClient
+      .post<MouthMapInferenceResult>('/mouthmap/inference', form, {
+        // Do NOT set Content-Type manually: the browser must generate the
+        // multipart boundary automatically. A hardcoded
+        // 'multipart/form-data' header (without boundary) makes FastAPI
+        // reject the request at form parsing, before it reaches the endpoint.
+        // axios's default 'application/json' header is overridden here by
+        // deleting it so the browser/XHR sets the correct multipart header.
+        transformRequest: [(data, headers) => {
+          const h = headers as unknown as {
+            delete?: (k: string) => void;
+          };
+          if (typeof h?.delete === 'function') h.delete('Content-Type');
+          else if (headers) delete (headers as Record<string, unknown>)['Content-Type'];
+          return data;
+        }],
+        timeout: 200000,
+        signal: opts?.signal,
+        onUploadProgress: (e) => {
+          if (onUploadProgress && e.total) {
+            // uploadComplete is observed from the raw XHR event (all bytes
+            // delivered) — never inferred from elapsed time or animation.
+            onUploadProgress(Math.round((e.loaded / e.total) * 100), e.loaded >= e.total);
+          }
+        },
+      })
+      .then((r) => r.data);
+  },
+  getHistory: (limit = 20, offset = 0) =>
+    apiClient.get<MouthMapHistoryItem[]>(`/mouthmap/history?limit=${limit}&offset=${offset}`).then((r) => r.data),
 };
 
 

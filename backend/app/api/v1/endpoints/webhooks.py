@@ -5,11 +5,13 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.github.webhooks import github_webhook_service
+from app.middleware.rate_limit import limiter
 
 router = APIRouter()
 
 
 @router.post("/github")
+@limiter.limit("100/minute")
 async def github_webhook(request: Request, background_tasks: BackgroundTasks):
     # 1. Read raw body
     body = await request.body()

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon } from '@animateicons/react/lucide';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon } from '@animateicons/react/lucide';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useRef, useState, useEffect } from 'react';
 
@@ -15,6 +15,7 @@ const navLinks = [
   { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
   { href: '/reviews', label: 'Reviews', icon: ClipboardIcon },
+  { href: '/model-lab', label: 'Model Lab', icon: BrainIcon },
 ];
 
 const bottomLinks = [
@@ -26,15 +27,16 @@ const bottomLinks = [
   { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon },
 ];
 
-function NavLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean }) {
+function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isNew?: boolean }) {
   const iconRef = useRef<any>(null);
   return (
     <Link
       href={href}
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
-      title={collapsed ? label : undefined}
-      className={`cursor-target flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
+      title={collapsed ? (isNew ? `${label} — New` : label) : undefined}
+      aria-label={isNew ? `${label} — New` : undefined}
+      className={`cursor-target${isNew ? ' relative group/modellab model-lab-card' : ''} flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isActive
@@ -46,6 +48,15 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: s
         <Icon ref={iconRef} size={16} isAnimated={false} />
       </span>
       {!collapsed && <span className="truncate">{label}</span>}
+      {isNew && !collapsed && (
+        <span className="model-lab-new-badge" aria-hidden="true">
+          <span className="model-lab-new-label">New</span>
+          <span className="model-lab-new-sparkle">✦</span>
+        </span>
+      )}
+      {isNew && collapsed && (
+        <span className="model-lab-new-badge model-lab-new-badge--dot" aria-hidden="true" />
+      )}
       {isActive && !collapsed && (
         <div className="ml-auto w-1.5 h-1.5 rounded-full bg-brand" />
       )}
@@ -85,6 +96,12 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [brokenAvatarSrc, setBrokenAvatarSrc] = useState<string | null>(null);
+  // A broken avatar URL degrades to the initial without a retry loop: the
+  // failed src is remembered, while any new user/image is attempted fresh.
+  // Render-derived (no effect), so no cascading renders.
+  const avatarSrc =
+    user?.image && user.image !== brokenAvatarSrc ? user.image : null;
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -100,10 +117,13 @@ export function Sidebar() {
     setIsLogoutModalOpen(true);
   };
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     setIsLogoutModalOpen(false);
-    logout();
-    router.push('/login');
+    // Await server revocation + cookie deletion before navigating, so the
+    // edge gate no longer sees a stale token and cannot bounce us back to
+    // the dashboard. replace() keeps the dashboard out of history.
+    await logout();
+    router.replace('/login');
   };
 
   const isActive = (href: string) => pathname === href;
@@ -178,13 +198,14 @@ export function Sidebar() {
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {!collapsed && (
-            <div className="text-[11px] font-bold text-foreground/60 uppercase tracking-wider px-3 mb-2">
+            <div className="text-[11px] font-semibold text-foreground/60 uppercase tracking-wider px-3 mb-2">
               Navigation
             </div>
           )}
           {navLinks.map((link) => (
             <NavLinkItem
               key={link.href}
+              isNew={link.href === '/model-lab'}
               href={link.href}
               label={link.label}
               icon={link.icon}
@@ -194,7 +215,7 @@ export function Sidebar() {
           ))}
 
           {!collapsed && (
-            <div className="text-[11px] font-bold text-foreground/60 uppercase tracking-wider px-3 mt-5 mb-2">
+            <div className="text-[11px] font-semibold text-foreground/60 uppercase tracking-wider px-3 mt-5 mb-2">
               Settings
             </div>
           )}
@@ -216,10 +237,11 @@ export function Sidebar() {
             href="/profile"
             className={`cursor-target flex items-center gap-3 rounded-lg px-2 py-2 mb-2 transition-colors hover:bg-white/[0.04] ${collapsed ? 'justify-center' : ''}`}
           >
-            {user?.image ? (
+            {avatarSrc ? (
               <img
-                src={user.image}
-                alt={user.name ?? 'User'}
+                src={avatarSrc}
+                alt={user?.name ?? 'User'}
+                onError={() => setBrokenAvatarSrc(avatarSrc)}
                 className="w-8 h-8 rounded-full object-cover shrink-0"
               />
             ) : (

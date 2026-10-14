@@ -34,8 +34,16 @@ export default function LoginPage() {
         setLoadingConfig(false);
         return;
       }
+      // Login-CSRF: mint a single-use state via the same-origin BFF so the
+      // oauth_state cookie is set first-party (storable on http://localhost);
+      // the callback returns it for verification.
+      const startRes = await fetch('/api/auth/start', { cache: 'no-store' });
+      if (!startRes.ok) {
+        throw new Error('Could not start the GitHub sign-in flow.');
+      }
+      const { state } = (await startRes.json()) as { state: string };
       const redirectUri = `${window.location.origin}/auth/callback`;
-      window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user,user:email`;
+      window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(state)}`;
     } catch (err) {
       console.error('Failed to get auth config', err);
       toast({

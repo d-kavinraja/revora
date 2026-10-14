@@ -1,0 +1,81 @@
+/* Model Lab promo card — lives inside the Data Signal demo-card shell. */
+
+.ml-glare {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ml-card-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  gap: 10px;
+}
+
+.ml-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #101a1e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ml-media img {
+  object-fit: cover;
+}
+
+.ml-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(105deg, oklch(0.62 0.2 270), oklch(0.65 0.16 245));
+  border: 1px solid oklch(0.98 0 0 / 45%);
+  border-radius: 9999px;
+  padding: 3px 9px;
+}
+
+.ml-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.ml-copy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  color: rgba(226, 229, 228, 0.88);
+}
+
+.ml-cta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.38);
+}
