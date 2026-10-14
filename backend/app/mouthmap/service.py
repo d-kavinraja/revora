@@ -88,7 +88,9 @@ class MouthMapService:
         ok, detail = await check_hf_health()
         return {
             "status": "available" if ok else "unavailable",
-            "endpoint": settings.MOUTHMAP_HF_ENDPOINT_URL,
+            # Schema requires `endpoint: str`; coalesce None so an
+            # unconfigured endpoint degrades to "" instead of a 500.
+            "endpoint": settings.MOUTHMAP_HF_ENDPOINT_URL or "",
             "detail": detail,
         }
 

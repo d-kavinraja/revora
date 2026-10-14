@@ -229,3 +229,30 @@ def test_inference_oversize_rejected_without_full_buffer(client, monkeypatch):
 
     resp = client.get("/api/v1/mouthmap/health")
     assert "token" not in resp.text.lower()
+
+
+async def test_missing_endpoint_raises_unavailable(monkeypatch):
+    """No configured endpoint must fail safe without network or disk IO."""
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "MOUTHMAP_HF_ENDPOINT_URL", None)
+    with pytest.raises(hf_client.MouthMapHFError) as exc:
+        await hf_client.run_hf_inference(
+            "/nonexistent/clip.mp4", "clip.mp4", "video/mp4"
+        )
+    assert exc.value.kind == "unavailable"
+    assert "not configured" in str(exc.value).lower()
+
+
+def test_health_empty_endpoint_when_unconfigured(client, monkeypatch):
+    """Health stays schema-valid (endpoint == '') with no URL configured."""
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "MOUTHMAP_HF_ENDPOINT_URL", None)
+    resp = client.get("/api/v1/mouthmap/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "unavailable"
+    assert body["endpoint"] == ""
+    assert "not configured" in (body["detail"] or "").lower()
+    assert "token" not in resp.text.lower()

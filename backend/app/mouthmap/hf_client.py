@@ -1,7 +1,6 @@
 """Hugging Face Gradio client for the hosted MouthMap inference Space.
 
-Actual discovered contract (verified live against
-https://kavinraja-mouthmap-inference.hf.space):
+Actual discovered contract (verified live against the configured Space):
   1. POST {base}/gradio_api/upload (multipart, field "files") -> [server_path]
   2. POST {base}/gradio_api/call/v2/predict
      {"video": {"path": server_path, "meta": {"_type": "gradio.FileData"}}}
@@ -9,8 +8,9 @@ https://kavinraja-mouthmap-inference.hf.space):
   3. GET {base}/gradio_api/call/predict/{event_id} (SSE)
      -> "event: complete\\ndata: [{...}]"
 
-The Space is public (no auth required); an optional server-side
-MOUTHMAP_HF_API_TOKEN is sent as Bearer when configured.
+The Space is private. The server-side MOUTHMAP_HF_API_TOKEN is sent as
+Bearer on every Space call. The endpoint URL itself is configuration
+(Render env in prod, backend/.env locally) and is never hardcoded.
 """
 
 import asyncio
@@ -289,6 +289,8 @@ async def run_hf_inference(
 async def check_hf_health() -> tuple[bool, str | None]:
     """Lightweight health probe with a short timeout (no aggressive polling)."""
     base = _base_url()
+    if not base:
+        return False, "MouthMap endpoint is not configured"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10)) as client:
             resp = await client.get(f"{base}/config", headers=_auth_headers())

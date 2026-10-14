@@ -115,9 +115,11 @@ class Settings(BaseSettings):
         description="A repo counts as 'recently updated' if synced within this many days",
     )
 
-    # MouthMap Model Lab (inference-only, Hugging Face Gradio Space)
-    MOUTHMAP_HF_ENDPOINT_URL: str = Field(
-        default="https://kavinraja-mouthmap-inference.hf.space",
+    # MouthMap Model Lab (inference-only, private Hugging Face Gradio Space)
+    # Configured exclusively via environment (Render dashboard in prod,
+    # backend/.env locally) — no default, so the Space URL never ships in git.
+    MOUTHMAP_HF_ENDPOINT_URL: str | None = Field(
+        default=None,
         description="Base URL of the hosted MouthMap Gradio Space",
     )
     MOUTHMAP_HF_API_TOKEN: str | None = Field(
