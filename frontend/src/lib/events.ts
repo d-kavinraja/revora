@@ -24,20 +24,24 @@ export function useReviewStream(
   url: string,
   onEvent: (event: ReviewStreamEvent) => void,
 ): void {
-  const token = useAuthStore((s) => s.token);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     let active = true;
     let retryMs = 2000;
 
     const connect = async () => {
       while (active) {
         try {
+          // Cookie-based auth: the HttpOnly session cookie rides along;
+          // send the in-memory Bearer too when present (same tab).
+          const token = useAuthStore.getState().token;
           const res = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
           if (!res.ok || !res.body) throw new Error(`SSE ${res.status}`);
           const reader = res.body.getReader();
@@ -77,7 +81,7 @@ export function useReviewStream(
     return () => {
       active = false;
     };
-  }, [url, token]);
+  }, [url, isAuthenticated]);
 }
 
 /** URL of the global reviews stream. */

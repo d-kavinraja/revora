@@ -1,10 +1,11 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThemeProvider } from '@/components/layout/theme-provider';
 import { ToasterProvider } from '@/components/ui/toaster';
 import { ServerStatusOverlay } from '@/components/ui/ServerStatusOverlay';
+import { restoreSession } from '@/lib/api';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -19,6 +20,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   );
+
+  // Re-establish the session from the HttpOnly cookie on first load of the
+  // app shell (the JWT itself is never readable by page JavaScript).
+  useEffect(() => {
+    void restoreSession();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { DotGrid } from '@/components/ui/DotGrid';
 import TargetCursor from '@/components/ui/TargetCursor';
 import { useThemeStore } from '@/store/useThemeStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { checkHealth } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isLight = theme === 'light';
   const router = useRouter();
   const pathname = usePathname();
+  const { isAuthenticated, sessionChecked, logout } = useAuthStore();
 
   // On mount, check if the backend is alive.
   // If it's sleeping (Render free tier), send user to the wake-up splash page.
@@ -25,15 +27,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
+  // Client-side auth guard. Waits for the session restore to settle
+  // (sessionChecked) so a valid refresh is not bounced. When the session is
+  // gone, clears any lingering cookie first (so the edge gate cannot redirect
+  // back here) and leaves the protected shell.
+  useEffect(() => {
+    if (!sessionChecked || isAuthenticated) return;
+    void (async () => {
+      await logout();
+      router.replace('/login');
+    })();
+  }, [sessionChecked, isAuthenticated, logout, router]);
+
+  const isModelLab = pathname.startsWith('/model-lab');
+
   return (
     <div className="min-h-screen bg-background text-foreground flex w-full relative">
-      <TargetCursor
-        spinDuration={2}
-        hideDefaultCursor={true}
-        parallaxOn={true}
-        cursorColor={isLight ? '#6366f1' : '#a855f7'}
-        cursorColorOnTarget={isLight ? '#4338ca' : '#d8b4fe'}
-      />
+      {!isModelLab && (
+        <TargetCursor
+          spinDuration={2}
+          hideDefaultCursor={true}
+          parallaxOn={true}
+          cursorColor={isLight ? '#6366f1' : '#a855f7'}
+          cursorColorOnTarget={isLight ? '#4338ca' : '#d8b4fe'}
+        />
+      )}
       {/* Background DotGrid */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <DotGrid
