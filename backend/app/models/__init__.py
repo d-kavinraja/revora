@@ -12,6 +12,7 @@ from app.models.knowledge import (
     ReviewEvent,
     ReviewMetrics,
 )
+from app.models.mouthmap import MouthmapInferenceRun
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
 from app.models.prompt import (
@@ -49,6 +50,7 @@ __all__ = [
     "Installation",
     "LLMRequestLog",
     "LlmTokenUsage",
+    "MouthmapInferenceRun",
     "OrgMember",
     "Organization",
     "PromptCacheRecord",

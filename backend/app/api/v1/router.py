@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     health,
     llm,
     models,
+    mouthmap,
     providers,
     repositories,
     review_lifecycle,
@@ -49,6 +50,7 @@ api_router.include_router(
     analytics.router, prefix="/platform-analytics", tags=["analytics"]
 )
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
+api_router.include_router(mouthmap.router, prefix="/mouthmap", tags=["mouthmap"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(cost.router, prefix="/cost", tags=["cost"])
 api_router.include_router(verification.router, prefix="/verify", tags=["verification"])
