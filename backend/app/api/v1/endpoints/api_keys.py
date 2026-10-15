@@ -58,6 +58,8 @@ def sanitize_error_message(message: str) -> str:
 _BUSY_ERROR_TYPES = {
     "rate_limited",
     "quota_exceeded",
+    "insufficient_credits",
+    "no_free_model",
     "provider_unavailable",
     "timeout",
 }
@@ -68,6 +70,8 @@ _SAFE_MESSAGES = {
     "authorization_error": "Provider authorization failed. Check key permissions.",
     "rate_limited": "Rate limit reached. Try again later.",
     "quota_exceeded": "Provider quota reached. Try again later.",
+    "insufficient_credits": "The provider key has insufficient credits. Add credits to continue.",
+    "no_free_model": "No free model could be verified with this key. The key remains active.",
     "provider_unavailable": "Provider is temporarily unavailable.",
     "timeout": "Validation timed out.",
     "decryption_error": "Stored credential could not be decrypted.",
@@ -106,6 +110,21 @@ def _classify_exception(exc: BaseException) -> tuple[str, str | None, str]:
         return "failed", "authorization_error", _SAFE_MESSAGES["authorization_error"]
     if any(k in lowered for k in ("429", "rate_limit", "rate limit", "rate-limit")):
         return "busy", "rate_limited", _SAFE_MESSAGES["rate_limited"]
+    if any(
+        k in lowered
+        for k in (
+            "402",
+            "payment required",
+            "insufficient credit",
+            "insufficient_credit",
+            "insufficient funds",
+            "out of credits",
+            "no credits",
+        )
+    ):
+        # Exhausted balance (notably OpenRouter 402): busy-preserving, never
+        # invalid — the key itself is fine, it just cannot pay right now.
+        return "busy", "insufficient_credits", _SAFE_MESSAGES["insufficient_credits"]
     if "quota" in lowered:
         return "busy", "quota_exceeded", _SAFE_MESSAGES["quota_exceeded"]
     if any(

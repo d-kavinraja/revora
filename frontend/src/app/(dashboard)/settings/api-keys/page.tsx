@@ -32,7 +32,7 @@ export default function ApiKeysSettingsPage() {
 
   // Test Key State
   const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, { status: string; message: string }>>({});
+  const [testResults, setTestResults] = useState<Record<string, { status: string; message: string; error_type?: string | null }>>({});
 
   // Delete confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -132,8 +132,14 @@ export default function ApiKeysSettingsPage() {
 
     try {
       const res = await api.testApiKey(id);
-      setTestResults(prev => ({ ...prev, [id]: { status: res.status, message: res.message } }));
-      setKeys(prev => prev.map(k => k.id === id ? { ...k, is_valid: res.status === 'success' } : k));
+      setTestResults(prev => ({ ...prev, [id]: { status: res.status, message: res.message, error_type: res.error_type ?? null } }));
+      // Transient busy outcomes must not deactivate a valid credential —
+      // only explicit success/failed verdicts flip is_valid.
+      setKeys(prev => prev.map(k => {
+        if (k.id !== id) return k;
+        if (res.status === 'busy') return k;
+        return { ...k, is_valid: res.status === 'success' };
+      }));
       toast({ title: `Test ${res.status}`, description: res.message, type: res.status === 'success' ? 'success' : 'error' });
     } catch (err: any) {
       console.error('Failed to test key', err);
@@ -204,7 +210,7 @@ export default function ApiKeysSettingsPage() {
       setTestResults(prev => {
         const next = { ...prev };
         for (const [id, r] of Object.entries(results)) {
-          next[id] = { status: r.status, message: r.message };
+          next[id] = { status: r.status, message: r.message, error_type: r.error_type ?? null };
         }
         return next;
       });
