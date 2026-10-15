@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
@@ -94,6 +95,29 @@ _BUSY_SIGNALS: tuple[str, ...] = (
     "try again",
 )
 
+# Signals for an exhausted provider balance (notably OpenRouter HTTP 402).
+# Never an auth verdict and never a soft success: the key is valid but cannot
+# pay for completions. Kept separate from _BUSY_SIGNALS so the outcome maps
+# to its own actionable error_type instead of generic "unavailable".
+_CREDIT_EXHAUSTED_SIGNALS: tuple[str, ...] = (
+    "402",
+    "payment required",
+    "insufficient credit",
+    "insufficient_credit",
+    "insufficient funds",
+    "out of credits",
+    "no credits",
+)
+
+# Other HTTP 4xx codes that are neither auth, rate-limit, timeout, nor
+# not-found signals. Only applied to OpenRouter (see verify_model_quota_detailed);
+# every other provider keeps the legacy retain-on-unknown behaviour.
+_UNKNOWN_CLIENT_ERROR_RE = re.compile(r"\b(400|405|409|410|413|422|451)\b")
+_UNKNOWN_CLIENT_ERROR_PHRASES: tuple[str, ...] = (
+    "bad request",
+    "no endpoints",
+)
+
 
 def classify_provider_error(error: Exception) -> tuple[str, str, type]:
     """Map a raw provider exception to (error_type, safe_message, exception_class).
@@ -105,6 +129,8 @@ def classify_provider_error(error: Exception) -> tuple[str, str, type]:
         if "403" in raw or "forbidden" in raw or "permission" in raw:
             return ("authorization_error", "Provider authorization failed. Check key permissions.", ProviderAuthError)
         return ("invalid_key", "Invalid API key.", ProviderAuthError)
+    if any(sig in raw for sig in _CREDIT_EXHAUSTED_SIGNALS):
+        return ("insufficient_credits", "The provider key has insufficient credits.", ProviderBusyError)
     if any(sig in raw for sig in _BUSY_SIGNALS):
         if "429" in raw or "rate" in raw:
             return ("rate_limited", "Rate limit reached. Try again later.", ProviderBusyError)
@@ -147,6 +173,18 @@ class ModelDiscoveryEngine:
     PROVIDER_API_BASES: ClassVar[dict[str, str]] = {
         "ollama_cloud": "https://ollama.com/v1",
     }
+
+    # OpenRouter-scoped validation bounds. OpenRouter's catalogue is ~300
+    # models (vs ~20-30 for NVIDIA/Gemini); smoke-testing all of them fans out
+    # hundreds of paid 1-token completions, draws 429s, and blows the 22s
+    # per-key validation budget — which surfaced as perpetual TEST BUSY.
+    # Other providers are untouched by these bounds.
+    OPENROUTER_KEY_ENDPOINT: ClassVar[str] = "https://openrouter.ai/api/v1/key"
+    OPENROUTER_KEY_TIMEOUT_SECONDS: ClassVar[float] = 10.0
+    OPENROUTER_MODELS_ENDPOINT: ClassVar[str] = "https://openrouter.ai/api/v1/models"
+    OPENROUTER_MODELS_TIMEOUT_SECONDS: ClassVar[float] = 10.0
+    OPENROUTER_SMOKE_SAMPLE_SIZE: ClassVar[int] = 8
+    OPENROUTER_SMOKE_CONCURRENCY: ClassVar[int] = 4
 
     # Terms indicating a model is not a chat model
     NON_CHAT_EXCLUSIONS: ClassVar[list[str]] = [
@@ -295,6 +333,100 @@ class ModelDiscoveryEngine:
     ENTERPRISE_TERMS: ClassVar[list[str]] = ["enterprise", "provisioned"]
 
     @classmethod
+    async def _verify_openrouter_key(cls, raw_key: str) -> bool:
+        """Fail-fast OpenRouter credential check via the documented key endpoint.
+
+        GET https://openrouter.ai/api/v1/key returns 200 for a valid key
+        (with quota/usage evidence) and 401 otherwise. Free, non-generative —
+        no completion calls are spent here.
+
+        Returns True when the key reports an explicitly exhausted paid-credit
+        limit. This is evidence only — it never becomes a verdict here, so a
+        low or zero paid balance can never block free-model validation or
+        invalidate the key. Free-tier keys are never reported as exhausted:
+        paid balance is irrelevant to free models.
+
+        Fail-safe direction: only an explicit 401/403 becomes an auth verdict.
+        Every other unexpected outcome stays busy/unavailable so a valid stored
+        key is never invalidated by an endpoint hiccup. Raises:
+            ProviderAuthError: 401 invalid key / 403 forbidden.
+            ProviderBusyError: 429, timeout, 5xx, transport failure.
+            ProviderUnavailableError: any other unexpected status.
+        """
+        import httpx
+
+        headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+        try:
+            async with httpx.AsyncClient(
+                timeout=cls.OPENROUTER_KEY_TIMEOUT_SECONDS
+            ) as client:
+                resp = await client.get(cls.OPENROUTER_KEY_ENDPOINT, headers=headers)
+        except Exception as e:
+            logger.warning(
+                "OpenRouter key verification request failed: %s", type(e).__name__
+            )
+            lowered = str(e).lower()
+            if "429" in lowered or "rate" in lowered:
+                raise ProviderBusyError(
+                    "Provider is temporarily unavailable.", error_type="rate_limited"
+                )
+            if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                raise ProviderBusyError(
+                    "Provider is temporarily unavailable.", error_type="timeout"
+                )
+            raise ProviderBusyError("Provider is temporarily unavailable.")
+
+        if resp.status_code == 200:
+            try:
+                data = resp.json().get("data", {}) or {}
+            except Exception:
+                return False  # Key accepted; body unreadable — do not fail validation.
+            limit = data.get("limit")
+            remaining = data.get("limit_remaining")
+            if (
+                limit is not None
+                and remaining is not None
+                and not data.get("is_free_tier")
+            ):
+                try:
+                    return float(remaining) <= 0
+                except (TypeError, ValueError):
+                    pass
+            return False
+        if resp.status_code == 401:
+            raise ProviderAuthError("Invalid API key.", error_type="invalid_key")
+        if resp.status_code == 403:
+            raise ProviderAuthError(
+                "Provider authentication failed.", error_type="authorization_error"
+            )
+        if resp.status_code == 429:
+            raise ProviderBusyError(
+                "Provider is temporarily unavailable.", error_type="rate_limited"
+            )
+        if resp.status_code in (502, 503, 504):
+            raise ProviderBusyError("Provider is temporarily unavailable.")
+        raise ProviderUnavailableError("Provider is temporarily unavailable.")
+
+    @classmethod
+    def _is_openrouter_free_model(cls, entry: dict) -> bool:
+        """True when a /models catalogue entry is an eligible free model.
+
+        Mirrors the discovery adapter predicate: an explicit ``:free``
+        variant ID, or zero prompt *and* completion pricing. OpenRouter-only;
+        never consulted for other providers.
+        """
+        model_id = entry.get("id", "") or ""
+        if isinstance(model_id, str) and model_id.endswith(":free"):
+            return True
+        pricing = entry.get("pricing", {}) or {}
+        try:
+            return float(pricing.get("prompt", 1)) == 0 and float(
+                pricing.get("completion", 1)
+            ) == 0
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
     async def get_available_models(
         cls, provider: str, raw_key: str, force_refresh: bool = False
     ) -> list[dict[str, Any]]:
@@ -327,7 +459,17 @@ class ModelDiscoveryEngine:
         if not force_refresh and cached and (now - cached["timestamp"]) < CACHE_TTL:
             return cached["models"]
 
+        paid_balance_exhausted = False
+        if provider.lower() == "openrouter":
+            # Fail fast on rejected credentials before spending any
+            # completion calls. Transient outcomes preserve validity (busy),
+            # so this never invalidates a stored key on a hiccup. An
+            # exhausted paid balance is evidence only — it must never block
+            # free-model validation.
+            paid_balance_exhausted = await cls._verify_openrouter_key(raw_key)
+
         live_models: list[str] = []
+        openrouter_free_ids: set[str] = set()
         try:
             if litellm_prov == "nvidia_nim":
                 try:
@@ -413,6 +555,88 @@ class ModelDiscoveryEngine:
                     raise ProviderUnavailableError(
                         "Provider returned no usable models."
                     )
+            elif provider.lower() == "openrouter":
+                # Direct catalogue fetch. The installed LiteLLM cannot serve
+                # OpenRouter here (provider config unresolvable, static
+                # fallback list empty), so litellm.get_valid_models() always
+                # yields [] for it. Query the public models endpoint directly
+                # instead — same pattern as the NVIDIA/Cohere branches above.
+                # The credential itself was already verified by
+                # _verify_openrouter_key (/models is public and accepts any
+                # bearer), so only explicit 401/403 become auth verdicts;
+                # everything else stays busy/unavailable and never invalidates.
+                try:
+                    import httpx
+
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(
+                        timeout=cls.OPENROUTER_MODELS_TIMEOUT_SECONDS
+                    ) as client:
+                        resp = await client.get(
+                            cls.OPENROUTER_MODELS_ENDPOINT,
+                            headers=headers,
+                        )
+                        if resp.status_code == 200:
+                            try:
+                                data = resp.json().get("data", []) or []
+                            except Exception:
+                                data = []
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict) and "id" in m
+                            ]
+                            # Record eligible free models (zero pricing or an
+                            # explicit :free variant, e.g. cohere/north-mini-code:free)
+                            # so validation smokes free models first and never
+                            # spends paid completions on a free-tier key.
+                            openrouter_free_ids.update(
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict)
+                                and "id" in m
+                                and cls._is_openrouter_free_model(m)
+                            )
+                        elif resp.status_code == 401:
+                            raise ProviderAuthError(
+                                "Invalid API key.", error_type="invalid_key"
+                            )
+                        elif resp.status_code == 403:
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type="authorization_error",
+                            )
+                        elif resp.status_code == 429:
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable.",
+                                error_type="rate_limited",
+                            )
+                        elif resp.status_code in (502, 503, 504):
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable."
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError):
+                    raise
+                except Exception as e:
+                    logger.warning(f"Direct OpenRouter API model fetch failed: {type(e).__name__}")
+                    lowered = str(e).lower()
+                    if "429" in lowered or "rate" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.", error_type="rate_limited"
+                        )
+                    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.", error_type="timeout"
+                        )
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError(
+                        "Provider returned no usable models."
+                    )
             else:
                 api_base = cls.PROVIDER_API_BASES.get(provider.lower())
 
@@ -493,12 +717,41 @@ class ModelDiscoveryEngine:
         # smoke test routes to the wrong endpoint and a valid key fails.
         quota_api_base = cls.PROVIDER_API_BASES.get(provider.lower())
         smoke_auth_failures = 0
+        smoke_credit_failures: list[str] = []
+
+        # OpenRouter only: smoke eligible free models first with limited
+        # concurrency. Every other provider keeps the legacy unbounded
+        # behaviour. Non-sampled OpenRouter models keep their default
+        # accessible=True (listed, quota unverified) — the credential
+        # verdict itself rests on the /key pre-check plus the sample.
+        # When the catalogue holds no free models, smoke nothing at all:
+        # key validation must never spend paid completion calls on a
+        # free-tier key.
+        smoke_targets = enriched_models
+        smoke_semaphore: asyncio.Semaphore | None = None
+        smoke_sink: list[str] | None = None
+        if provider.lower() == "openrouter":
+            free_targets = [
+                m
+                for m in enriched_models
+                if m.canonical_model_name in openrouter_free_ids
+            ]
+            smoke_targets = free_targets[: cls.OPENROUTER_SMOKE_SAMPLE_SIZE]
+            smoke_semaphore = asyncio.Semaphore(cls.OPENROUTER_SMOKE_CONCURRENCY)
+            smoke_sink = smoke_credit_failures
 
         async def verify_and_update(c_model: CanonicalModel):
             nonlocal smoke_auth_failures
-            accessible, saw_auth = await cls.verify_model_quota_detailed(
-                c_model, raw_key, api_base=quota_api_base
-            )
+            if smoke_semaphore is not None:
+                async with smoke_semaphore:
+                    accessible, saw_auth = await cls.verify_model_quota_detailed(
+                        c_model, raw_key,
+                        api_base=quota_api_base, credit_sink=smoke_sink,
+                    )
+            else:
+                accessible, saw_auth = await cls.verify_model_quota_detailed(
+                    c_model, raw_key, api_base=quota_api_base
+                )
             if not accessible and saw_auth:
                 smoke_auth_failures += 1
             c_model.accessible = accessible
@@ -506,20 +759,52 @@ class ModelDiscoveryEngine:
             return c_model.model_dump()
 
         validated_models = await asyncio.gather(
-            *(verify_and_update(m) for m in enriched_models)
+            *(verify_and_update(m) for m in smoke_targets)
         )
 
-        # Filter out models that failed the quota check
-        final_models = [m for m in validated_models if m["accessible"]]
+        # Verdict rests on the sampled smokes only: auth rejections invalidate,
+        # exhausted credit maps to insufficient_credits, anything else empty
+        # maps to unavailable. The unsmoked remainder is appended afterwards
+        # as listed-but-quota-unverified so the model picker keeps the full
+        # catalogue; it never flips the verdict.
+        # OpenRouter-only additions: an exhausted paid balance (pre-check
+        # evidence, non-free-tier keys) also maps to insufficient_credits —
+        # but only after free-model smokes were attempted. A valid key with
+        # no verifiable free model maps to no_free_model (busy, never
+        # invalid, never "add credits").
+        sampled_models = [m for m in validated_models if m["accessible"]]
 
-        if not final_models:
+        if not sampled_models:
             if smoke_auth_failures:
                 raise ProviderAuthError(
                     "Invalid API key.", error_type="invalid_key"
                 )
+            if smoke_credit_failures:
+                raise ProviderBusyError(
+                    "The provider key has insufficient credits.",
+                    error_type="insufficient_credits",
+                )
+            if provider.lower() == "openrouter" and paid_balance_exhausted:
+                raise ProviderBusyError(
+                    "The provider key has insufficient credits.",
+                    error_type="insufficient_credits",
+                )
+            if provider.lower() == "openrouter":
+                raise ProviderBusyError(
+                    "No free model could be verified with this key.",
+                    error_type="no_free_model",
+                )
             raise ProviderUnavailableError(
                 "Provider returned no usable models."
             )
+
+        final_models = list(sampled_models)
+        if provider.lower() == "openrouter" and len(smoke_targets) < len(enriched_models):
+            smoked_names = {m.canonical_model_name for m in smoke_targets}
+            for c_model in enriched_models:
+                if c_model.canonical_model_name not in smoked_names:
+                    canonical_registry.register(c_model)
+                    final_models.append(c_model.model_dump())
 
         # Sort so recommended models appear at the top
         def get_model_priority(m: dict) -> int:
@@ -686,7 +971,11 @@ class ModelDiscoveryEngine:
 
     @classmethod
     async def verify_model_quota_detailed(
-        cls, canonical_model: CanonicalModel, raw_key: str, api_base: str | None = None
+        cls,
+        canonical_model: CanonicalModel,
+        raw_key: str,
+        api_base: str | None = None,
+        credit_sink: list[str] | None = None,
     ) -> tuple[bool, bool]:
         """
         Smoke-test variant returning (accessible, saw_auth_failure).
@@ -694,7 +983,12 @@ class ModelDiscoveryEngine:
         Classification:
           success                    -> (True, False)
           401/403/invalid-key        -> (False, True)  -- never soft-success
+          402/exhausted credit       -> (False, False) -- never soft-success;
+             recorded into credit_sink (when provided) so callers can report
+             insufficient_credits instead of generic unavailable.
           404/not-found/unsupported  -> (False, False)
+          OpenRouter unknown 4xx    -> (False, False) -- OpenRouter only; all
+             other providers retain the legacy soft-success for these.
           429/503/timeout/transient  -> (True, False)  -- retain, do not invalidate
 
         api_base must be supplied for providers borrowing another
@@ -736,13 +1030,38 @@ class ModelDiscoveryEngine:
                     f"Smoke test auth failure for {canonical_model.canonical_model_name}: {type(e).__name__}"
                 )
                 return False, True
+            if any(sig in error_str for sig in _CREDIT_EXHAUSTED_SIGNALS):
+                # Exhausted balance (notably OpenRouter 402): the key is
+                # valid but cannot pay. Must NOT be soft-success (that would
+                # report broke keys as accessible) and must NOT read as auth.
+                logger.warning(
+                    f"Smoke test credit failure for {canonical_model.canonical_model_name}: {type(e).__name__}"
+                )
+                if credit_sink is not None:
+                    credit_sink.append(canonical_model.canonical_model_name)
+                return False, False
             if (
                 "404" in error_str
                 or "not found" in error_str
+                or "no endpoints" in error_str
                 or "unsupported" in error_str
             ):
                 logger.warning(
                     f"Model {canonical_model.canonical_model_name} not supported: {type(e).__name__}"
+                )
+                return False, False
+            if getattr(canonical_model, "provider", "").lower() == "openrouter" and (
+                _UNKNOWN_CLIENT_ERROR_RE.search(error_str)
+                or any(sig in error_str for sig in _UNKNOWN_CLIENT_ERROR_PHRASES)
+            ) and not any(
+                sig in error_str
+                for sig in ("429", "rate", "408", "timeout", "timed out", "deadline")
+            ):
+                # OpenRouter-only: an unrecognised client error is a per-model
+                # exclusion, never a soft success. Other providers keep the
+                # legacy retain behaviour below (unchanged).
+                logger.warning(
+                    f"Model {canonical_model.canonical_model_name} client error, excluding: {type(e).__name__}"
                 )
                 return False, False
 

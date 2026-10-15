@@ -578,7 +578,7 @@ export const api = {
   createApiKey: (data: ApiKeyCreate) => apiClient.post<ApiKey>('/api-keys', data).then((r) => r.data),
   updateApiKey: (id: string, data: ApiKeyUpdate) => apiClient.put<ApiKey>(`/api-keys/${id}`, data).then((r) => r.data),
   deleteApiKey: (id: string) => apiClient.delete<void>(`/api-keys/${id}`).then((r) => r.data),
-  testApiKey: (id: string) => apiClient.post<{ status: string; message: string }>(`/api-keys/${id}/test`).then((r) => r.data),
+  testApiKey: (id: string) => apiClient.post<{ status: string; message: string; error_type?: string | null }>(`/api-keys/${id}/test`).then((r) => r.data),
   getThemeConfig: () => apiClient.get<ThemeConfig>('/ui/settings/theme').then((r) => r.data),
   validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
