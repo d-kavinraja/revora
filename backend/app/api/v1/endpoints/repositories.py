@@ -797,9 +797,14 @@ async def get_available_models(
             except Exception:
                 pass
 
-    available: dict[str, list[dict[str, Any]]] = {}
+    # Probe every provider concurrently: each branch is an independent external
+    # HTTP round-trip, so the endpoint costs the slowest provider instead of the
+    # sum of all. The DB session is only touched before the gather (and by the
+    # single openrouter branch), never by concurrent tasks at once.
 
-    for provider, raw_key in provider_keys.items():
+    async def _probe(
+        provider: str, raw_key: str
+    ) -> tuple[str, list[dict[str, Any]]] | None:
         try:
             if provider == "openrouter":
                 # Ensure the models are synced using our dynamic engine
@@ -807,7 +812,7 @@ async def get_available_models(
                     db_models = await discovery_engine.sync_provider_models(db, provider, force=False)
                 except Exception:
                     db_models = await discovery_engine.get_cached_models(db, provider)
-                
+
                 models = [
                     {
                         "model_name": m.model_id,
@@ -824,13 +829,22 @@ async def get_available_models(
                 models = await model_discovery_engine.get_available_models(
                     provider, raw_key
                 )
-                
+
             if models:
-                # Sort by model_name
-                available[provider] = sorted(models, key=lambda x: x["model_name"])
+                return provider, sorted(models, key=lambda x: x["model_name"])
         except Exception as e:
             logger.warning(f"Live model fetch failed for provider '{provider}': {e}")
-            continue
+        return None
+
+    probe_results = await asyncio.gather(
+        *(
+            _probe(provider, raw_key)
+            for provider, raw_key in provider_keys.items()
+        )
+    )
+    available: dict[str, list[dict[str, Any]]] = {
+        provider: models for provider, models in probe_results if models is not None
+    }
 
     return available
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,15 +39,19 @@ async def get_models_per_provider(
 ):
     """Get discovered models grouped by provider for the current user."""
     user_keys = await api_key_service.get_all_usable_keys(db, current_user.id)
-    result = {}
 
-    for provider_name, key in user_keys.items():
+    # Probe every provider concurrently: each branch is an independent external
+    # HTTP round-trip (no DB access), so the endpoint costs the slowest provider
+    # instead of the sum of all. Failures collapse to an empty list per provider,
+    # matching the previous sequential behavior.
+
+    async def _probe(provider_name: str, key) -> tuple[str, list[dict[str, str]]]:
         try:
             raw_key = encryption_service.decrypt(key.encrypted_key)
             models = await model_discovery_engine.get_available_models(
                 provider_name, raw_key
             )
-            result[provider_name] = [
+            return provider_name, [
                 {
                     "model": m["canonical_model_name"],
                     "litellm_model": m["litellm_model_name"],
@@ -55,9 +60,15 @@ async def get_models_per_provider(
                 if m.get("accessible", True)
             ]
         except Exception:
-            result[provider_name] = []
+            return provider_name, []
 
-    return result
+    probe_results = await asyncio.gather(
+        *(
+            _probe(provider_name, key)
+            for provider_name, key in user_keys.items()
+        )
+    )
+    return dict(probe_results)
 
 
 @router.get("/recommend/{feature}")
