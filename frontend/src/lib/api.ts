@@ -32,7 +32,6 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true'
   },
-  timeout: 15000, // 15s timeout to prevent UI freezing on slow/unresponsive backend
 });
 
 /** Ping the backend health endpoint. Returns true if server is alive, false if sleeping/unreachable. */
@@ -582,7 +581,14 @@ export const api = {
   getThemeConfig: () => apiClient.get<ThemeConfig>('/ui/settings/theme').then((r) => r.data),
   validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
-  getAvailableModels: () => apiClient.get<Record<string, ModelMetadata[]>>('/repositories/available-models').then((r) => r.data),
+  getAvailableModels: () =>
+    apiClient.get<Record<string, ModelMetadata[]>>(
+      '/repositories/available-models',
+      // Live provider probing on the backend can run well past 15s with
+      // several keys (each provider is a separate network round-trip);
+      // keep a generous cap so a stuck request can't spin forever.
+      { timeout: 90_000 },
+    ).then((r) => r.data),
   updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
   getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
@@ -601,8 +607,8 @@ export const api = {
       '/api-keys/validate-all',
       {},
       // Bulk validation runs bounded sequential per-key checks server-side
-      // (~22s per key worst case); use an explicit long timeout instead of
-      // the global 15s so legitimate multi-key runs don't false-timeout.
+      // (~22s per key worst case); keep the 100s cap so legitimate
+      // multi-key runs don't get truncated by browser or proxy limits.
       { timeout: 100000 },
     ).then((r) => r.data),
   getKeyHealth: (id: string) =>
@@ -660,7 +666,11 @@ export const api = {
   updateRoutingPreferences: (routing: Record<string, { provider: string; model: string }>) =>
     apiClient.put<{ status: string; routing: Record<string, { provider: string; model: string }> }>('/routing/preferences', { routing }).then((r) => r.data),
   getModelsPerProvider: () =>
-    apiClient.get<Record<string, Array<{model: string; litellm_model: string}>>>('/routing/models-per-provider').then((r) => r.data),
+    apiClient.get<Record<string, Array<{model: string; litellm_model: string}>>>(
+      '/routing/models-per-provider',
+      // Same live-probe path as getAvailableModels — generous per-call cap.
+      { timeout: 90_000 },
+    ).then((r) => r.data),
 
   // Analytics
   getRequestLogs: (limit = 50, offset = 0, filters?: UsageFilters) => {
