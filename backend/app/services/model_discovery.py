@@ -24,7 +24,11 @@ def _hash_api_key(raw_key: str) -> str:
 class ProviderAuthError(Exception):
     """Credential rejected by the provider (401/403/invalid key). Not retryable as-is."""
 
-    def __init__(self, message: str = "Provider authentication failed.", error_type: str = "authentication_error"):
+    def __init__(
+        self,
+        message: str = "Provider authentication failed.",
+        error_type: str = "authentication_error",
+    ):
         super().__init__(message)
         self.error_type = error_type
 
@@ -32,7 +36,11 @@ class ProviderAuthError(Exception):
 class ProviderBusyError(Exception):
     """Provider temporarily unable to validate (429/503/timeout/network). Retryable."""
 
-    def __init__(self, message: str = "Provider is temporarily unavailable.", error_type: str = "provider_unavailable"):
+    def __init__(
+        self,
+        message: str = "Provider is temporarily unavailable.",
+        error_type: str = "provider_unavailable",
+    ):
         super().__init__(message)
         self.error_type = error_type
 
@@ -40,7 +48,11 @@ class ProviderBusyError(Exception):
 class ProviderUnavailableError(Exception):
     """Provider returned no usable data for a non-auth, non-busy reason."""
 
-    def __init__(self, message: str = "Provider returned no usable models.", error_type: str = "provider_unavailable"):
+    def __init__(
+        self,
+        message: str = "Provider returned no usable models.",
+        error_type: str = "provider_unavailable",
+    ):
         super().__init__(message)
         self.error_type = error_type
 
@@ -48,7 +60,11 @@ class ProviderUnavailableError(Exception):
 class ProviderConfigError(Exception):
     """Revora-side configuration problem (unknown provider). Not retryable."""
 
-    def __init__(self, message: str = "Provider is not configured correctly.", error_type: str = "configuration_error"):
+    def __init__(
+        self,
+        message: str = "Provider is not configured correctly.",
+        error_type: str = "configuration_error",
+    ):
         super().__init__(message)
         self.error_type = error_type
 
@@ -127,19 +143,43 @@ def classify_provider_error(error: Exception) -> tuple[str, str, type]:
     raw = str(error).lower()
     if any(sig in raw for sig in _AUTH_SIGNALS):
         if "403" in raw or "forbidden" in raw or "permission" in raw:
-            return ("authorization_error", "Provider authorization failed. Check key permissions.", ProviderAuthError)
+            return (
+                "authorization_error",
+                "Provider authorization failed. Check key permissions.",
+                ProviderAuthError,
+            )
         return ("invalid_key", "Invalid API key.", ProviderAuthError)
     if any(sig in raw for sig in _CREDIT_EXHAUSTED_SIGNALS):
-        return ("insufficient_credits", "The provider key has insufficient credits.", ProviderBusyError)
+        return (
+            "insufficient_credits",
+            "The provider key has insufficient credits.",
+            ProviderBusyError,
+        )
     if any(sig in raw for sig in _BUSY_SIGNALS):
         if "429" in raw or "rate" in raw:
-            return ("rate_limited", "Rate limit reached. Try again later.", ProviderBusyError)
+            return (
+                "rate_limited",
+                "Rate limit reached. Try again later.",
+                ProviderBusyError,
+            )
         if "quota" in raw:
-            return ("quota_exceeded", "Provider quota reached. Try again later.", ProviderBusyError)
+            return (
+                "quota_exceeded",
+                "Provider quota reached. Try again later.",
+                ProviderBusyError,
+            )
         if "timeout" in raw or "timed out" in raw or "deadline" in raw:
             return ("timeout", "Validation timed out.", ProviderBusyError)
-        return ("provider_unavailable", "Provider is temporarily unavailable.", ProviderBusyError)
-    return ("provider_unavailable", "Provider is temporarily unavailable.", ProviderUnavailableError)
+        return (
+            "provider_unavailable",
+            "Provider is temporarily unavailable.",
+            ProviderBusyError,
+        )
+    return (
+        "provider_unavailable",
+        "Provider is temporarily unavailable.",
+        ProviderUnavailableError,
+    )
 
 
 class ModelDiscoveryEngine:
@@ -420,9 +460,10 @@ class ModelDiscoveryEngine:
             return True
         pricing = entry.get("pricing", {}) or {}
         try:
-            return float(pricing.get("prompt", 1)) == 0 and float(
-                pricing.get("completion", 1)
-            ) == 0
+            return (
+                float(pricing.get("prompt", 1)) == 0
+                and float(pricing.get("completion", 1)) == 0
+            )
         except (TypeError, ValueError):
             return False
 
@@ -506,7 +547,9 @@ class ModelDiscoveryEngine:
                 except (ProviderAuthError, ProviderUnavailableError):
                     raise
                 except Exception as e:
-                    logger.warning(f"Direct NVIDIA API model fetch failed: {type(e).__name__}")
+                    logger.warning(
+                        f"Direct NVIDIA API model fetch failed: {type(e).__name__}"
+                    )
                     raise ProviderBusyError("Provider is temporarily unavailable.")
 
                 if not live_models:
@@ -531,7 +574,9 @@ class ModelDiscoveryEngine:
                             live_models = [
                                 m["name"]
                                 for m in data
-                                if isinstance(m, dict) and "name" in m and "chat" in m.get("endpoints", [])
+                                if isinstance(m, dict)
+                                and "name" in m
+                                and "chat" in m.get("endpoints", [])
                             ]
                         elif resp.status_code in (401, 403):
                             raise ProviderAuthError(
@@ -549,7 +594,57 @@ class ModelDiscoveryEngine:
                 except (ProviderAuthError, ProviderUnavailableError):
                     raise
                 except Exception as e:
-                    logger.warning(f"Direct Cohere API model fetch failed: {type(e).__name__}")
+                    logger.warning(
+                        f"Direct Cohere API model fetch failed: {type(e).__name__}"
+                    )
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError(
+                        "Provider returned no usable models."
+                    )
+            elif provider.lower() == "mistral":
+                # Direct catalogue fetch. Query Mistral's /v1/models
+                # endpoint with Bearer auth to get live chat models.
+                try:
+                    import httpx
+
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            "https://api.mistral.ai/v1/models",
+                            headers=headers,
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json().get("data", [])
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict)
+                                and "id" in m
+                                and not any(
+                                    term in m["id"].lower()
+                                    for term in ("embed", "embedding", "moderation")
+                                )
+                            ]
+                        elif resp.status_code in (401, 403):
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type=(
+                                    "authorization_error"
+                                    if resp.status_code == 403
+                                    else "invalid_key"
+                                ),
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderUnavailableError):
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        f"Direct Mistral API model fetch failed: {type(e).__name__}"
+                    )
                     raise ProviderBusyError("Provider is temporarily unavailable.")
                 if not live_models:
                     raise ProviderUnavailableError(
@@ -622,13 +717,20 @@ class ModelDiscoveryEngine:
                 except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError):
                     raise
                 except Exception as e:
-                    logger.warning(f"Direct OpenRouter API model fetch failed: {type(e).__name__}")
+                    logger.warning(
+                        f"Direct OpenRouter API model fetch failed: {type(e).__name__}"
+                    )
                     lowered = str(e).lower()
                     if "429" in lowered or "rate" in lowered:
                         raise ProviderBusyError(
-                            "Provider is temporarily unavailable.", error_type="rate_limited"
+                            "Provider is temporarily unavailable.",
+                            error_type="rate_limited",
                         )
-                    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                    if (
+                        "timeout" in lowered
+                        or "timed out" in lowered
+                        or "deadline" in lowered
+                    ):
                         raise ProviderBusyError(
                             "Provider is temporarily unavailable.", error_type="timeout"
                         )
@@ -657,7 +759,8 @@ class ModelDiscoveryEngine:
                     if exc_cls is ProviderAuthError:
                         error_type, _, _ = classify_provider_error(e)
                         raise ProviderAuthError(
-                            "Invalid API key." if error_type == "invalid_key"
+                            "Invalid API key."
+                            if error_type == "invalid_key"
                             else "Provider authentication failed.",
                             error_type=error_type,
                         )
@@ -670,7 +773,12 @@ class ModelDiscoveryEngine:
                     raise ProviderUnavailableError(
                         "Provider is temporarily unavailable."
                     )
-        except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError, ProviderConfigError):
+        except (
+            ProviderAuthError,
+            ProviderBusyError,
+            ProviderUnavailableError,
+            ProviderConfigError,
+        ):
             # Never cache failures. Propagate typed errors so callers can
             # distinguish invalid vs busy vs unavailable.
             raise
@@ -745,8 +853,10 @@ class ModelDiscoveryEngine:
             if smoke_semaphore is not None:
                 async with smoke_semaphore:
                     accessible, saw_auth = await cls.verify_model_quota_detailed(
-                        c_model, raw_key,
-                        api_base=quota_api_base, credit_sink=smoke_sink,
+                        c_model,
+                        raw_key,
+                        api_base=quota_api_base,
+                        credit_sink=smoke_sink,
                     )
             else:
                 accessible, saw_auth = await cls.verify_model_quota_detailed(
@@ -776,9 +886,7 @@ class ModelDiscoveryEngine:
 
         if not sampled_models:
             if smoke_auth_failures:
-                raise ProviderAuthError(
-                    "Invalid API key.", error_type="invalid_key"
-                )
+                raise ProviderAuthError("Invalid API key.", error_type="invalid_key")
             if smoke_credit_failures:
                 raise ProviderBusyError(
                     "The provider key has insufficient credits.",
@@ -794,12 +902,12 @@ class ModelDiscoveryEngine:
                     "No free model could be verified with this key.",
                     error_type="no_free_model",
                 )
-            raise ProviderUnavailableError(
-                "Provider returned no usable models."
-            )
+            raise ProviderUnavailableError("Provider returned no usable models.")
 
         final_models = list(sampled_models)
-        if provider.lower() == "openrouter" and len(smoke_targets) < len(enriched_models):
+        if provider.lower() == "openrouter" and len(smoke_targets) < len(
+            enriched_models
+        ):
             smoked_names = {m.canonical_model_name for m in smoke_targets}
             for c_model in enriched_models:
                 if c_model.canonical_model_name not in smoked_names:
@@ -1050,12 +1158,23 @@ class ModelDiscoveryEngine:
                     f"Model {canonical_model.canonical_model_name} not supported: {type(e).__name__}"
                 )
                 return False, False
-            if getattr(canonical_model, "provider", "").lower() == "openrouter" and (
-                _UNKNOWN_CLIENT_ERROR_RE.search(error_str)
-                or any(sig in error_str for sig in _UNKNOWN_CLIENT_ERROR_PHRASES)
-            ) and not any(
-                sig in error_str
-                for sig in ("429", "rate", "408", "timeout", "timed out", "deadline")
+            if (
+                getattr(canonical_model, "provider", "").lower() == "openrouter"
+                and (
+                    _UNKNOWN_CLIENT_ERROR_RE.search(error_str)
+                    or any(sig in error_str for sig in _UNKNOWN_CLIENT_ERROR_PHRASES)
+                )
+                and not any(
+                    sig in error_str
+                    for sig in (
+                        "429",
+                        "rate",
+                        "408",
+                        "timeout",
+                        "timed out",
+                        "deadline",
+                    )
+                )
             ):
                 # OpenRouter-only: an unrecognised client error is a per-model
                 # exclusion, never a soft success. Other providers keep the

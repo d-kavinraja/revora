@@ -326,7 +326,7 @@ export default function ApiKeysSettingsPage() {
                     <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
                     <option value="ollama_cloud">Ollama Cloud</option>
                     <option value="cohere">Cohere</option>
-                    <option value="mistral" disabled>Mistral (Under Testing)</option>
+                    <option value="mistral">Mistral</option>
                     <option value="nvidia">NVIDIA NIM</option>
                   </select>
                 </div>
