@@ -373,6 +373,9 @@ export default function ApiKeysSettingsPage() {
                         </option>
                       );
                     })}
+                    {!providers.some((p) => p.slug === 'mistral') && (
+                      <option value="mistral">Mistral</option>
+                    )}
                   </select>
                 </div>
               </div>

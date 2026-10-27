@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.discovery.base import BaseDiscoveryAdapter
 from app.ai.discovery.cohere import CohereDiscoveryAdapter
+from app.ai.discovery.mistral import MistralDiscoveryAdapter
 from app.ai.discovery.ollama_cloud import OllamaCloudDiscoveryAdapter
 from app.ai.discovery.openrouter import OpenRouterDiscoveryAdapter
 from app.core.security import encryption_service
@@ -18,11 +19,14 @@ class DiscoveryEngineService:
             "openrouter": OpenRouterDiscoveryAdapter(),
             "ollama_cloud": OllamaCloudDiscoveryAdapter(),
             "cohere": CohereDiscoveryAdapter(),
+            "mistral": MistralDiscoveryAdapter(),
         }
 
-    async def sync_provider_models(self, db: AsyncSession, provider_slug: str, force: bool = False) -> list[DiscoveredModel]:
+    async def sync_provider_models(
+        self, db: AsyncSession, provider_slug: str, force: bool = False
+    ) -> list[DiscoveredModel]:
         """
-        Synchronizes models for a given provider. 
+        Synchronizes models for a given provider.
         If force is False, only syncs if last_synced_at is older than 24 hours.
         Returns the current list of DiscoveredModels for this provider from the DB.
         """
@@ -41,7 +45,7 @@ class DiscoveryEngineService:
             latest = result.scalars().first()
             if latest:
                 age = datetime.datetime.now(datetime.UTC) - latest.last_synced_at
-                if age.total_seconds() < 86400: # 24 hours
+                if age.total_seconds() < 86400:  # 24 hours
                     return await self.get_cached_models(db, provider_slug)
 
         # Find a valid API key for this provider
@@ -60,14 +64,18 @@ class DiscoveryEngineService:
         try:
             discovered_models = await adapter.fetch_models(raw_key)
         except Exception as e:
-            raise RuntimeError(f"Failed to fetch models from {provider_slug}: {e!s}") from e
+            raise RuntimeError(
+                f"Failed to fetch models from {provider_slug}: {e!s}"
+            ) from e
 
         if not discovered_models:
             raise RuntimeError(f"No valid/free models found for {provider_slug}")
 
         # Clear existing cached models for this provider
         await db.execute(
-            delete(DiscoveredModel).where(DiscoveredModel.provider_slug == provider_slug)
+            delete(DiscoveredModel).where(
+                DiscoveredModel.provider_slug == provider_slug
+            )
         )
 
         # Insert the newly discovered models
@@ -76,7 +84,9 @@ class DiscoveryEngineService:
 
         return await self.get_cached_models(db, provider_slug)
 
-    async def get_cached_models(self, db: AsyncSession, provider_slug: str) -> list[DiscoveredModel]:
+    async def get_cached_models(
+        self, db: AsyncSession, provider_slug: str
+    ) -> list[DiscoveredModel]:
         result = await db.execute(
             select(DiscoveredModel)
             .where(DiscoveredModel.provider_slug == provider_slug)

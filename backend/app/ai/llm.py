@@ -144,7 +144,12 @@ class LLMService:
                     f"Model '{display_model}' not found or deprecated by the provider. "
                     f"Please check your provider settings."
                 ) from e
-            elif "410" in error_str or "end of life" in error_str or "gone" in error_str or "removed" in error_str:
+            elif (
+                "410" in error_str
+                or "end of life" in error_str
+                or "gone" in error_str
+                or "removed" in error_str
+            ):
                 raise RuntimeError(
                     f"Model '{display_model}' has reached its end of life and is no longer available from the provider. "
                     f"Please select a different model."
@@ -161,8 +166,7 @@ class LLMService:
                 ) from e
             else:
                 raise RuntimeError(
-                    f"AI provider error for '{display_model}'. "
-                    f"Please try again later."
+                    f"AI provider error for '{display_model}'. Please try again later."
                 ) from e
 
     async def _resolve_api_key(
@@ -283,6 +287,8 @@ class LLMService:
             model = f"nvidia_nim/{model}"
         elif provider == "openrouter" and not model.startswith("openrouter/"):
             model = f"openrouter/{model}"
+        elif provider == "mistral" and not model.startswith("mistral/"):
+            model = f"mistral/{model}"
         elif provider == "ollama_cloud":
             model = model.removeprefix("ollama/")
             if not model.startswith("openai/"):

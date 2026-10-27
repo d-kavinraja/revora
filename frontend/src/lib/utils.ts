@@ -21,7 +21,7 @@ export const cardData = [
   {
     id: 3,
     title: "3. Configure Your API Key",
-    description: "Add an API key from Google Gemini, NVIDIA NIM, or Cohere to power the code review.",
+    description: "Add an API key from Google Gemini, Mistral, NVIDIA NIM, or Cohere to power the code review.",
     color: "rgba(168, 85, 247, 0.8)", // Purple
   },
   {
