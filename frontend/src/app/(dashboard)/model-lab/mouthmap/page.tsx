@@ -19,11 +19,30 @@ import { AnalysisSection } from './_components/AnalysisSection';
 import { HistoryTable } from './_components/HistoryTable';
 import type { Phase, SelectedVideo, UploadMode } from './_components/types';
 import { friendlyError } from './_components/types';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
-export default function ModelLabPage() {
+// Gate at the route level so none of the lab's fetch effects run while
+// `mouthmap` is disabled (all mouthmap routes 503 server-side; mounting the
+// child would only produce failed requests behind a cosmetic overlay).
+export default function MouthMapPage() {
+  const { data: features } = usePlatformFeatures();
+  const { status, message } = featureState(features, 'mouthmap');
+
+  if (status !== 'enabled') {
+    return (
+      <div className="w-full min-w-0 max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+        <FeatureUnavailable status={status} message={message} title="MouthMap is unavailable" />
+      </div>
+    );
+  }
+
+  return <MouthMapLab />;
+}
+
+function MouthMapLab() {
   const { toast } = useToast();
   const [config, setConfig] = useState<MouthMapConfig | null>(null);
-  const [health, setHealth] = useState<string>('unknown');
   const [dataset, setDataset] = useState<MouthMapTestVideo[]>([]);
   const [history, setHistory] = useState<MouthMapHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,11 +54,6 @@ export default function ModelLabPage() {
   // inferred from elapsed time. Distinguishes "bytes in flight" from
   // "upload delivered, backend computing".
   const [uploadDone, setUploadDone] = useState(false);
-  // Pre-flight service probe state. `didProbe` records whether this run
-  // performed a live probe (vs reusing a fresh ConfigCard health state).
-  const [probing, setProbing] = useState(false);
-  const [didProbe, setDidProbe] = useState(false);
-  const [healthAt, setHealthAt] = useState(0);
   const [result, setResult] = useState<MouthMapInferenceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
@@ -132,18 +146,6 @@ export default function ModelLabPage() {
         if (!cancelled && ds.length > 0) {
           void prefetchThumbs(ds);
         }
-        try {
-          const h = await mouthmapApi.getHealth();
-          if (!cancelled) {
-            setHealth(h.status);
-            setHealthAt(Date.now());
-          }
-        } catch {
-          if (!cancelled) {
-            setHealth('unavailable');
-            setHealthAt(Date.now());
-          }
-        }
       } catch (e) {
         if (!cancelled)
           toast({
@@ -172,10 +174,16 @@ export default function ModelLabPage() {
 
   // Live elapsed-time ticker — display only, never drives stage completion.
   useEffect(() => {
-    if (phase !== 'uploading' && phase !== 'processing' && phase !== 'preparing' && !probing) return;
+    if (
+      phase !== 'warming' &&
+      phase !== 'uploading' &&
+      phase !== 'processing' &&
+      phase !== 'preparing'
+    )
+      return;
     const t = window.setInterval(() => setElapsedS((s) => s + 1), 1000);
     return () => window.clearInterval(t);
-  }, [phase, probing]);
+  }, [phase]);
 
   useEffect(() => {
     return () => {
@@ -200,7 +208,6 @@ export default function ModelLabPage() {
   const pickDatasetVideo = async (v: MouthMapTestVideo): Promise<SelectedVideo | null> => {
     setError(null);
     setResult(null);
-    setDidProbe(false);
     setPhase('preparing');
     const seq = (pickSeqRef.current += 1);
     try {
@@ -329,12 +336,10 @@ export default function ModelLabPage() {
     if (timerRef.current) window.clearInterval(timerRef.current);
   };
 
-  const HEALTH_FRESH_MS = 60_000;
-
   const runInference = async (sel: SelectedVideo | null = selected) => {
     if (!sel?.blob) return;
     // Prevent duplicate jobs from double-clicks or overlapping triggers.
-    if (phase === 'uploading' || phase === 'processing' || phase === 'preparing' || probing) return;
+    if (running || phase === 'preparing') return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -342,47 +347,29 @@ export default function ModelLabPage() {
     setResult(null);
     setUploadPct(0);
     setUploadDone(false);
-    setDidProbe(false);
     setElapsedS(0);
 
-    // Pre-flight readiness: reuse the ConfigCard health state when probed
-    // <60s ago, else run ONE bounded probe. A 200 + available means the
-    // service answered HTTP — not that the model is warm — so copy stays
-    // honest ("Connecting…", never "sleeping", which we cannot detect).
-    const healthFresh = health === 'available' && Date.now() - healthAt < HEALTH_FRESH_MS;
-    if (!healthFresh) {
-      setProbing(true);
-      setDidProbe(true);
-      try {
-        const h = await mouthmapApi.getHealth();
-        setHealth(h.status);
-        setHealthAt(Date.now());
-        if (controller.signal.aborted) {
-          setProbing(false);
-          setPhase('idle');
-          toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
-          return;
-        }
-        if (h.status !== 'available') {
-          setProbing(false);
-          setPhase('failed');
-          setError('MouthMap inference service is currently unavailable. Please try again later.');
-          return;
-        }
-      } catch (e) {
-        setHealth('unavailable');
-        setHealthAt(Date.now());
-        setProbing(false);
-        if (controller.signal.aborted) {
-          setPhase('idle');
-          toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
-          return;
-        }
-        setPhase('failed');
-        setError(friendlyError(e));
+    // On-demand wake-up: ask the backend to bring the hosted HF Space up and
+    // confirm readiness BEFORE uploading the video. The backend holds this
+    // request while the Space boots (bounded by MOUTHMAP_WAKE_TIMEOUT_S), so
+    // an idle Space is never woken by page loads — only by starting a run.
+    setPhase('warming');
+    try {
+      await mouthmapApi.warm({ signal: controller.signal });
+    } catch (e) {
+      if (controller.signal.aborted) {
+        setPhase('idle');
+        toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
         return;
       }
-      setProbing(false);
+      setPhase('failed');
+      setError(friendlyError(e));
+      return;
+    }
+    if (controller.signal.aborted) {
+      setPhase('idle');
+      toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
+      return;
     }
 
     setPhase('uploading');
@@ -426,7 +413,7 @@ export default function ModelLabPage() {
   };
 
   const selectAndRun = async (v: MouthMapTestVideo) => {
-    if (phase === 'uploading' || phase === 'processing' || phase === 'preparing' || probing) return;
+    if (running || phase === 'preparing') return;
     const sel = await pickDatasetVideo(v);
     if (sel) {
       document
@@ -478,65 +465,65 @@ export default function ModelLabPage() {
   };
 
   const statusLabel =
-    phase === 'uploading' && !uploadDone
-      ? `Uploading video... ${uploadPct}%`
-      : phase === 'preparing'
-        ? 'Preparing video...'
-        : phase === 'processing' || (phase === 'uploading' && uploadDone)
-          ? 'Running MouthMap inference...'
-          : phase === 'completed'
-            ? 'Inference completed.'
-            : null;
+    phase === 'warming'
+      ? 'Waking up model...'
+      : phase === 'uploading' && !uploadDone
+        ? `Uploading video... ${uploadPct}%`
+        : phase === 'preparing'
+          ? 'Preparing video...'
+          : phase === 'processing' || (phase === 'uploading' && uploadDone)
+            ? 'Running MouthMap inference...'
+            : phase === 'completed'
+              ? 'Inference completed.'
+              : null;
 
-  const running = phase === 'uploading' || phase === 'processing';
-  const canRun = !!selected?.blob && !running && phase !== 'preparing' && !probing;
+  const running =
+    phase === 'warming' || phase === 'uploading' || phase === 'processing';
+  const canRun = !!selected?.blob && !running && phase !== 'preparing';
 
   // Honest live stages with exactly ONE active stage at a time:
+  // - Wake-up is its own stage, shown only while the backend confirms it is
+  //   bringing the hosted model up before the video is uploaded.
   // - Upload is done ONLY on an observed XHR loaded >= total event.
   // - Inference is pending until uploadDone, active after — never while
   //   merely waiting for bytes to finish sending.
   // - Backend-internal steps (model load, frame processing) stay merged:
   //   the API exposes no per-stage progress, and elapsed time never
   //   completes a stage.
-  // - The service row appears only when this run performed a live probe
-  //   (reused-fresh health skips it — no fake "checking" flash).
-  const loaderStages: LoaderStage[] = probing
-    ? [
-        { id: 'service', label: 'Checking service', status: 'active', detail: 'Connecting to processing service…' },
-        { id: 'prepare', label: 'Preparing video', status: 'pending' },
-        { id: 'upload', label: 'Uploading video', status: 'pending' },
-        { id: 'inference', label: 'Running inference', status: 'pending' },
-      ]
-    : phase === 'preparing'
+  const loaderStages: LoaderStage[] =
+    phase === 'warming'
       ? [
-          { id: 'prepare', label: 'Preparing video', status: 'active', detail: 'Downloading test video…' },
+          { id: 'wake', label: 'Waking up model', status: 'active', detail: 'Starting the inference service…' },
           { id: 'upload', label: 'Uploading video', status: 'pending' },
           { id: 'inference', label: 'Running inference', status: 'pending' },
         ]
-      : [
-          ...(didProbe
-            ? [{ id: 'service', label: 'Checking service', status: 'done' as const, detail: 'Service reachable' }]
-            : []),
-          { id: 'prepare', label: 'Preparing video', status: 'done', detail: 'Video validated' },
-          uploadDone
-            ? { id: 'upload', label: 'Uploading video', status: 'done', detail: 'Upload complete' }
-            : {
-                id: 'upload',
-                label: 'Uploading video',
-                status: 'active',
-                detail: uploadPct > 0 ? `${uploadPct}% uploaded` : 'Sending video…',
-              },
-          uploadDone
-            ? {
-                id: 'inference',
-                label: 'Running inference',
-                status: 'active',
-                detail: 'Model is processing on the backend…',
-              }
-            : { id: 'inference', label: 'Running inference', status: 'pending' },
-        ];
+      : phase === 'preparing'
+        ? [
+            { id: 'prepare', label: 'Preparing video', status: 'active', detail: 'Downloading test video…' },
+            { id: 'upload', label: 'Uploading video', status: 'pending' },
+            { id: 'inference', label: 'Running inference', status: 'pending' },
+          ]
+        : [
+            { id: 'prepare', label: 'Preparing video', status: 'done', detail: 'Video validated' },
+            uploadDone
+              ? { id: 'upload', label: 'Uploading video', status: 'done', detail: 'Upload complete' }
+              : {
+                  id: 'upload',
+                  label: 'Uploading video',
+                  status: 'active',
+                  detail: uploadPct > 0 ? `${uploadPct}% uploaded` : 'Sending video…',
+                },
+            uploadDone
+              ? {
+                  id: 'inference',
+                  label: 'Running inference',
+                  status: 'active',
+                  detail: 'Model is processing on the backend…',
+                }
+              : { id: 'inference', label: 'Running inference', status: 'pending' },
+          ];
 
-  const loaderOpen = running || phase === 'preparing' || probing;
+  const loaderOpen = running || phase === 'preparing';
 
   return (
     <div className="w-full min-w-0 max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-5 md:space-y-6 overflow-x-clip">
@@ -576,7 +563,7 @@ export default function ModelLabPage() {
                 onSelect={pickDatasetVideo}
                 onRun={selectAndRun}
                 onAddVideo={handleAddVideo}
-                busy={running || phase === 'preparing' || probing}
+                busy={running || phase === 'preparing'}
               />
             </div>
           </div>

@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import hmac
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 

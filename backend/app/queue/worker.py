@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, select, text, update
 
 from app.db.session import AsyncSessionLocal
 from app.queue.models import JobStatus, ReviewJob
+from app.services.platform_settings import platform_settings_service
 
 logger = logging.getLogger(__name__)
 
@@ -720,12 +721,18 @@ async def claim_next_job_with_factory(session_factory) -> tuple | None:
     (only one DB connection exists; serializing open→claim avoids checkout
     races). Production uses claim_next_job(session) from run_worker.
     """
-    async with _claim_slot:
-        async with session_factory() as session:
-            return await _claim_next_job_locked(session)
+    async with _claim_slot, session_factory() as session:
+        return await _claim_next_job_locked(session)
 
 
 async def _claim_next_job_locked(session) -> tuple | None:
+    # Maintenance gate (§12.3): stop claiming NEW jobs while enabled. Queued
+    # jobs persist untouched and resume on disable; in-flight runs are
+    # unaffected (the worker loop only consults this before claiming).
+    if await platform_settings_service.is_enabled(session):
+        await session.rollback()
+        return None
+
     if not await _acquire_global_claim_lock(session):
         return None
 

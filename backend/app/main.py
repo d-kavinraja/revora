@@ -14,6 +14,8 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.sync_run import SYNC_STATUS_QUEUED, SYNC_STATUS_RUNNING, SyncRun
 from app.queue.worker import run_worker
+from app.services.admin_audit import admin_audit
+from app.services.admin_auth import get_admin_by_username, provision_admin
 from app.services.recovery import recover_stale_reviews_on_startup
 from app.services.sync_engine import (
     SYNC_REASON_STARTUP,
@@ -27,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 async def _process_queued_sync_on_startup(run_id: uuid.UUID, repo_id: uuid.UUID, user_id: uuid.UUID | None) -> None:
     """Process a QUEUED sync run on startup (simplified version without full retry loop)."""
-    from app.api.v1.endpoints.repositories import _background_single_repo_sync_with_retry
+    from app.api.v1.endpoints.repositories import (
+        _background_single_repo_sync_with_retry,
+    )
 
     async with AsyncSessionLocal() as db:
         run = await db.execute(select(SyncRun).where(SyncRun.id == run_id))
@@ -38,6 +42,44 @@ async def _process_queued_sync_on_startup(run_id: uuid.UUID, repo_id: uuid.UUID,
         await record_sync_run(db, run.reason, SYNC_STATUS_RUNNING, run_id=run_id)
 
     await _background_single_repo_sync_with_retry(repo_id, run_id, user_id)
+
+
+async def _bootstrap_admin_from_env() -> None:
+    """Optional deploy-time admin provisioning (never overwrites).
+
+    Runs only when ADMIN_BOOTSTRAP_USERNAME is set. Creates the admin from
+    ADMIN_BOOTSTRAP_PASSWORD(_HASH) when no such username exists; existing
+    admins are never overwritten or rotated implicitly.
+    """
+    username = settings.ADMIN_BOOTSTRAP_USERNAME
+    if not username:
+        return
+    password = settings.ADMIN_BOOTSTRAP_PASSWORD
+    password_hash = settings.ADMIN_BOOTSTRAP_PASSWORD_HASH
+    if not password and not password_hash:
+        logger.warning(
+            "ADMIN_BOOTSTRAP_USERNAME is set but no password/hash is configured; skipping."
+        )
+        return
+
+    async with AsyncSessionLocal() as db:
+        existing = await get_admin_by_username(db, username)
+        if existing is not None:
+            return
+        admin = await provision_admin(
+            db,
+            username=username,
+            password=password,
+            password_hash=password_hash,
+        )
+        await admin_audit(
+            db,
+            action="admin.bootstrap",
+            entity_type="admin_user",
+            entity_id=str(admin.id),
+            details={"source": "env"},
+        )
+        logger.info("Bootstrap admin created from environment (username=%s)", admin.username)
 
 
 @asynccontextmanager
@@ -59,6 +101,12 @@ async def lifespan(app: FastAPI):
         await recover_stale_reviews_on_startup()
     except Exception:
         logger.exception("Startup recovery failed")
+
+    # Optional env-driven admin provisioning (no-op when unset).
+    try:
+        await _bootstrap_admin_from_env()
+    except Exception:
+        logger.exception("Admin bootstrap failed")
 
     # Recover orphaned QUEUED sync runs (from webhook initial syncs, login, etc.)
     # that were created before a restart but never picked up.
@@ -121,10 +169,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.core.deps_flags import FeatureDisabledError
 from app.middleware.correlation import CorrelationIdMiddleware
+from app.middleware.maintenance import MaintenanceMiddleware
 from app.middleware.rate_limit import SlowAPIMiddleware, limiter
 from app.middleware.size_limit import OriginCheckMiddleware, RequestSizeLimitMiddleware
 
@@ -143,6 +194,21 @@ def _netloc_or_raw(u: str) -> str:
 
 app.state.cors_origins = [_netloc_or_raw(o) for o in settings.CORS_ORIGINS]
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _feature_disabled_handler(request, exc: FeatureDisabledError) -> JSONResponse:
+    """Exact §11.1 payload: `503 {"code": "feature_disabled", "message": ...}`."""
+    return JSONResponse(
+        status_code=503,
+        content={"code": "feature_disabled", "message": exc.message},
+    )
+
+
+app.add_exception_handler(FeatureDisabledError, _feature_disabled_handler)
+# Maintenance gate: added FIRST so Starlette LIFO makes it the innermost
+# middleware — it executes after CORS/Correlation/SizeLimit/OriginCheck/
+# SlowAPI and immediately before route dispatch (§12.3 placement note).
+app.add_middleware(MaintenanceMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_upload_size=10 * 1024 * 1024)

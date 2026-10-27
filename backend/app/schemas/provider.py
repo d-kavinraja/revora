@@ -23,7 +23,48 @@ class ProviderRegistryRead(BaseModel):
     supports_function_calling: bool = False
     supports_reasoning: bool = False
     is_enabled: bool = True
+    # Admin control plane (phase 4) — additive fields; admin sees all rows,
+    # non-admins see the same rows with status badges/messages (§14).
+    status: str = "available"
+    status_message: str | None = None
+    status_expires_at: datetime | None = None
+    allow_key_addition: bool = True
     extra_config: dict[str, Any] = {}
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ProviderRegistryPublic(BaseModel):
+    """User-facing provider view.
+
+    Deliberately omits internal wiring that the control plane keeps private
+    (`base_url_template`, `extra_config` — see `AdminProviderRead`), so the
+    user-authenticated `GET /providers` endpoints cannot disclose operator
+    configuration to ordinary users.
+    """
+
+    id: uuid.UUID
+    name: str
+    display_name: str
+    slug: str
+    litellm_provider: str
+    api_key_prefix: str | None = None
+    api_key_min_length: int = 15
+    default_model: str
+    timeout_seconds: int = 300
+    max_retries: int = 3
+    priority: int = 0
+    supports_streaming: bool = True
+    supports_vision: bool = False
+    supports_function_calling: bool = False
+    supports_reasoning: bool = False
+    is_enabled: bool = True
+    status: str = "available"
+    status_message: str | None = None
+    status_expires_at: datetime | None = None
+    allow_key_addition: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -58,5 +99,5 @@ class DiscoveredModelRead(BaseModel):
     is_free: bool
     description: str | None = None
     last_synced_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)

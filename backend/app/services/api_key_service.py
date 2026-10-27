@@ -54,6 +54,16 @@ class ApiKeyService:
         await db.delete(db_obj)
         await db.commit()
 
+    async def set_enabled(
+        self, db: AsyncSession, db_obj: ApiKey, enabled: bool
+    ) -> ApiKey:
+        """Owner/admin credential switch (phase 4). Never touches key material."""
+        db_obj.is_enabled = enabled
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
+        return db_obj
+
     async def get_decrypted_key(
         self, db: AsyncSession, user_id: uuid.UUID, provider: str
     ) -> str | None:
@@ -63,6 +73,7 @@ class ApiKeyService:
             .where(ApiKey.user_id == user_id)
             .where(ApiKey.provider.ilike(provider))
             .where(ApiKey.is_valid == True)
+            .where(ApiKey.is_enabled == True)
             .order_by(ApiKey.last_used_at.desc().nulls_last())
         )
         key_obj = result.scalars().first()
@@ -79,6 +90,7 @@ class ApiKeyService:
             .where(ApiKey.user_id == user_id)
             .where(ApiKey.provider.ilike(provider))
             .where(ApiKey.is_valid == True)
+            .where(ApiKey.is_enabled == True)
             .order_by(ApiKey.last_used_at.desc().nulls_last())
         )
         keys = result.scalars().all()
@@ -98,6 +110,7 @@ class ApiKeyService:
             .where(ApiKey.user_id == user_id)
             .where(ApiKey.provider.ilike(provider))
             .where(ApiKey.is_valid == True)
+            .where(ApiKey.is_enabled == True)
             .order_by(ApiKey.last_used_at.desc().nulls_last())
         )
         return result.scalars().first()
@@ -109,6 +122,7 @@ class ApiKeyService:
             select(ApiKey)
             .where(ApiKey.user_id == user_id)
             .where(ApiKey.is_valid == True)
+            .where(ApiKey.is_enabled == True)
         )
         keys = result.scalars().all()
         provider_keys = {}

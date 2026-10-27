@@ -73,7 +73,7 @@ class LLMService:
             api_base = "https://ollama.com/v1"
 
         try:
-            # Removed asyncio.wait_for to ensure the system waits as long as needed 
+            # Removed asyncio.wait_for to ensure the system waits as long as needed
             # for the AI to complete its response without failing due to artificial limits.
             response = await acompletion(
                 model=model_to_use,
@@ -193,7 +193,12 @@ class LLMService:
                         return None
 
                     db_key = await api_key_service.get_by_id(db, key_uuid)
-                    if db_key and db_key.user_id == user_id and db_key.is_valid:
+                    if (
+                        db_key
+                        and db_key.user_id == user_id
+                        and db_key.is_valid
+                        and db_key.is_enabled
+                    ):
                         decrypted = encryption_service.decrypt(db_key.encrypted_key)
                         logger.info(
                             f"Resolved API key by id: {db_key.label} "
@@ -279,13 +284,11 @@ class LLMService:
         elif provider == "openrouter" and not model.startswith("openrouter/"):
             model = f"openrouter/{model}"
         elif provider == "ollama_cloud":
-            if model.startswith("ollama/"):
-                model = model[len("ollama/"):]
+            model = model.removeprefix("ollama/")
             if not model.startswith("openai/"):
                 model = f"openai/{model}"
         elif provider == "cohere":
-            if model.startswith("cohere/"):
-                model = model[len("cohere/"):]
+            model = model.removeprefix("cohere/")
             if not model.startswith("cohere_chat/"):
                 model = f"cohere_chat/{model}"
 

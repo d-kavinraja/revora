@@ -68,7 +68,7 @@ apiClient.interceptors.request.use((config) => {
  */
 export type RestoreOutcome =
   | { ok: true }
-  | { ok: false; reason: 'unauthorized' | 'unreachable' };
+  | { ok: false; reason: 'unauthorized' | 'unreachable' | 'disabled' };
 
 // One bounded restore attempt with a cold-start-tolerant timeout (Render
 // Free Tier regularly needs 30-60s to wake). Retry UX belongs to the
@@ -97,7 +97,17 @@ export async function restoreSession(): Promise<RestoreOutcome> {
     return { ok: true };
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-    const reason = status === 401 || status === 403 ? 'unauthorized' : 'unreachable';
+    const data = axios.isAxiosError(error) ? error.response?.data : undefined;
+    const detail = String(data?.detail ?? '');
+    const code = String(data?.code ?? '');
+    let reason: 'unauthorized' | 'unreachable' | 'disabled';
+    if (code === 'account_disabled' || detail.toLowerCase().includes('disabled') || status === 403) {
+      reason = 'disabled';
+    } else if (status === 401) {
+      reason = 'unauthorized';
+    } else {
+      reason = 'unreachable';
+    }
     useAuthStore.setState({ restoreReason: reason });
     return { ok: false, reason };
   } finally {
@@ -130,21 +140,33 @@ function isProtectedPath(pathname: string): boolean {
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const data = error.response?.data;
+    const detail = String(data?.detail ?? '');
+    const code = String(data?.code ?? '');
+    const isDisabled403 =
+      status === 403 &&
+      (code === 'account_disabled' || detail.toLowerCase().includes('disabled'));
+    if (status === 401 || isDisabled403) {
       const url =
         typeof error.config?.url === 'string' ? error.config.url : '';
       const isRestore = !!error.config?.__revoraRestore;
       // Public endpoint: no session expected, nothing to clear.
       const isPublic = url.includes('/auth/config');
+      // Admin console endpoints use their own isolated session/cookie and
+      // self-guard at /admin/login. A 401 there (e.g. no admin cookie) must
+      // never clear or redirect the *user* session.
+      const isAdminEndpoint = url.includes('/admin/');
       const state = useAuthStore.getState();
       const onProtected =
         typeof window !== 'undefined' &&
         isProtectedPath(window.location.pathname);
+      const loginTarget = isDisabled403 ? '/login?reason=disabled' : '/login';
       // Restore failures belong to the dashboard guard; public endpoints
       // and already-signed-out states need no logout round-trip. Logout
       // itself is single-flighted in the store, so concurrent 401s share
       // one clearing pass instead of stampeding.
-      if (!isRestore && !isPublic && state.isAuthenticated) {
+      if (!isRestore && !isPublic && !isAdminEndpoint && state.isAuthenticated) {
         // Await the cookie-clearing logout BEFORE any hard navigation, so the
         // edge gate cannot bounce us straight back to the dashboard.
         void (async () => {
@@ -154,7 +176,7 @@ apiClient.interceptors.response.use(
             typeof window !== 'undefined' &&
             window.location.pathname !== '/login'
           ) {
-            window.location.assign('/login');
+            window.location.assign(loginTarget);
           }
         })();
       } else if (
@@ -163,7 +185,7 @@ apiClient.interceptors.response.use(
         typeof window !== 'undefined' &&
         window.location.pathname !== '/login'
       ) {
-        window.location.assign('/login');
+        window.location.assign(loginTarget);
       }
     }
     return Promise.reject(error);
@@ -288,6 +310,7 @@ export interface ApiKey {
   label: string;
   masked_key: string;
   is_valid: boolean;
+  is_enabled: boolean;
   last_used_at: string | null;
   created_at: string;
 }
@@ -340,7 +363,6 @@ export interface Provider {
   litellm_provider: string;
   api_key_prefix: string | null;
   api_key_min_length: number;
-  base_url_template: string | null;
   default_model: string;
   timeout_seconds: number;
   max_retries: number;
@@ -350,10 +372,12 @@ export interface Provider {
   supports_function_calling: boolean;
   supports_reasoning: boolean;
   is_enabled: boolean;
-  extra_config: Record<string, unknown>;
+  status: string;
+  status_message: string | null;
+  status_expires_at: string | null;
+  allow_key_addition: boolean;
   created_at: string | null;
   updated_at: string | null;
-  status?: 'active' | 'archived' | 'deleted' | null;
 }
 
 export interface DiscoveredModel {
@@ -673,8 +697,7 @@ export const api = {
     ).then((r) => r.data),
 
   // Analytics
-  getRequestLogs: (limit = 50, offset = 0, filters?: UsageFilters) => {
-    let query = `/platform-analytics/requests?limit=${limit}&offset=${offset}`;
+  getRequestLogs: (limit = 50, offset = 0, filters?: UsageFilters) => {    let query = `/platform-analytics/requests?limit=${limit}&offset=${offset}`;
     if (filters) {
         query += buildFilterQuery(filters);
     }
@@ -708,6 +731,604 @@ export const api = {
     }
     return apiClient.get<Array<{ provider: string; request_count: number; success_rate: number; avg_latency_ms: number; total_cost_usd: number; total_tokens: number }>>(query).then((r) => r.data);
   },
+
+  // Platform status (public, unauthenticated): maintenance state, feature
+  // flags and blocked-provider explanations.
+  getPlatformStatus: () =>
+    apiClient.get<PublicPlatformStatus>('/platform/status').then((r) => r.data),
+
+  // Feature flags (public): status + admin message per key — powers the
+  // dashboard gating wrappers and sidebar hiding (§11.1).
+  getPlatformFeatures: () =>
+    apiClient.get<PlatformFeatures>('/platform/features').then((r) => r.data),
+
+  // Phase 7 — public announcement feed (published + active only).
+  getAnnouncements: () =>
+    apiClient.get<PublicAnnouncementRead[]>('/platform/announcements').then((r) => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Admin console API (isolated server-side session: revora_admin_session cookie)
+// ---------------------------------------------------------------------------
+export interface AdminSessionInfo {
+  username: string;
+  expires_at: string;
+}
+
+export interface ScalarMetric {
+  available: boolean;
+  value: number | string | null;
+  reason: string | null;
+}
+
+export interface NumericMetric {
+  available: boolean;
+  value: number | null;
+  reason: string | null;
+  sample_size: number | null;
+}
+
+export interface AdminPeriodRead {
+  key: string;
+  start: string;
+  end: string;
+}
+
+export interface AdminCredentialBreakdown {
+  provider: string;
+  total: number;
+  valid: number;
+  invalid: number;
+  enabled: number;
+  disabled: number;
+}
+
+export interface AdminProviderModelCount {
+  provider: string | null;
+  model: string | null;
+  count: number;
+}
+
+export interface AdminFailureCategory {
+  category: string;
+  count: number;
+}
+
+export interface AdminProviderHealthRead {
+  provider: string;
+  status: string;
+  success_rate: number | null;
+  circuit_state: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  snapshot_at: string | null;
+}
+
+export interface AdminMaintenanceState {
+  enabled: boolean;
+  title: string | null;
+  message: string | null;
+  expected_return_at: string | null;
+}
+
+export interface AdminMaintenanceFull extends AdminMaintenanceState {
+  reason: string | null;
+  changed_by: string | null;
+  changed_at: string | null;
+  version: number;
+}
+
+export interface AdminMaintenanceUpdate {
+  enabled?: boolean;
+  title?: string | null;
+  message?: string | null;
+  expected_return_at?: string | null;
+  reason?: string | null;
+  version?: number;
+}
+
+export interface PublicMaintenanceState {
+  enabled: boolean;
+  title: string | null;
+  message: string | null;
+  expected_return_at: string | null;
+}
+
+export interface DisabledProviderRead {
+  slug: string;
+  message: string | null;
+  expires_at: string | null;
+}
+
+export interface PublicPlatformStatus {
+  maintenance: PublicMaintenanceState;
+  features: Record<string, string>;
+  disabled_providers: DisabledProviderRead[];
+}
+
+export interface PublicAnnouncementRead {
+  id: string;
+  title: string;
+  message: string;
+  kind: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  link_url: string | null;
+  link_label: string | null;
+  is_dismissible: boolean;
+}
+
+export interface AdminAnnouncementRead {
+  id: string;
+  title: string;
+  message: string;
+  kind: string;
+  state: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  link_url: string | null;
+  link_label: string | null;
+  is_enabled: boolean;
+  is_dismissible: boolean;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AdminAnnouncementCreate {
+  title: string;
+  message: string;
+  kind?: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  link_url?: string | null;
+  link_label?: string | null;
+  is_enabled?: boolean | null;
+  is_dismissible?: boolean | null;
+}
+
+export interface AdminAnnouncementUpdate {
+  title?: string | null;
+  message?: string | null;
+  kind?: string | null;
+  state?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  link_url?: string | null;
+  link_label?: string | null;
+  is_enabled?: boolean | null;
+  is_dismissible?: boolean | null;
+}
+
+export interface AdminAuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_type: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  outcome: string | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface AdminAuditListResponse {
+  items: AdminAuditLogItem[];
+  total: number;
+}
+
+export const ANNOUNCEMENT_KINDS = [
+  'scheduled_maintenance',
+  'upgrade',
+  'service_interruption',
+  'new_feature',
+  'provider_update',
+  'general',
+] as const;
+
+export interface PublicFeatureState {
+  status: string;
+  message: string | null;
+}
+
+export type PlatformFeatures = Record<string, PublicFeatureState>;
+
+export interface AdminFeatureFlag {
+  key: string;
+  status: string;
+  message: string | null;
+}
+
+export interface AdminModelOverride {
+  provider_slug: string;
+  model_id: string;
+  status: string;
+  message: string | null;
+}
+
+export interface AdminModelOverrideUpdate {
+  provider_slug: string;
+  model_id: string;
+  status: string;
+  message?: string | null;
+}
+
+export interface AdminOverview {
+  period: AdminPeriodRead;
+  users_total: number;
+  users_new_in_period: number;
+  signed_in_users: ScalarMetric;
+  last_login_at: ScalarMetric;
+  active_users: Record<string, ScalarMetric>;
+  credentials_total: number;
+  credentials_by_provider: AdminCredentialBreakdown[];
+  repos_connected: number;
+  reviews_total: number;
+  reviews_in_period: number;
+  reviews_by_status: Record<string, number>;
+  reviews_by_provider_model: AdminProviderModelCount[];
+  retries_in_period: number;
+  duration_p50_ms: NumericMetric;
+  duration_p95_ms: NumericMetric;
+  failure_rate: NumericMetric;
+  failure_categories: AdminFailureCategory[];
+  provider_health: AdminProviderHealthRead[];
+  maintenance: AdminMaintenanceState;
+  features: Record<string, string>;
+  token_usage: ScalarMetric;
+  cost_totals: ScalarMetric;
+}
+
+export type AdminUserStatusFilter = 'active' | 'disabled';
+
+export interface AdminUserListItem {
+  id: string;
+  name: string;
+  email: string;
+  github_username: string | null;
+  created_at: string;
+  last_login_at: string | null;
+  status: string;
+  repo_count: number;
+  credential_count: number;
+  review_count: number;
+}
+
+export interface AdminUserList {
+  items: AdminUserListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminUserRepository {
+  id: string;
+  full_name: string;
+  is_private: boolean;
+  is_archived: boolean;
+  removed_at: string | null;
+  last_synced_at: string | null;
+  mapping_provider: string | null;
+  mapping_model: string | null;
+  mapping_health: string;
+}
+
+export interface AdminUserCredential {
+  id: string;
+  label: string;
+  provider: string;
+  is_valid: boolean;
+  is_enabled: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  last_health_status: string | null;
+  last_health_at: string | null;
+}
+
+export interface AdminUserReview {
+  id: string;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  repository_full_name: string;
+  pr_number: number;
+  pr_title: string;
+  latest_provider: string | null;
+  latest_model: string | null;
+  latest_status: string | null;
+  latest_duration_ms: number | null;
+  latest_error: string | null;
+}
+
+export interface AdminUserError {
+  provider: string | null;
+  message: string;
+  occurred_at: string | null;
+}
+
+export interface AdminAuditEvent {
+  id: string;
+  action: string;
+  actor_id: string | null;
+  actor_type: string;
+  outcome: string | null;
+  created_at: string;
+}
+
+export interface AdminUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  github_username: string | null;
+  avatar_url: string | null;
+  role: string;
+  status: string;
+  is_verified: boolean;
+  default_provider: string | null;
+  created_at: string;
+  disabled_at: string | null;
+  last_login_at: string | null;
+  last_active_at: string | null;
+}
+
+export interface AdminUserDetail {
+  profile: AdminUserProfile;
+  repositories: AdminUserRepository[];
+  credentials: AdminUserCredential[];
+  reviews: {
+    items: AdminUserReview[];
+    total: number;
+    status_counts: Record<string, number>;
+  };
+  recent_errors: AdminUserError[];
+  audit_events: AdminAuditEvent[];
+}
+
+export interface AdminUserStatus {
+  id: string;
+  status: string;
+  disabled_at: string | null;
+}
+
+export interface AdminRepositoryItem {
+  id: string;
+  full_name: string;
+  is_private: boolean;
+  is_archived: boolean;
+  removed_at: string | null;
+  created_at: string;
+  last_synced_at: string | null;
+  owner_id: string;
+  owner_email: string;
+  owner_github_username: string | null;
+  installation_account_login: string | null;
+  installation_suspended_at: string | null;
+  installation_permissions_ok: boolean | null;
+  mapping_provider: string | null;
+  mapping_model: string | null;
+  mapping_health: string;
+  review_count: number;
+  last_review_at: string | null;
+  recent_failures_7d: number;
+}
+
+export interface AdminRepositoryList {
+  items: AdminRepositoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminReviewItem {
+  id: string;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  repository_id: string;
+  repository_full_name: string;
+  pr_number: number;
+  pr_title: string;
+  owner_email: string;
+  configured_provider: string | null;
+  configured_model: string | null;
+  provider: string | null;
+  model: string | null;
+  execution_status: string | null;
+  duration_ms: number | null;
+  error: string | null;
+}
+
+export interface AdminReviewList {
+  items: AdminReviewItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// Phase 4 — provider / credential controls
+export interface AdminProviderRead {
+  id: string;
+  name: string;
+  display_name: string;
+  slug: string;
+  default_model: string;
+  priority: number;
+  is_enabled: boolean;
+  status: string;
+  status_message: string | null;
+  status_expires_at: string | null;
+  allow_key_addition: boolean;
+  supports_streaming: boolean;
+  supports_vision: boolean;
+  supports_function_calling: boolean;
+  supports_reasoning: boolean;
+  keys_total: number;
+  keys_enabled: number;
+  keys_valid: number;
+  mapped_repositories: number;
+  models_count?: number;
+  last_health_status: string | null;
+  last_health_at: string | null;
+}
+
+export interface AdminProviderList {
+  items: AdminProviderRead[];
+}
+
+export interface AdminProviderUpdate {
+  status?: string;
+  status_message?: string | null;
+  status_expires_at?: string | null;
+  is_enabled?: boolean;
+  allow_key_addition?: boolean;
+}
+
+export interface AdminKeyRead {
+  id: string;
+  user_id: string;
+  user_email: string;
+  provider: string;
+  label: string;
+  is_valid: boolean;
+  is_enabled: boolean;
+  last_used_at: string | null;
+  created_at: string | null;
+}
+
+export interface AdminKeyList {
+  items: AdminKeyRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminKeyListParams {
+  user_id?: string;
+  provider?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminUserListParams {
+  q?: string;
+  status?: AdminUserStatusFilter;
+  sort?: 'created' | 'last_login' | 'reviews';
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminRepositoryListParams {
+  user?: string;
+  provider?: string;
+  mapping?: 'ok' | 'stale' | 'missing';
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminReviewListParams {
+  user?: string;
+  repo?: string;
+  provider?: string;
+  model?: string;
+  status?: string;
+  error?: string;
+  period?: '24h' | '7d' | '30d';
+  start?: string;
+  end?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const adminApi = {
+  login: (data: { username: string; password: string }) =>
+    apiClient.post<AdminSessionInfo>('/admin/auth/login', data).then((r) => r.data),
+  session: () =>
+    apiClient.get<AdminSessionInfo>('/admin/auth/session').then((r) => r.data),
+  logout: () =>
+    apiClient.post<{ status: string }>('/admin/auth/logout').then((r) => r.data),
+
+  // Phase 2 — read-only analytics
+  overview: (params?: { period?: string; start?: string; end?: string }) =>
+    apiClient.get<AdminOverview>('/admin/overview', { params }).then((r) => r.data),
+  users: (params?: AdminUserListParams) =>
+    apiClient.get<AdminUserList>('/admin/users', { params }).then((r) => r.data),
+  user: (id: string, params?: { reviews_limit?: number; reviews_offset?: number }) =>
+    apiClient.get<AdminUserDetail>(`/admin/users/${id}`, { params }).then((r) => r.data),
+  disableUser: (id: string, data: { reason: string }) =>
+    apiClient.post<AdminUserStatus>(`/admin/users/${id}/disable`, data).then((r) => r.data),
+  enableUser: (id: string) =>
+    apiClient.post<AdminUserStatus>(`/admin/users/${id}/enable`).then((r) => r.data),
+  revokeUserSessions: (id: string) =>
+    apiClient
+      .post<{ revoked: boolean }>(`/admin/users/${id}/revoke-sessions`)
+      .then((r) => r.data),
+  repositories: (params?: AdminRepositoryListParams) =>
+    apiClient.get<AdminRepositoryList>('/admin/repositories', { params }).then((r) => r.data),
+  reviews: (params?: AdminReviewListParams) =>
+    apiClient.get<AdminReviewList>('/admin/reviews', { params }).then((r) => r.data),
+
+  // Phase 4 — provider / credential controls
+  providers: () =>
+    apiClient.get<AdminProviderList>('/admin/providers').then((r) => r.data),
+  updateProvider: (slug: string, data: AdminProviderUpdate) =>
+    apiClient.put<AdminProviderRead>(`/admin/providers/${slug}`, data).then((r) => r.data),
+  keys: (params?: AdminKeyListParams) =>
+    apiClient.get<AdminKeyList>('/admin/keys', { params }).then((r) => r.data),
+  disableKey: (id: string) =>
+    apiClient.post<AdminKeyRead>(`/admin/keys/${id}/disable`).then((r) => r.data),
+  enableKey: (id: string) =>
+    apiClient.post<AdminKeyRead>(`/admin/keys/${id}/enable`).then((r) => r.data),
+
+  // Phase 5 — maintenance mode
+  maintenance: () =>
+    apiClient.get<AdminMaintenanceFull>('/admin/maintenance').then((r) => r.data),
+  updateMaintenance: (data: AdminMaintenanceUpdate) =>
+    apiClient
+      .put<AdminMaintenanceFull>('/admin/maintenance', data)
+      .then((r) => r.data),
+
+  // Phase 6 — feature flags / model overrides
+  features: () =>
+    apiClient.get<AdminFeatureFlag[]>('/admin/features').then((r) => r.data),
+  updateFeature: (key: string, data: { status: string; message?: string | null }) =>
+    apiClient
+      .put<AdminFeatureFlag>(`/admin/features/${key}`, data)
+      .then((r) => r.data),
+  modelOverrides: () =>
+    apiClient.get<AdminModelOverride[]>('/admin/models/overrides').then((r) => r.data),
+  updateModelOverride: (data: AdminModelOverrideUpdate) =>
+    apiClient
+      .put<AdminModelOverride>('/admin/models/overrides', data)
+      .then((r) => r.data),
+
+  // Phase 7 — announcements
+  announcements: () =>
+    apiClient.get<AdminAnnouncementRead[]>('/admin/announcements').then((r) => r.data),
+  createAnnouncement: (data: AdminAnnouncementCreate) =>
+    apiClient.post<AdminAnnouncementRead>('/admin/announcements', data).then((r) => r.data),
+  updateAnnouncement: (id: string, data: AdminAnnouncementUpdate) =>
+    apiClient.put<AdminAnnouncementRead>(`/admin/announcements/${id}`, data).then((r) => r.data),
+  deleteAnnouncement: (id: string) =>
+    apiClient.delete<void>(`/admin/announcements/${id}`).then((r) => r.data),
+
+  // Phase 7 — audit log viewer
+  audit: (params?: {
+    action?: string;
+    actor?: string;
+    entity_type?: string;
+    period?: string;
+    start?: string;
+    end?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    apiClient
+      .get<AdminAuditListResponse>('/admin/audit', { params })
+      .then((r) => r.data),
 };
 
 export interface MouthMapConfig {
@@ -765,6 +1386,13 @@ export const mouthmapApi = {
   getConfig: () => apiClient.get<MouthMapConfig>('/mouthmap/config').then((r) => r.data),
   getHealth: () =>
     apiClient.get<{ status: string; endpoint: string; detail: string | null }>('/mouthmap/health').then((r) => r.data),
+  // Wake the hosted HF Space and confirm readiness. Called on demand when a
+  // run starts (never on page load). The backend holds the request while the
+  // Space boots, bounded by MOUTHMAP_WAKE_TIMEOUT_S; a warm Space returns fast.
+  warm: (opts?: { signal?: AbortSignal }) =>
+    apiClient
+      .post<{ status: string }>('/mouthmap/warm', null, { timeout: 200000, signal: opts?.signal })
+      .then((r) => r.data),
   getDataset: () => apiClient.get<MouthMapTestVideo[]>('/mouthmap/dataset').then((r) => r.data),
   streamUrl: (id: string) => `${API_BASE}/mouthmap/dataset/${encodeURIComponent(id)}/stream`,
   runInference: (file: Blob, filename: string, opts?: { test_video_id?: string; source?: string; signal?: AbortSignal }, onUploadProgress?: (pct: number, uploadComplete: boolean) => void) => {

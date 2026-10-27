@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.deps_flags import FeatureDisabledError, feature_message
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.usage import (
@@ -16,12 +17,17 @@ from app.schemas.usage import (
     UsageSummary,
 )
 from app.services.cost_estimator import cost_estimator
+from app.services.platform_settings import platform_settings_service
 from app.services.token_manager import token_manager
 
 router = APIRouter()
 
 
-async def require_usage_enabled():
+async def require_usage_enabled(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Env remains master (§11.1): its contract/message is unchanged.
     if not settings.USAGE_ANALYTICS_ENABLED:
         raise HTTPException(
             status_code=503,
@@ -30,6 +36,14 @@ async def require_usage_enabled():
                 "message": "Usage analytics are temporarily disabled while we redesign model-level pricing. "
                 "No data has been lost; this feature will be re-enabled in a future release.",
             },
+        )
+    if getattr(current_user, "role", "user") == "admin":
+        return
+    flag = await platform_settings_service.get_flag("usage", db)
+    status = flag.get("status") or "enabled"
+    if status != "enabled":
+        raise FeatureDisabledError(
+            "usage", feature_message("usage", status, flag.get("message"))
         )
 
 

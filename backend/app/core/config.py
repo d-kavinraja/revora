@@ -90,6 +90,20 @@ class Settings(BaseSettings):
         default=1440, description="JWT token expiry in minutes"  # 1 day
     )
 
+    # Admin console bootstrap (optional; values never committed).
+    # If ADMIN_BOOTSTRAP_USERNAME is set and no admin with that username
+    # exists, startup creates it from one of the password fields. An
+    # existing admin is never overwritten or rotated implicitly.
+    ADMIN_BOOTSTRAP_USERNAME: str | None = Field(
+        default=None, description="Optional admin username provisioned at startup"
+    )
+    ADMIN_BOOTSTRAP_PASSWORD: str | None = Field(
+        default=None, description="Bootstrap admin password (env only, never committed)"
+    )
+    ADMIN_BOOTSTRAP_PASSWORD_HASH: str | None = Field(
+        default=None, description="Bcrypt hash alternative to ADMIN_BOOTSTRAP_PASSWORD"
+    )
+
     # Real-time / background sync
     PR_STATE_SYNC_INTERVAL_MINUTES: int = Field(
         default=3,
@@ -145,6 +159,18 @@ class Settings(BaseSettings):
     )
     MOUTHMAP_STREAM_CHUNK_BYTES: int = Field(
         default=1024 * 1024, description="Chunk size for streaming MouthMap uploads"
+    )
+    MOUTHMAP_WAKE_TIMEOUT_S: int = Field(
+        default=180,
+        description="Max seconds to wait for a sleeping MouthMap Space to become ready",
+    )
+    MOUTHMAP_WAKE_POLL_INTERVAL_S: float = Field(
+        default=4.0,
+        description="Seconds between readiness probes while waking the MouthMap Space",
+    )
+    MOUTHMAP_READY_TTL_S: int = Field(
+        default=600,
+        description="Seconds a confirmed-ready MouthMap Space is trusted before re-probing",
     )
     GIT_CLONE_TIMEOUT_S: int = Field(
         default=120, description="Hard timeout for a single git clone operation"

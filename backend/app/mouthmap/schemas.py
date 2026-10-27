@@ -22,6 +22,10 @@ class MouthMapHealth(BaseModel):
     detail: str | None = None
 
 
+class MouthMapWarm(BaseModel):
+    status: Literal["ready"] = "ready"
+
+
 class TestVideo(BaseModel):
     id: str
     filename: str

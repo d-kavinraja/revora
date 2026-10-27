@@ -11,6 +11,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.github.auth import github_app_auth
 from app.models.github import Installation, PullRequest, Repository
@@ -26,6 +27,7 @@ from app.models.sync_run import (
 )
 from app.models.user import User
 from app.services.api_key_service import api_key_service
+from app.services.provider_registry import provider_registry_service
 from app.services.repository_service import repository_service
 from app.services.sync_engine import record_sync_run
 
@@ -786,10 +788,20 @@ async def get_available_models(
     logger = _logging.getLogger(__name__)
 
     api_keys_list = await api_key_service.get_all_for_user(db, current_user.id)
-    # Build a dict of provider -> decrypted api key (valid keys only)
+    # Build a dict of provider -> decrypted api key (usable keys only).
+    # Provider-status filter (C1): blocked providers never contribute models.
+    from app.services.provider_registry import provider_registry_service
+
+    usable_providers = {
+        p.name.lower()
+        for p in await provider_registry_service.get_usable(db)
+    }
+
     provider_keys: dict[str, str] = {}
     for key_obj in api_keys_list:
-        if key_obj.is_valid:
+        if key_obj.is_valid and key_obj.is_enabled:
+            if key_obj.provider.lower() not in usable_providers:
+                continue
             try:
                 provider_keys[key_obj.provider.lower()] = encryption_service.decrypt(
                     key_obj.encrypted_key
@@ -855,6 +867,7 @@ async def update_repository_config(
     config: RepoConfigUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("routing_mapping")),
 ):
     """Update repository model configuration and review settings."""
     try:
@@ -897,6 +910,21 @@ async def update_repository_config(
                 detail=f"Model configuration is locked while a Pull Request review is currently {active_status}. Please wait until the review completes.",
             )
 
+    # Phase 4: blocked providers cannot be mapped (additive — zero-state
+    # flows unchanged); checked before model discovery so no provider API
+    # call is made for a disabled provider.
+    if config.assigned_provider is not None:
+        usable, provider_row = await provider_registry_service.usability(
+            db, config.assigned_provider
+        )
+        if not usable:
+            detail = (
+                provider_row.status_message
+                if provider_row is not None and provider_row.status_message
+                else f"Provider '{config.assigned_provider}' is not available for new mappings."
+            )
+            raise HTTPException(status_code=400, detail=detail)
+
     # Validate model if assigned_model and assigned_key_id are provided
     if config.assigned_provider and config.assigned_model and config.assigned_key_id:
         from app.ai.discovery.engine import discovery_engine
@@ -905,7 +933,12 @@ async def update_repository_config(
 
         # Get the API key to validate access
         db_key = await api_key_service.get_by_id(db, uuid.UUID(config.assigned_key_id))
-        if not db_key or not db_key.is_valid:
+        if (
+            db_key is None
+            or str(db_key.user_id) != str(current_user.id)
+            or not db_key.is_valid
+            or not db_key.is_enabled
+        ):
             raise HTTPException(status_code=400, detail="Invalid API key selected.")
 
         try:

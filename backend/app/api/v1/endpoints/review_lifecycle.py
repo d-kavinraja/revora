@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.reviews import _ensure_review_ownership
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.models.review import Review
 from app.models.user import User
@@ -56,6 +57,7 @@ async def rerun_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     request: Request = None,
+    _: None = Depends(require_feature("review_initiation")),
 ):
     try:
         rid = uuid.UUID(review_id)
@@ -85,6 +87,7 @@ async def retry_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     request: Request = None,
+    _: None = Depends(require_feature("review_initiation")),
 ):
     try:
         rid = uuid.UUID(review_id)
@@ -114,6 +117,7 @@ async def restart_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     request: Request = None,
+    _: None = Depends(require_feature("review_initiation")),
 ):
     try:
         rid = uuid.UUID(review_id)

@@ -2,6 +2,7 @@
 
 import { Repeat, ArrowUpDown, Play, Ban } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 import type { Review, ReviewStatus } from '@/lib/api';
 
 interface ReviewActionsProps {
@@ -64,7 +65,15 @@ function prBlockedTooltip(github_pr_state: string): string | null {
 const activeReviewTooltip = 'Another review for this pull request is already in progress.';
 
 export function ReviewActions({ review, onAction, isActioning = false, actioningAction = null, variant = 'full' }: ReviewActionsProps) {
-  const actions = getApplicableActions(review.status);
+  // When `review_initiation` is disabled the server refuses rerun/retry/
+  // restart (§11.2). Hide those actions so users never hit the 503; cancel
+  // of an in-flight review stays available.
+  const { data: features } = usePlatformFeatures();
+  const initiation = featureState(features, 'review_initiation');
+  const initiationEnabled = initiation.status === 'enabled';
+  const actions = getApplicableActions(review.status).filter(
+    (action) => initiationEnabled || action.action === 'cancel'
+  );
   const prBlocked = review.github_pr_state !== 'open' && review.github_pr_state !== 'unknown';
   const prBlockedByActive = review.pr_has_active_review === true;
   const tooltip = prBlocked ? prBlockedTooltip(review.github_pr_state) : prBlockedByActive ? activeReviewTooltip : null;
@@ -112,6 +121,11 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lifecycle Actions</span>
         {tooltip && (
           <span className="text-[10px] text-error/80 font-medium ml-auto">{tooltip}</span>
+        )}
+        {!tooltip && !initiationEnabled && (
+          <span className="text-[10px] text-muted-foreground font-medium ml-auto" title={initiation.message ?? undefined}>
+            New reviews are paused
+          </span>
         )}
       </div>
       <div className="flex flex-wrap gap-2">

@@ -1,6 +1,10 @@
 import type { NextRequest } from 'next/server';
 
 import { backendApiBase } from '@/lib/backend-origin';
+import {
+  isBackendInMaintenance,
+  maintenanceUnavailableResponse,
+} from '@/lib/backend-maintenance';
 import { relaySetCookies } from '@/lib/bff-cookies';
 
 /**
@@ -12,6 +16,11 @@ import { relaySetCookies } from '@/lib/bff-cookies';
  * browser started the flow instead of silently skipping verification.
  */
 export async function GET(request: NextRequest) {
+  // Maintenance short-circuit (§12.3): same 503 payload, no cookie relay.
+  if (await isBackendInMaintenance()) {
+    return maintenanceUnavailableResponse();
+  }
+
   // Normalized to .../api/v1 regardless of BACKEND_ORIGIN shape (bare
   // origin vs suffixed URL) — a bare origin here previously produced
   // upstream /auth/... paths that FastAPI answers with 404.

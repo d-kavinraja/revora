@@ -1,8 +1,16 @@
-from datetime import timedelta
+import secrets
+from datetime import UTC, datetime, timedelta
 
 import httpx
-import secrets
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -85,16 +93,32 @@ class GitHubLoginRequest(BaseModel):
     state: str | None = None
 
 
-def _github_error(response: Response, status_code: int, detail: str) -> JSONResponse:
+def _github_error(
+    response: Response,
+    status_code: int,
+    detail: str,
+    *,
+    code: str | None = None,
+    github_username: str | None = None,
+) -> JSONResponse:
     """Error response that preserves cookies staged on the injected response.
 
     Raising HTTPException discards Set-Cookie headers staged earlier (e.g. the
     single-use oauth_state burn in _verify_oauth_state), leaving stale cookies
-    in the browser. Returning keeps them.
+    in the browser. Returning keeps them. ``code``/``github_username`` are
+    optional, non-secret identifiers for frontend UX (never email/name).
     """
-    error_resp = JSONResponse(status_code=status_code, content={"detail": detail})
-    for staged in response.headers.getlist("set-cookie"):
-        error_resp.headers.append("set-cookie", staged)
+    content: dict = {"detail": detail}
+    if code:
+        content["code"] = code
+    if github_username:
+        content["github_username"] = github_username
+    error_resp = JSONResponse(status_code=status_code, content=content)
+    try:
+        for staged in response.headers.getlist("set-cookie"):
+            error_resp.headers.append("set-cookie", staged)
+    except Exception:  # noqa: S110
+        pass
     return error_resp
 
 
@@ -113,6 +137,23 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Disabled-account gate (C5): refuse before issuing any usable session.
+    if getattr(user, "status", None) == "disabled":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been disabled. Please contact the administrator for assistance.",
+        )
+
+    # Login tracking (phase 7, §3.4): record the successful sign-in. An
+    # existing row's failure to update never blocks the login itself.
+    try:
+        user.last_login_at = datetime.now(UTC)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    except Exception:
+        await db.rollback()
 
     access_token_expires = timedelta(minutes=60 * 24)
     access_token = create_access_token(
@@ -198,23 +239,54 @@ async def github_login(
         token_data = token_res.json()
         access_token = token_data.get("access_token")
         if not access_token:
-            err_desc = token_data.get("error_description") or ""
-            err_code = token_data.get("error") or ""
+            err_desc = str(token_data.get("error_description") or "")
+            err_code = str(token_data.get("error") or "")
+            lowered_desc = err_desc.lower()
+            lowered_code = err_code.lower()
+
+            # Server misconfiguration (not a user-retry problem): GitHub
+            # rejected our client credentials. Name the env vars to check,
+            # never their values, and never retry automatically.
             if (
-                "incorrect or expired" in err_desc.lower()
-                or "bad_verification_code" in err_code.lower()
+                "incorrect_client_credentials" in lowered_code
+                or "client_id and/or client_secret" in lowered_desc
+            ):
+                return _github_error(
+                    response,
+                    500,
+                    "GitHub rejected the backend's OAuth client credentials. An administrator must verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in backend/.env match the authorized GitHub App, then restart the backend.",
+                    code="oauth_config_error",
+                )
+
+            # Authorization codes are single-use. GitHub reports a replayed
+            # or expired code as bad_verification_code ("incorrect or
+            # expired") — the expected outcome when a callback page is
+            # retried after the code was already consumed. Recoverable:
+            # the user simply starts the sign-in again.
+            if (
+                "bad_verification_code" in lowered_code
+                or "incorrect or expired" in lowered_desc
             ):
                 return _github_error(
                     response,
                     400,
-                    "GitHub returned: Invalid or expired code. This usually happens because GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET in your backend/.env does not match the GitHub App you are authorizing with, or because you need to restart uvicorn after modifying the .env file.",
+                    "This GitHub sign-in link has already been used or has expired. Please start the sign-in again.",
+                    code="oauth_code_invalid",
                 )
+
+            if "redirect_uri_mismatch" in lowered_code or "redirect_uri" in lowered_desc:
+                return _github_error(
+                    response,
+                    400,
+                    "GitHub rejected the OAuth redirect URL. The callback URL configured on the GitHub App must exactly match the callback URL the sign-in flow uses.",
+                    code="oauth_redirect_mismatch",
+                )
+
             return _github_error(
                 response,
                 400,
-                token_data.get(
-                    "error_description", "Invalid GitHub authorization code."
-                ),
+                err_desc or "Invalid GitHub authorization code.",
+                code="oauth_exchange_failed",
             )
 
         # 2. Fetch GitHub user profile
@@ -290,6 +362,29 @@ async def github_login(
             db.add(user)
             await db.commit()
             await db.refresh(user)
+
+    # Disabled-account gate (C5): refuse before issuing any usable session.
+    if getattr(user, "status", None) == "disabled":
+        # Clear any stale session cookie for this browser (defense-in-depth;
+        # disable already bumped token_version server-side).
+        _clear_session_cookie(response)
+        return _github_error(
+            response,
+            403,
+            "Your account has been disabled. Please contact the administrator for assistance.",
+            code="account_disabled",
+            github_username=getattr(user, "github_username", None) or github_username,
+        )
+
+    # 4b. Login tracking (phase 7, §3.4): record the successful sign-in.
+    # Fail-open: a tracking hiccup must never break GitHub sign-in.
+    try:
+        user.last_login_at = datetime.now(UTC)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    except Exception:
+        await db.rollback()
 
     # 5. Generate JWT token
     access_token_expires = timedelta(minutes=60 * 24)

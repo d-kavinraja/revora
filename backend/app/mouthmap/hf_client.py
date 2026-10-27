@@ -29,11 +29,16 @@ _FILEDATA_META = {"_type": "gradio.FileData"}
 
 
 class MouthMapHFError(Exception):
-    def __init__(self, message: str, kind: str = "unavailable"):
+    def __init__(
+        self, message: str, kind: str = "unavailable", *, accepted: bool = False
+    ):
         super().__init__(message)
-        self.kind = (
-            kind  # unsupported_format | timeout | unavailable | malformed | failed
-        )
+        # unsupported_format | timeout | unavailable | malformed | failed | waking_timeout
+        self.kind = kind
+        # True once the Space has taken ownership of the inference request (an
+        # event_id was issued). A failure after this point may already be
+        # executing on the Space, so callers must NOT retry it.
+        self.accepted = accepted
 
 
 def _base_url() -> str:
@@ -215,6 +220,7 @@ async def run_hf_inference(
         server_path = str(paths[0])
 
         # 2. Enqueue prediction (retry once on 502/503)
+        accepted = False
         payload = {"video": {"path": server_path, "meta": dict(_FILEDATA_META)}}
         event_id: str | None = None
         last_err: Exception | None = None
@@ -250,6 +256,10 @@ async def run_hf_inference(
                 kind="unavailable",
             ) from last_err
 
+        # The Space has accepted the run: from here a failure must never be
+        # retried by the caller (the inference may already be executing).
+        accepted = True
+
         # 3. Poll SSE until complete
         deadline = time.monotonic() + timeout
         raw: dict | None = None
@@ -266,16 +276,24 @@ async def run_hf_inference(
                 raise MouthMapHFError(
                     "MouthMap inference service is currently unavailable",
                     kind="unavailable",
+                    accepted=accepted,
                 ) from exc
             if "event: complete" in body:
-                raw = _parse_sse_payload(body)
+                try:
+                    raw = _parse_sse_payload(body)
+                except MouthMapHFError as exc:
+                    # The Space already ran the inference — never retry it.
+                    exc.accepted = True
+                    raise
                 break
             if "event: error" in body:
-                raise MouthMapHFError("MouthMap inference failed", kind="unavailable")
+                raise MouthMapHFError(
+                    "MouthMap inference failed", kind="unavailable", accepted=accepted
+                )
             await asyncio.sleep(1.5)
         if raw is None:
             raise MouthMapHFError(
-                "Inference timed out. Please try again.", kind="timeout"
+                "Inference timed out. Please try again.", kind="timeout", accepted=accepted
             )
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -284,6 +302,102 @@ async def run_hf_inference(
     if normalized.get("inference_time_ms") is None:
         normalized["inference_time_ms"] = elapsed_ms
     return normalized, raw
+
+
+# ---------------------------------------------------------------------------
+# Readiness / wake-up
+#
+# Verified against the live Space (kavinraja/mouthmap-inference, Gradio 6.x):
+#   * the Space is PRIVATE — an unauthenticated request returns 404, so the
+#     server-side MOUTHMAP_HF_API_TOKEN is sent as Bearer on every probe;
+#   * GET {base}/config returns 200 with Gradio's config JSON (default
+#     "api_prefix": "/gradio_api") ONLY once the uvicorn/Gradio process is
+#     fully serving. While the Space is asleep/booting the request times out,
+#     errors, returns a non-200, or returns a non-JSON interstitial page.
+# So `/config` + JSON is the readiness signal: the request itself also
+# triggers Hugging Face's factory wake, and we poll until bounded by
+# MOUTHMAP_WAKE_TIMEOUT_S.
+# ---------------------------------------------------------------------------
+
+_ready_until: float = 0.0
+_wake_lock: asyncio.Lock | None = None
+
+
+def _wake_guard() -> asyncio.Lock:
+    """Lazily-created process-wide lock so concurrent callers share one wake."""
+    global _wake_lock
+    if _wake_lock is None:
+        _wake_lock = asyncio.Lock()
+    return _wake_lock
+
+
+def invalidate_ready_cache() -> None:
+    """Drop a cached 'ready' verdict so the next check re-probes the Space."""
+    global _ready_until
+    _ready_until = 0.0
+
+
+async def _probe_ready(timeout_s: float) -> bool:
+    """One bounded readiness probe. Never raises on transport/protocol issues."""
+    base = _base_url()
+    if not base:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_s)) as client:
+            resp = await client.get(f"{base}/config", headers=_auth_headers())
+    except httpx.HTTPError:
+        return False
+    if resp.status_code != 200:
+        return False
+    try:
+        cfg = resp.json()
+    except ValueError:
+        # A non-JSON body (e.g. the HF 'sleeping/restarting' page) is not ready.
+        return False
+    return isinstance(cfg, dict) and bool(cfg.get("api_prefix"))
+
+
+async def ensure_hf_ready() -> None:
+    """Ensure the Space is awake and serving before an inference run.
+
+    Returns immediately when a recent probe confirmed readiness (short-lived
+    cache). Otherwise probes and waits, bounded by MOUTHMAP_WAKE_TIMEOUT_S,
+    for the Gradio app to serve ``/config``. Single-flight: concurrent callers
+    share ONE wake cycle. Cancellation while waiting releases the lock and
+    leaves the cache untouched.
+    """
+    base = _base_url()
+    if not base:
+        raise MouthMapHFError("MouthMap endpoint is not configured", kind="unavailable")
+
+    global _ready_until
+    if time.monotonic() < _ready_until:
+        return
+
+    total = max(1, int(settings.MOUTHMAP_WAKE_TIMEOUT_S or 180))
+    interval = float(settings.MOUTHMAP_WAKE_POLL_INTERVAL_S or 4.0)
+    interval = min(max(interval, 0.5), 30.0)
+    probe_timeout = min(max(interval * 2.0, 5.0), 15.0)
+
+    async with _wake_guard():
+        # Another caller may have finished the wake while we waited for the lock.
+        if time.monotonic() < _ready_until:
+            return
+        deadline = time.monotonic() + total
+        while True:
+            if await _probe_ready(probe_timeout):
+                _ready_until = time.monotonic() + max(
+                    1, int(settings.MOUTHMAP_READY_TTL_S or 600)
+                )
+                logger.info("mouthmap space ready")
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise MouthMapHFError(
+                    f"MouthMap model did not finish waking up within {total}s.",
+                    kind="waking_timeout",
+                )
+            await asyncio.sleep(min(interval, remaining))
 
 
 async def check_hf_health() -> tuple[bool, str | None]:

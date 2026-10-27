@@ -75,7 +75,7 @@ interface AuthState {
   /** Why the last restore failed (null = fresh or last restore succeeded).
    *  Lets guards route `unauthorized` to /login and `unreachable`
    *  (backend asleep/down) to the waking-up flow instead of signing out. */
-  restoreReason: null | 'unauthorized' | 'unreachable';
+  restoreReason: null | 'unauthorized' | 'unreachable' | 'disabled';
   setAuth: (token: string, user: User) => void;
   markSessionChecked: () => void;
   logout: (opts?: { revoke?: boolean }) => Promise<void>;

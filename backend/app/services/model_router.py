@@ -6,6 +6,7 @@ from app.models.user import User
 from app.schemas.health import ModelRoute
 from app.services.api_key_service import api_key_service
 from app.services.cost_estimator import cost_estimator
+from app.services.model_overrides import model_overrides_service
 from app.services.provider_registry import provider_registry_service
 
 # Feature requirements
@@ -40,7 +41,13 @@ class ModelRouter:
             preferred_model = pref.get("model")
 
         user_keys = await api_key_service.get_all_usable_keys(db, user_id)
-        providers = await provider_registry_service.get_enabled(db)
+        # Status-aware selection: only enabled providers with `available`
+        # status may serve new reviews (phase 4, §9.3 #6). Zero-state parity:
+        # all seeded rows default to available/enabled.
+        providers = await provider_registry_service.get_usable(db)
+        # Per-model overrides (phase 6, §11.2): a disabled model is skipped —
+        # the provider and its other models stay usable.
+        disabled_overrides = await model_overrides_service.get_disabled_map(db)
 
         # Get feature requirements
         reqs = FEATURE_REQUIREMENTS.get(feature, {})
@@ -69,6 +76,9 @@ class ModelRouter:
                 if (preferred_provider == provider.name and preferred_model)
                 else provider.default_model
             )
+
+            if model in disabled_overrides.get(provider.name, ()):
+                continue
 
             cost = cost_estimator.estimate(provider.name, 1000, 1000)
 

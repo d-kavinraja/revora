@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.core.security import encryption_service
 from app.db.session import get_db
 from app.models.github import Installation, Repository
@@ -23,6 +24,7 @@ from app.schemas.usage import (
     PerKeyValidationResult,
 )
 from app.services.api_key_service import api_key_service
+from app.services.provider_registry import provider_registry_service
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +176,7 @@ async def create_api_key(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("api_keys_add")),
 ):
     """Add a new encrypted API key for the current user."""
     provider = key_in.provider.lower()
@@ -195,6 +198,26 @@ async def create_api_key(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid LLM provider",
         )
+
+    # Phase 4 key-addition policy (§10): blocked providers and providers
+    # with `allow_key_addition=false` reject NEW credentials. Existing
+    # keys for the same provider remain stored, listed and rotatable (D9).
+    # A provider missing from the registry keeps its legacy behavior.
+    _, provider_row = await provider_registry_service.usability(db, provider)
+    if provider_row is not None:
+        blocked = (
+            not provider_row.is_enabled
+            or provider_row.status in ("disabled", "unavailable", "coming_soon")
+            or not provider_row.allow_key_addition
+        )
+        if blocked:
+            detail = provider_row.status_message or (
+                f"Adding new keys for provider '{provider}' is currently disabled."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=detail,
+            )
 
     if provider == "openai" and not key_in.api_key.startswith("sk-"):
         raise HTTPException(
@@ -248,6 +271,7 @@ async def update_api_key(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("api_keys_add")),
 ):
     """Update an API key configuration."""
     db_key = await api_key_service.get_by_id(db, key_id)
@@ -486,6 +510,7 @@ async def rotate_api_key(
     data: ApiKeyRotate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("api_keys_add")),
 ):
     """Atomically rotate an API key."""
     db_key = await api_key_service.get_by_id(db, key_id)
@@ -503,6 +528,41 @@ async def rotate_api_key(
 
     rotated = await api_key_service.rotate(db, key_id, data.api_key)
     return ApiKeySchema.from_orm_with_mask(rotated, data.api_key)
+
+
+async def _owner_set_key_enabled(
+    db: AsyncSession, key_id: uuid.UUID, user: User, enabled: bool
+) -> ApiKeySchema:
+    db_key = await api_key_service.get_by_id(db, key_id)
+    if not db_key or db_key.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found or not owned by user",
+        )
+    db_key = await api_key_service.set_enabled(db, db_key, enabled)
+    return ApiKeySchema.from_orm_with_mask(db_key, "***")
+
+
+@router.post("/{key_id}/disable", response_model=ApiKeySchema)
+async def disable_api_key(
+    key_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Owner switch (phase 4): exclude this credential from all selection
+    paths without deleting or decrypting it. Existing key material is
+    untouched; re-enable restores eligibility automatically."""
+    return await _owner_set_key_enabled(db, key_id, current_user, False)
+
+
+@router.post("/{key_id}/enable", response_model=ApiKeySchema)
+async def enable_api_key(
+    key_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Owner switch (phase 4): re-include a previously disabled credential."""
+    return await _owner_set_key_enabled(db, key_id, current_user, True)
 
 
 @router.post("/validate-all", response_model=BulkValidateResult)

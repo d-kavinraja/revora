@@ -71,8 +71,16 @@ export async function POST(request: NextRequest) {
   // Guarantee first-party deletion regardless of the upstream outcome.
   clearSessionCookie(headers, secure);
 
-  const body = upstream ? await upstream.text() : '';
-  const status = upstream?.status ?? 200;
+  // Maintenance mode (CD5): the backend may answer 503 for /auth/logout while
+  // maintenance is active. The local session is still cleared above, so treat
+  // that as a successful local sign-out instead of propagating the 503.
+  const isMaintenance = upstream?.status === 503;
+  const body = isMaintenance
+    ? ''
+    : upstream
+      ? await upstream.text()
+      : '';
+  const status = isMaintenance ? 200 : (upstream?.status ?? 200);
   return new Response(body || JSON.stringify({ status: 'logged_out' }), {
     status,
     headers,

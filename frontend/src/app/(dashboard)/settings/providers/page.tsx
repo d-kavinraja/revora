@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { api, Provider } from '@/lib/api';
 import {
   GlobeIcon,
@@ -10,6 +10,16 @@ import {
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { Pill, type PillTone } from '@/components/shared/pill';
+import { formatDateTime } from '@/components/shared/time-ago';
+
+const STATUS_META: Record<string, { label: string; tone: PillTone }> = {
+  available: { label: 'Available', tone: 'success' },
+  under_testing: { label: 'Under testing', tone: 'warning' },
+  coming_soon: { label: 'Coming soon', tone: 'info' },
+  unavailable: { label: 'Temporarily unavailable', tone: 'error' },
+  disabled: { label: 'Disabled', tone: 'muted' },
+};
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -35,17 +45,6 @@ export default function ProvidersPage() {
     }
     loadData();
   }, [toast]);
-
-  const handleToggle = async (slug: string, enabled: boolean) => {
-    try {
-      const updated = await api.toggleProvider(slug, enabled);
-      setProviders((prev) => prev.map((p) => (p.slug === slug ? updated : p)));
-      toast({ title: `Provider ${enabled ? 'enabled' : 'disabled'}`, type: 'success' });
-    } catch (err) {
-      console.error('Failed to toggle provider', err);
-      toast({ title: 'Failed to toggle provider', type: 'error' });
-    }
-  };
 
   const getCapabilityLabel = (cap: string) => {
     const labels: Record<string, string> = {
@@ -75,7 +74,7 @@ export default function ProvidersPage() {
             Provider Registry
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
-            Manage LLM providers and their capabilities. Toggle providers on/off.
+            View LLM providers and their capabilities. Availability is managed by the platform team.
           </p>
         </div>
       </div>
@@ -83,7 +82,10 @@ export default function ProvidersPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {providers.map((provider) => {
           const caps = capabilities[provider.slug] || [];
-          const isTesting = provider.slug !== 'gemini' && provider.slug !== 'groq' && provider.slug !== 'nvidia' && provider.slug !== 'nvidia_nim' && provider.slug !== 'openrouter' && provider.slug !== 'ollama_cloud' && provider.slug !== 'cohere';
+          const statusMeta = STATUS_META[provider.status] ?? {
+            label: provider.status,
+            tone: 'muted' as PillTone,
+          };
           return (
             <div
               key={provider.slug}
@@ -101,21 +103,13 @@ export default function ProvidersPage() {
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
                       {provider.litellm_provider}
                     </span>
-                    {isTesting ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 uppercase tracking-wide">
-                        Under Testing
-                      </span>
-                    ) : provider.is_enabled ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-success/10 border-success/30 text-success">
-                        <CircleCheckIcon size={12} />
-                        Enabled
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-error/10 border-error/30 text-error">
+                    <Pill tone={statusMeta.tone}>
+                      {statusMeta.tone === 'success' && <CircleCheckIcon size={12} />}
+                      {(statusMeta.tone === 'warning' || statusMeta.tone === 'error') && (
                         <TriangleAlertIcon size={12} />
-                        Disabled
-                      </span>
-                    )}
+                      )}
+                      {statusMeta.label}
+                    </Pill>
                   </div>
 
                   <div className="mt-2 text-xs text-muted-foreground">
@@ -125,6 +119,17 @@ export default function ProvidersPage() {
                     <span className="mx-1.5">·</span>
                     <span>Retries: {provider.max_retries}</span>
                   </div>
+
+                  {provider.status_message && (
+                    <p className="mt-2 text-xs text-foreground/80 border-l-2 border-warning/50 pl-2">
+                      {provider.status_message}
+                    </p>
+                  )}
+                  {provider.status === 'unavailable' && provider.status_expires_at && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Expected back {formatDateTime(provider.status_expires_at)}
+                    </p>
+                  )}
 
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {caps.map((cap) => (
@@ -136,22 +141,6 @@ export default function ProvidersPage() {
                       </span>
                     ))}
                   </div>
-                </div>
-
-                <div className="shrink-0">
-                  <button
-                    disabled={isTesting}
-                    onClick={() => handleToggle(provider.slug, !provider.is_enabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      provider.is_enabled && !isTesting ? 'bg-brand' : 'bg-surface-3'
-                    } ${isTesting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        provider.is_enabled && !isTesting ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
                 </div>
               </div>
             </div>

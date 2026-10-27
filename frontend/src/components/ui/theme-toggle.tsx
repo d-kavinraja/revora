@@ -4,8 +4,18 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { SunIcon, MoonIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, toggleTheme } = useThemeStore();
+export function ThemeToggle({
+  className,
+  theme: themeProp,
+  onToggle: onToggleProp,
+}: {
+  className?: string;
+  theme?: 'light' | 'dark';
+  onToggle?: () => void;
+}) {
+  const store = useThemeStore();
+  const theme = themeProp ?? store.theme;
+  const toggleTheme = onToggleProp ?? store.toggleTheme;
 
   return (
     <button

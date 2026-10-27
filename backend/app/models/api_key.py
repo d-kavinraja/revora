@@ -18,6 +18,11 @@ class ApiKey(Base):
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     is_valid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Admin control plane (schema migrated in adm1n_sch3ma; enforcement in
+    # phase 4 — selection helpers exclude disabled credentials).
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

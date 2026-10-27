@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 @plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .admin-dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -191,6 +191,116 @@
   --chart-4: oklch(0.65 0.2 25);
   --chart-5: oklch(0.65 0.15 250);
 
+  --sidebar: oklch(0.11 0.005 270);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(0.62 0.2 265);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.16 0.008 270);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: oklch(0.62 0.2 265);
+}
+
+/* Admin-scoped themes: independent of the global `.dark` class so the admin
+   portal can be light while the main app is dark (and vice-versa). Tokens are
+   re-declared on a wrapper ancestor; the dark variant above also matches
+   `.admin-dark *` so shared components using `dark:` utilities still resolve.
+   Three contrast values are nudged vs. the global palette for admin surfaces
+   (light --warning/--success, dark --muted-foreground). */
+.admin-light {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --surface-1: oklch(0.98 0 0);
+  --surface-2: oklch(0.96 0 0);
+  --surface-3: oklch(0.94 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --brand: oklch(0.55 0.2 265);
+  --brand-hover: oklch(0.50 0.2 265);
+  --brand-foreground: oklch(0.98 0 0);
+  --ai-purple: oklch(0.45 0.2 280);
+  --ai-purple-hover: oklch(0.52 0.22 280);
+  --ai-purple-soft: oklch(0.55 0.2 280 / 0.1);
+  --ai-cyan: oklch(0.55 0.12 210);
+  --ai-cyan-hover: oklch(0.62 0.14 210);
+  --ai-cyan-soft: oklch(0.55 0.12 210 / 0.1);
+  --primary: oklch(0.55 0.2 265);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.50 0.18 160);
+  --warning: oklch(0.52 0.15 85);
+  --error: oklch(0.55 0.2 25);
+  --info: oklch(0.55 0.15 250);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.55 0.2 265);
+  --chart-1: oklch(0.55 0.2 265);
+  --chart-2: oklch(0.55 0.18 160);
+  --chart-3: oklch(0.65 0.15 85);
+  --chart-4: oklch(0.55 0.2 25);
+  --chart-5: oklch(0.55 0.15 250);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.55 0.2 265);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.55 0.2 265);
+}
+
+.admin-dark {
+  color-scheme: dark;
+  --background: oklch(0.09 0.005 270);
+  --foreground: oklch(0.95 0 0);
+  --surface-1: oklch(0.13 0.005 270);
+  --surface-2: oklch(0.16 0.008 270);
+  --surface-3: oklch(0.19 0.008 270);
+  --card: oklch(0.13 0.005 270);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.16 0.008 270);
+  --popover-foreground: oklch(0.95 0 0);
+  --brand: oklch(0.62 0.2 265);
+  --brand-hover: oklch(0.68 0.2 265);
+  --brand-foreground: oklch(0.98 0 0);
+  --ai-purple: oklch(0.65 0.22 280);
+  --ai-purple-hover: oklch(0.75 0.25 280);
+  --ai-purple-soft: oklch(0.65 0.22 280 / 0.15);
+  --ai-cyan: oklch(0.65 0.12 210);
+  --ai-cyan-hover: oklch(0.75 0.14 210);
+  --ai-cyan-soft: oklch(0.65 0.12 210 / 0.15);
+  --primary: oklch(0.62 0.2 265);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.16 0.008 270);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted: oklch(0.16 0.008 270);
+  --muted-foreground: oklch(0.60 0 0);
+  --accent: oklch(0.16 0.008 270);
+  --accent-foreground: oklch(0.95 0 0);
+  --destructive: oklch(0.65 0.2 25);
+  --success: oklch(0.72 0.18 160);
+  --warning: oklch(0.8 0.15 85);
+  --error: oklch(0.65 0.2 25);
+  --info: oklch(0.65 0.15 250);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.62 0.2 265);
+  --chart-1: oklch(0.62 0.2 265);
+  --chart-2: oklch(0.72 0.18 160);
+  --chart-3: oklch(0.8 0.15 85);
+  --chart-4: oklch(0.65 0.2 25);
+  --chart-5: oklch(0.65 0.15 250);
+  --radius: 0.75rem;
   --sidebar: oklch(0.11 0.005 270);
   --sidebar-foreground: oklch(0.9 0 0);
   --sidebar-primary: oklch(0.62 0.2 265);

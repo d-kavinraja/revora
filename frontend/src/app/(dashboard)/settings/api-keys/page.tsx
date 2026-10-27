@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, ApiKey, ThemeConfig, ApiKeyHealth } from '@/lib/api';
+import { api, ApiKey, ThemeConfig, ApiKeyHealth, Provider } from '@/lib/api';
 import {
   KeyIcon,
   TrashIcon,
@@ -15,12 +15,21 @@ import {
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 export default function ApiKeysSettingsPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const { toast } = useToast();
+
+  // Key addition (create/update/rotate) is flag-gated server-side; reads,
+  // tests, and deletes stay available. Hide add affordances when disabled.
+  const { data: features } = usePlatformFeatures();
+  const addKeys = featureState(features, 'api_keys_add');
+  const addEnabled = addKeys.status === 'enabled';
 
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -55,12 +64,30 @@ export default function ApiKeysSettingsPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [keysData, themeData] = await Promise.all([
+        const [keysData, themeData, providersData] = await Promise.all([
           api.getApiKeys(),
-          api.getThemeConfig()
+          api.getThemeConfig(),
+          api.getProviders(),
         ]);
         setKeys(keysData);
         setThemeConfig(themeData);
+        setProviders(providersData);
+        const usable = providersData.find(
+          (p) => p.is_enabled && p.status === 'available' && p.allow_key_addition,
+        );
+        if (usable) {
+          setProvider((prev) =>
+            providersData.some(
+              (p) =>
+                p.slug === prev &&
+                p.is_enabled &&
+                p.status === 'available' &&
+                p.allow_key_addition,
+            )
+              ? prev
+              : usable.slug,
+          );
+        }
       } catch (err) {
         console.error('Failed to load settings data', err);
         toast({ title: 'Failed to load settings', type: 'error' });
@@ -286,20 +313,31 @@ export default function ApiKeysSettingsPage() {
             {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
             {validatingAll ? 'Validating...' : 'Validate All'}
           </button>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            onMouseEnter={() => plusIconRef.current?.startAnimation()}
-            onMouseLeave={() => plusIconRef.current?.stopAnimation()}
-            className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-lg text-sm font-medium transition-colors shrink-0"
-          >
-            <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
-            Add Key
-          </button>
+          {addEnabled && (
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              onMouseEnter={() => plusIconRef.current?.startAnimation()}
+              onMouseLeave={() => plusIconRef.current?.stopAnimation()}
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-lg text-sm font-medium transition-colors shrink-0"
+            >
+              <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
+              Add Key
+            </button>
+          )}
         </div>
       </div>
 
+      {!addEnabled && (
+        <FeatureUnavailable
+          status={addKeys.status}
+          message={addKeys.message}
+          title="Adding API keys is unavailable"
+          className="mb-8"
+        />
+      )}
+
       {/* Add Key Form */}
-      {showAddForm && (
+      {showAddForm && addEnabled && (
         <div className="mb-8 p-6 rounded-xl border border-border bg-surface-1 shadow-sm shadow-black/5 relative overflow-hidden transition-all duration-300">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-brand-hover" />
           <h2 className="text-lg font-bold text-foreground mb-4">Add Encrypted API Key</h2>
@@ -312,22 +350,29 @@ export default function ApiKeysSettingsPage() {
                   <div className="absolute left-3 pointer-events-none flex items-center justify-center">
                     <ProviderIcon slug={provider} size={16} />
                   </div>
-                  <select
+                    <select
                     value={provider}
                     onChange={(e) => setProvider(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/60 transition-colors cursor-pointer"
                   >
-                    <option value="gemini">Gemini</option>
-                    <option value="openai" disabled>OpenAI (Under Testing)</option>
-                    <option value="anthropic" disabled>Claude (Under Testing)</option>
-                    <option value="groq">Groq</option>
-                    <option value="deepseek" disabled>DeepSeek (Under Testing)</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="azure_openai" disabled>Azure OpenAI (Under Testing)</option>
-                    <option value="ollama_cloud">Ollama Cloud</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="mistral" disabled>Mistral (Under Testing)</option>
-                    <option value="nvidia">NVIDIA NIM</option>
+                    {providers.length === 0 && (
+                      <option value={provider}>{provider}</option>
+                    )}
+                    {providers.map((p) => {
+                      const blocked =
+                        !p.is_enabled ||
+                        p.status !== 'available' ||
+                        !p.allow_key_addition;
+                      const reason =
+                        p.status_message ||
+                        (blocked ? 'Unavailable' : '');
+                      return (
+                        <option key={p.slug} value={p.slug} disabled={blocked}>
+                          {p.display_name}
+                          {blocked ? ` (${reason})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>

@@ -11,6 +11,7 @@ import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 const LANG_COLORS: Record<string, string> = {
   Python: '#3572A5',
@@ -183,7 +184,7 @@ function ConfigModal({
     return norm1 === norm2;
   };
 
-  const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid);
+  const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && k.is_enabled);
 
   const [selectedKeyId, setSelectedKeyId] = useState(() => {
     const saved = repo.settings?.assigned_key_id;
@@ -214,8 +215,14 @@ function ConfigModal({
   const settingsRef = useRef<any>(null);
   const { toast } = useToast();
 
+  // Saving repository routing config is flag-gated server-side (§11.1).
+  // The modal still shows the current mapping; only the save is blocked.
+  const { data: features } = usePlatformFeatures();
+  const routingFlag = featureState(features, 'routing_mapping');
+  const routingEnabled = routingFlag.status === 'enabled';
+
   useEffect(() => {
-    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid);
+    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && k.is_enabled);
     if (keys.length > 0 && !keys.some(k => k.id === selectedKeyId)) {
       setSelectedKeyId(keys[0].id);
     } else if (keys.length === 0) {
@@ -247,6 +254,7 @@ function ConfigModal({
   }, [onClose]);
 
   const handleSave = async () => {
+    if (!routingEnabled) return;
     setSaving(true);
     try {
       await onSave({
@@ -447,9 +455,19 @@ function ConfigModal({
             </div>
 
             {/* Save Button */}
+            {!routingEnabled && (
+              <div
+                role="status"
+                className="rounded-lg border border-border bg-surface-2 p-3 text-xs text-muted-foreground"
+              >
+                {routingFlag.message ||
+                  'Changing routing configuration is temporarily unavailable.'}
+              </div>
+            )}
             <button
               onClick={handleSave}
-              disabled={saving || !selectedModel || isReviewActive}
+              disabled={saving || !selectedModel || isReviewActive || !routingEnabled}
+              title={!routingEnabled ? routingFlag.message ?? undefined : undefined}
               className="w-full py-2.5 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
               {isReviewActive ? (

@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -14,6 +15,19 @@ from app.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login", auto_error=False
 )
+
+#: Activity instrumentation throttle (phase 7, §3.4): at most one
+#: `users.last_active_at` write per user per this interval.
+ACTIVITY_TOUCH_INTERVAL = timedelta(minutes=5)
+
+
+def _activity_touch_due(last_active_at: datetime | None, now: datetime) -> bool:
+    if last_active_at is None:
+        return True
+    if last_active_at.tzinfo is None:
+        # SQLite round-trips naive values; stored values are UTC wall time.
+        last_active_at = last_active_at.replace(tzinfo=UTC)
+    return now - last_active_at >= ACTIVITY_TOUCH_INTERVAL
 
 
 async def _token_from_request(request: Request, header_token: str | None) -> str | None:
@@ -53,9 +67,32 @@ async def get_current_user(
     user = result.scalars().first()
     if user is None:
         raise credentials_exception
+    # Admin disable enforcement (B14): a disabled account is refused with a
+    # distinct 403, checked BEFORE token_version so the live cookie of a
+    # just-disabled user yields "Account disabled" (not a generic 401).
+    if (user.status or "active") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
+        )
     # Session revocation: logout bumps user.token_version, killing all
     # previously minted tokens (they carry the older tv).
     user_tv = int(getattr(user, "token_version", 0) or 0)
     if token_tv != user_tv:
         raise credentials_exception
+
+    # Activity tracking (phase 7, §3.4): throttled `last_active_at` touch
+    # (max one write per user per 5 minutes). Fail-open — analytics writes
+    # must never break an authenticated request.
+    # Activity tracking (phase 7, §3.4): throttled `last_active_at` touch
+    # (max one write per user per 5 minutes). Fail-open — analytics writes
+    # must never break an authenticated request.
+    now = datetime.now(UTC)
+    if _activity_touch_due(user.last_active_at, now):
+        try:
+            user.last_active_at = now
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+        except Exception:
+            await db.rollback()
     return user

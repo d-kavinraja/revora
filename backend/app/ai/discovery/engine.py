@@ -51,12 +51,12 @@ class DiscoveryEngineService:
         api_keys = result.scalars().all()
         if not api_keys:
             raise ValueError(f"No API keys configured for provider {provider_slug}")
-            
+
         api_key_obj = api_keys[0]
         raw_key = encryption_service.decrypt(api_key_obj.encrypted_key)
-        
+
         adapter = self.adapters[provider_slug]
-        
+
         try:
             discovered_models = await adapter.fetch_models(raw_key)
         except Exception as e:
@@ -69,11 +69,11 @@ class DiscoveryEngineService:
         await db.execute(
             delete(DiscoveredModel).where(DiscoveredModel.provider_slug == provider_slug)
         )
-        
+
         # Insert the newly discovered models
         db.add_all(discovered_models)
         await db.commit()
-        
+
         return await self.get_cached_models(db, provider_slug)
 
     async def get_cached_models(self, db: AsyncSession, provider_slug: str) -> list[DiscoveredModel]:
