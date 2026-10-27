@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.models.user import User
 from app.mouthmap import dataset as dataset_mod
@@ -20,6 +21,7 @@ from app.mouthmap.schemas import (
     InferenceResponse,
     MouthMapConfig,
     MouthMapHealth,
+    MouthMapWarm,
     TestVideo,
 )
 from app.mouthmap.service import mouthmap_service
@@ -43,6 +45,10 @@ def _hf_error_to_http(exc: MouthMapHFError) -> HTTPException:
         return HTTPException(
             status_code=504, detail="Inference timed out. Please try again."
         )
+    if exc.kind == "waking_timeout":
+        # The Space never became ready within the bounded wake window. The
+        # message is user-actionable and drives the UI's manual Retry action.
+        return HTTPException(status_code=503, detail=str(exc))
     return HTTPException(
         status_code=502,
         detail="MouthMap inference service is currently unavailable.",
@@ -67,17 +73,45 @@ def _inference_slot() -> asyncio.Semaphore:
 
 
 @router.get("/config", response_model=MouthMapConfig)
-async def get_config(current_user: User = Depends(get_current_user)):
+async def get_config(
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
+):
     return await mouthmap_service.get_config()
 
 
 @router.get("/health", response_model=MouthMapHealth)
-async def get_health(current_user: User = Depends(get_current_user)):
+async def get_health(
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
+):
     return await mouthmap_service.get_health()
 
 
+@router.post("/warm", response_model=MouthMapWarm)
+async def warm_model(
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
+):
+    """Wake the hosted HF Space and confirm readiness (bounded).
+
+    On-demand by design: the client calls this when the user starts an
+    inference run, so an idle Space is never woken by page loads. Concurrent
+    callers share a single wake cycle, and an already-warm Space returns fast
+    from the short-lived ready cache. Raises 503 (`waking_timeout`) when the
+    Space does not become ready within MOUTHMAP_WAKE_TIMEOUT_S.
+    """
+    try:
+        return await mouthmap_service.warm()
+    except MouthMapHFError as exc:
+        raise _hf_error_to_http(exc) from exc
+
+
 @router.get("/dataset", response_model=list[TestVideo])
-async def list_dataset(current_user: User = Depends(get_current_user)):
+async def list_dataset(
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
+):
     return await mouthmap_service.list_dataset()
 
 
@@ -85,6 +119,7 @@ async def list_dataset(current_user: User = Depends(get_current_user)):
 async def stream_dataset_video(
     video_id: str,
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
 ):
     match = dataset_mod.resolve_test_video(mouthmap_service.dataset_dir(), video_id)
     if not match or not os.path.isfile(match["abs_path"]):
@@ -103,6 +138,7 @@ async def run_inference(
     source: str = Form(default="upload"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
 ):
     # Concurrency gate: one inference at a time on small instances.
     # Extra callers get an instant 429 instead of stacking 180s workers.
@@ -140,17 +176,40 @@ async def run_inference(
                 await asyncio.to_thread(fh.write, chunk)
                 await asyncio.to_thread(fh.flush)
         try:
-            async with slot:
-                return await mouthmap_service.run_inference(
-                    db,
-                    current_user,
-                    video_path=tmp_path,
-                    size_bytes=size_bytes,
-                    filename=filename,
-                    content_type=content_type,
-                    source=source,
-                    test_video_id=test_video_id,
+            # Wake the Space first (bounded, single-flight, cached). This is a
+            # safety net for clients that did not call /warm; when the Space is
+            # already warm this returns immediately from the ready cache.
+            await mouthmap_service.warm()
+
+            async def _run_once():
+                async with slot:
+                    return await mouthmap_service.run_inference(
+                        db,
+                        current_user,
+                        video_path=tmp_path,
+                        size_bytes=size_bytes,
+                        filename=filename,
+                        content_type=content_type,
+                        source=source,
+                        test_video_id=test_video_id,
+                    )
+
+            try:
+                return await _run_once()
+            except MouthMapHFError as exc:
+                # Retry at most once, and ONLY when the Space never accepted the
+                # run (failure before an event_id): the inference cannot be
+                # executing, so a duplicate submission is impossible. A failure
+                # after acceptance (`exc.accepted`) is surfaced as-is.
+                if exc.accepted:
+                    raise
+                logger.warning(
+                    "mouthmap inference failed before acceptance (%s); re-warming once",
+                    exc.kind,
                 )
+                mouthmap_service.invalidate_ready()
+                await mouthmap_service.warm()
+                return await _run_once()
         except MouthMapHFError as exc:
             logger.warning("mouthmap inference failed: %s", exc.kind)
             await mouthmap_service.record_failure(
@@ -188,5 +247,6 @@ async def list_history(
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("mouthmap")),
 ):
     return await mouthmap_service.list_history(db, current_user, limit, offset)

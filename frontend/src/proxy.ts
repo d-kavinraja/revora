@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { backendApiBase } from '@/lib/backend-origin';
 import { isIndexableDeployment } from '@/lib/site';
 import { isSafeInternalPath } from '@/lib/safe-redirect';
 
@@ -14,6 +15,49 @@ const AUTHENTICATED_ROUTE_PREFIXES = [
   '/reviews',
   '/model-lab',
 ];
+
+/**
+ * Maintenance redirect exemptions (§12.4): the admin console must stay
+ * reachable for recovery, and /maintenance itself must never self-redirect.
+ * Static assets are already excluded by the matcher below.
+ */
+const MAINTENANCE_EXEMPT_PREFIXES = ['/admin', '/maintenance'];
+
+/**
+ * Edge-side maintenance lookup cache. The backend serves status through its
+ * own 5s TTL cache, so this only bounds extra round-trips (staleness bound
+ * stays ≤ 5s either way). Fails open — a flaky backend must never trap the
+ * whole site on /maintenance.
+ */
+const MAINTENANCE_CACHE_TTL_MS = 5_000;
+let maintenanceCache: { enabled: boolean; at: number } | null = null;
+
+async function isMaintenanceActive(): Promise<boolean> {
+  const now = Date.now();
+  if (maintenanceCache && now - maintenanceCache.at < MAINTENANCE_CACHE_TTL_MS) {
+    return maintenanceCache.enabled;
+  }
+
+  try {
+    const response = await fetch(`${backendApiBase()}/platform/status`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) {
+      throw new Error(`platform status returned ${response.status}`);
+    }
+    const payload = (await response.json()) as {
+      maintenance?: { enabled?: boolean };
+    };
+    const enabled = payload?.maintenance?.enabled === true;
+    maintenanceCache = { enabled, at: now };
+    return enabled;
+  } catch {
+    maintenanceCache = { enabled: false, at: now };
+    return false;
+  }
+}
 
 /**
  * Routes that must never become search-index targets. Authenticated application screens,
@@ -32,6 +76,12 @@ const NON_INDEXABLE_ROUTE_PREFIXES = [
   '/register',
   '/auth',
   '/waking-up',
+  // Admin control center + public maintenance page. Direct-URL access only;
+  // deliberately NOT in AUTHENTICATED_ROUTE_PREFIXES — the user-cookie gate
+  // is irrelevant here because the admin console self-guards server-side
+  // (every admin API call requires a valid admin session).
+  '/admin',
+  '/maintenance',
 ];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
@@ -55,9 +105,22 @@ function withRobotsPolicy(response: NextResponse, pathname: string): NextRespons
   return response;
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('revora_auth_token')?.value;
+
+  // Global maintenance gate (§12.4): while the switch is on, every page load
+  // goes to /maintenance — except the admin console (recovery path) and the
+  // maintenance page itself. Runs before the auth gate so signed-in users
+  // land on the status page instead of a blocked dashboard.
+  if (!matchesPrefix(pathname, MAINTENANCE_EXEMPT_PREFIXES)) {
+    if (await isMaintenanceActive()) {
+      return withRobotsPolicy(
+        NextResponse.redirect(new URL('/maintenance', request.url)),
+        pathname
+      );
+    }
+  }
 
   // Protect application routes
   if (matchesPrefix(pathname, AUTHENTICATED_ROUTE_PREFIXES)) {

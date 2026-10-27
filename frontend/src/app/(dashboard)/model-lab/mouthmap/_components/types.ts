@@ -7,6 +7,7 @@ import type {
 
 export type Phase =
   | 'idle'
+  | 'warming'
   | 'uploading'
   | 'preparing'
   | 'processing'
@@ -158,6 +159,9 @@ export function friendlyError(err: unknown): string {
   if (/too large|maximum size/i.test(detail)) return detail;
   if (/timed out|timeout|504/i.test(detail))
     return 'Inference timed out. Please try again.';
+  // Wake-up window elapsed: the backend's actionable message is clearer than
+  // the generic "unavailable" copy, so surface it verbatim.
+  if (/waking up|did not finish waking/i.test(detail)) return detail;
   if (/unavailable|502|503/i.test(detail))
     return 'MouthMap inference service is currently unavailable. Please try again later.';
   return detail || 'Something went wrong. Please try again.';

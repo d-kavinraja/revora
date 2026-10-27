@@ -1,6 +1,5 @@
 """MouthMap service: validation + HF delegation + normalization + persistence."""
 
-import asyncio
 import logging
 import os
 import re
@@ -16,6 +15,8 @@ from app.mouthmap import dataset as dataset_mod
 from app.mouthmap.hf_client import (
     MouthMapHFError,
     check_hf_health,
+    ensure_hf_ready,
+    invalidate_ready_cache,
     run_hf_inference,
 )
 
@@ -93,6 +94,19 @@ class MouthMapService:
             "endpoint": settings.MOUTHMAP_HF_ENDPOINT_URL or "",
             "detail": detail,
         }
+
+    async def warm(self) -> dict[str, Any]:
+        """Wake the HF Space (bounded) and confirm it is serving.
+
+        Delegates to the single-flight readiness routine in the HF client, so
+        concurrent callers share one wake cycle and a recent success is cached.
+        """
+        await ensure_hf_ready()
+        return {"status": "ready"}
+
+    def invalidate_ready(self) -> None:
+        """Drop the cached 'ready' verdict so the next run re-probes the Space."""
+        invalidate_ready_cache()
 
     def dataset_dir(self) -> str:
         d = settings.MOUTHMAP_DATASET_DIR or "app/mouthmap/dataset"

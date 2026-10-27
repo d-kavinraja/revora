@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { SoftAurora } from '@/components/ui/SoftAurora';
@@ -14,16 +14,88 @@ import Link from 'next/link';
 
 import { useThemeStore } from '@/store/useThemeStore';
 import { isSafeInternalPath } from '@/lib/safe-redirect';
+import { startGitHubOAuth } from '@/lib/github-oauth';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [disabledMessage, setDisabledMessage] = useState<string | null>(null);
   const { toast } = useToast();
+  // True once we have handed the browser off to GitHub. Used to tell an
+  // in-flight start apart from a stale spinner after the user comes back.
+  const redirectingRef = useRef(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  const releaseRedirect = () => {
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+    if (!redirectingRef.current) return;
+    redirectingRef.current = false;
+    setLoadingConfig(false);
+  };
+
+  /**
+   * `startGitHubOAuth` ends with a full-page `location.href` navigation. If the
+   * user cancels on GitHub and returns with the browser Back button, the page is
+   * restored from the back/forward cache: the JS heap survives, so this
+   * component's `loadingConfig` state survives too and the button would stay
+   * permanently disabled. Reset on bfcache restore, on returning to the tab,
+   * and via a timer as a final safety net.
+   */
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) releaseRedirect();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') releaseRedirect();
+    };
+
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'disabled') {
+      setDisabledMessage(
+        'Your account has been disabled. Please contact the administrator for assistance.',
+      );
+      params.delete('reason');
+      const qs = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}${qs ? `?${qs}` : ''}`,
+      );
+    }
+  }, []);
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
 
-  const handleGitHubLogin = async () => {
+  const handleGitHubLogin = async (switchAccount = false) => {
+    // Synchronous guard: a fast second click can land before React applies the
+    // button's disabled attribute, and two concurrent OAuth starts would mint
+    // two states — the second invalidating the first.
+    if (redirectingRef.current) return;
     setLoadingConfig(true);
+    redirectingRef.current = true;
+    // Safety net: if the hand-off to GitHub never happens (navigation blocked,
+    // popup stripped, network stalls), release the spinner so the button can
+    // never stay disabled.
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+    }
+    resetTimerRef.current = window.setTimeout(releaseRedirect, 10_000);
     try {
       // Remember where the user was headed (guards append ?redirect=) so the
       // OAuth round-trip can return them there instead of always going to the
@@ -34,29 +106,10 @@ export default function LoginPage() {
       } else {
         sessionStorage.removeItem('revora_post_login_redirect');
       }
-
-      const config = await api.getAuthConfig();
-      const clientId = config.github_client_id;
-      if (!clientId) {
-        toast({
-          title: "GitHub Client ID is not configured on the backend.",
-          type: "error"
-        });
-        setLoadingConfig(false);
-        return;
-      }
-      // Login-CSRF: mint a single-use state via the same-origin BFF so the
-      // oauth_state cookie is set first-party (storable on http://localhost);
-      // the callback returns it for verification.
-      const startRes = await fetch('/api/auth/start', { cache: 'no-store' });
-      if (!startRes.ok) {
-        throw new Error('Could not start the GitHub sign-in flow.');
-      }
-      const { state } = (await startRes.json()) as { state: string };
-      const redirectUri = `${window.location.origin}/auth/callback`;
-      window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(state)}`;
+      await startGitHubOAuth({ switchAccount });
     } catch (err) {
-      console.error('Failed to get auth config', err);
+      console.error('Failed to start GitHub sign-in', err);
+      releaseRedirect();
       toast({
         title: "Failed to connect to the backend authorization service.",
         type: "error"
@@ -109,9 +162,19 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {disabledMessage && (
+          <div
+            role="alert"
+            className="mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm font-medium text-error"
+          >
+            {disabledMessage}
+          </div>
+        )}
+
         <button
           type="button"
-          onClick={handleGitHubLogin}
+            onClick={() => void handleGitHubLogin(false)}
+          aria-busy={loadingConfig}
           disabled={loadingConfig}
           className="w-full h-12 bg-[#24292e] text-white hover:bg-[#2c3238] border border-white/10 rounded-lg flex items-center justify-center gap-2.5 font-semibold text-sm cursor-pointer transition-all duration-150 disabled:opacity-50"
         >
@@ -123,6 +186,16 @@ export default function LoginPage() {
             </svg>
           )}
           Sign in with GitHub
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleGitHubLogin(true)}
+          aria-busy={loadingConfig}
+          disabled={loadingConfig}
+          className="w-full mt-2 h-10 bg-transparent hover:bg-surface-2 border border-border text-foreground rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-all duration-150 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        >
+          Use another GitHub account
         </button>
 
         <Link

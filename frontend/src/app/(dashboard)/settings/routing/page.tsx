@@ -6,6 +6,8 @@ import { CircleCheckIcon, GitBranchIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 type FeatureStatus = 'active' | 'under_development';
 
@@ -60,6 +62,12 @@ export default function RoutingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  // Saving routing preferences is flag-gated server-side; the current
+  // mapping still renders so users can see their configuration.
+  const { data: features } = usePlatformFeatures();
+  const routingFlag = featureState(features, 'routing_mapping');
+  const routingEnabled = routingFlag.status === 'enabled';
 
   useEffect(() => {
     async function loadData() {
@@ -173,12 +181,22 @@ export default function RoutingPage() {
         </div>
         <button
           onClick={handleSavePreferences}
-          disabled={saving}
+          disabled={saving || !routingEnabled}
+          title={!routingEnabled ? routingFlag.message ?? undefined : undefined}
           className="px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
         >
           {saving ? 'Saving...' : 'Save Preferences'}
         </button>
       </div>
+
+      {!routingEnabled && (
+        <FeatureUnavailable
+          status={routingFlag.status}
+          message={routingFlag.message}
+          title="Routing changes are unavailable"
+          className="mb-8"
+        />
+      )}
 
       <div className="space-y-4">
         {FEATURES.map((meta) => {

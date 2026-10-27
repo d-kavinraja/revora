@@ -54,14 +54,14 @@ class ReviewExecution(Base):
         JSON_TYPE, nullable=True, default=dict
     )
     commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    
+
     # Review Metadata
     summary: Mapped[str | None] = mapped_column(String, nullable=True)
     stats: Mapped[dict[str, Any] | None] = mapped_column(
         JSON_TYPE, nullable=True, default=dict
     )
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
-    
+
     # Execution Snapshot Context
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     configuration_snapshot: Mapped[dict[str, Any] | None] = mapped_column(

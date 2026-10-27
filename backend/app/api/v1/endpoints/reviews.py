@@ -187,14 +187,14 @@ async def list_reviews(
         )
 
         latest_exec = execution_map.get(review.id)
-        
+
         stats = latest_exec.stats.copy() if latest_exec and latest_exec.stats else {}
         if latest_exec:
             if latest_exec.provider:
                 stats["provider"] = stats.get("provider") or latest_exec.provider
             if latest_exec.model:
                 stats["model"] = stats.get("model") or latest_exec.model
-        
+
         result.append(
             {
                 "id": str(review.id),

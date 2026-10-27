@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
+import { AnnouncementBanner } from '@/components/landing/announcement-banner';
+import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
 import Waves from '@/components/ui/Waves';
 import { Footer } from '@/components/ui/footer';
 import { DataSignalHero } from '@/components/home/data-signal-hero';
@@ -64,6 +66,12 @@ export default function LandingPage() {
           </a>
         </p>
       </StickyBanner>
+
+      {/* Maintenance fallback banner (≤5s stale-cache window, C5) */}
+      <MaintenanceBanner />
+
+      {/* Phase 7 — landing announcements (graceful degradation: absent if backend down) */}
+      <AnnouncementBanner />
 
       {/* Waves Background */}
       <div className="fixed inset-0 pointer-events-none z-0">

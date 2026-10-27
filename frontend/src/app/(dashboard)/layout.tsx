@@ -8,6 +8,8 @@ import TargetCursor from '@/components/ui/TargetCursor';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { checkHealth } from '@/lib/api';
+import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
+import { usePlatformFeatures } from '@/lib/use-platform-features';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme } = useThemeStore();
@@ -15,6 +17,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, sessionChecked, restoreReason, logout } = useAuthStore();
+
+  // Warm the public feature-flag query once per dashboard mount (§11.1);
+  // the sidebar and gated pages share the same React Query cache entry.
+  usePlatformFeatures();
 
   // On mount, check if the backend is alive.
   // If it's sleeping (Render free tier), send user to the wake-up splash page.
@@ -38,6 +44,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!sessionChecked || isAuthenticated) return;
     if (restoreReason === 'unreachable') {
       router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    if (restoreReason === 'disabled') {
+      void (async () => {
+        await logout({ revoke: false });
+        router.replace('/login?reason=disabled');
+      })();
       return;
     }
     void (async () => {
@@ -78,6 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <Sidebar />
       <main className="flex-1 min-w-0 overflow-auto z-10 pt-16 md:pt-0">
+        <MaintenanceBanner />
         {children}
       </main>
     </div>

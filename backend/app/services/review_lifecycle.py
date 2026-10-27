@@ -336,11 +336,11 @@ class ReviewLifecycleService:
         from app.services.review_execution_service import create_execution
 
         execution = await create_execution(
-            db, 
-            review.id, 
-            trigger=action, 
-            commit_sha=pr.head_sha, 
-            provider=provider, 
+            db,
+            review.id,
+            trigger=action,
+            commit_sha=pr.head_sha,
+            provider=provider,
             model=model,
             configuration_snapshot=settings,
             api_key_id=self._safe_uuid(key_id),

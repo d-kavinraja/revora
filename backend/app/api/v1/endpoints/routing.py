@@ -6,12 +6,14 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.core.security import encryption_service
 from app.db.session import get_db
 from app.models.user import User
 from app.services.api_key_service import api_key_service
 from app.services.model_discovery import model_discovery_engine
 from app.services.model_router import model_router
+from app.services.provider_registry import provider_registry_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,6 +41,14 @@ async def get_models_per_provider(
 ):
     """Get discovered models grouped by provider for the current user."""
     user_keys = await api_key_service.get_all_usable_keys(db, current_user.id)
+
+    # Provider-status filter (C1): only available providers may be probed.
+    usable_providers = {
+        p.name for p in await provider_registry_service.get_usable(db)
+    }
+    user_keys = {
+        name: key for name, key in user_keys.items() if name in usable_providers
+    }
 
     # Probe every provider concurrently: each branch is an independent external
     # HTTP round-trip (no DB access), so the endpoint costs the slowest provider
@@ -104,6 +114,7 @@ async def update_routing_preferences(
     data: RoutingPreferencesUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("routing_mapping")),
 ):
     """Update per-feature routing preferences."""
     try:
@@ -117,6 +128,25 @@ async def update_routing_preferences(
 
         if not isinstance(user.settings, dict):
             user.settings = {}
+
+        # Phase 4: blocked providers cannot be stored as preferences
+        # (additive check — zero-state flows unchanged).
+        for feature_pref in (data.routing or {}).values():
+            if not isinstance(feature_pref, dict):
+                continue
+            pref_provider = feature_pref.get("provider")
+            if not pref_provider:
+                continue
+            usable, provider_row = await provider_registry_service.usability(
+                db, pref_provider
+            )
+            if not usable:
+                detail = (
+                    provider_row.status_message
+                    if provider_row is not None and provider_row.status_message
+                    else f"Provider '{pref_provider}' is not available for new routing preferences."
+                )
+                raise HTTPException(status_code=400, detail=detail)
 
         # Update model_routing
         user.settings["model_routing"] = data.routing

@@ -1,3 +1,4 @@
+from app.models.admin import AdminSession, AdminUser
 from app.models.api_key import ApiKey
 from app.models.audit import AuditLog
 from app.models.discovered_model import DiscoveredModel
@@ -15,6 +16,12 @@ from app.models.knowledge import (
 from app.models.mouthmap import MouthmapInferenceRun
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
+from app.models.platform import (
+    Announcement,
+    FeatureFlag,
+    ModelOverride,
+    PlatformSetting,
+)
 from app.models.prompt import (
     PromptCacheRecord,
     PromptMetric,
@@ -39,6 +46,9 @@ from app.models.verification import (
 from app.queue.models import ReviewJob
 
 __all__ = [
+    "AdminSession",
+    "AdminUser",
+    "Announcement",
     "ApiKey",
     "ApiKeyHealth",
     "AuditLog",
@@ -46,13 +56,16 @@ __all__ = [
     "DiscoveredModel",
     "FailoverLog",
     "FalsePositiveReportModel",
+    "FeatureFlag",
     "HallucinationReportModel",
     "Installation",
     "LLMRequestLog",
     "LlmTokenUsage",
+    "ModelOverride",
     "MouthmapInferenceRun",
     "OrgMember",
     "Organization",
+    "PlatformSetting",
     "PromptCacheRecord",
     "PromptMetric",
     "PromptTemplate",

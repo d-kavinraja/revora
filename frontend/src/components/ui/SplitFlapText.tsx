@@ -131,6 +131,13 @@ export default function SplitFlapText({
   const rafRef = useRef<number | null>(null);
   const cycleTimerRef = useRef<number | null>(null);
   const currentTextRef = useRef<string>('');
+  // Bumped for every animation run. A scheduled frame whose captured
+  // generation is stale returns immediately, so at most one animation loop
+  // can ever be live even if a frame is missed or a cleanup is raced.
+  const generationRef = useRef(0);
+  // Phrase set the animation was last seeded with; used to distinguish a real
+  // phrase change (re-seed) from an incidental effect re-run (do not re-seed).
+  const lastPhrasesKeyRef = useRef<string | null>(null);
 
   const sourceWords = Array.isArray(words) && words.length > 0 ? words : DEFAULT_WORDS;
   const phrasesKey =
@@ -157,11 +164,15 @@ export default function SplitFlapText({
   }
 
   useEffect(() => {
-    const clearAnimation = () => {
+    const cancelLoop = () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+    };
+
+    const clearAnimation = () => {
+      cancelLoop();
 
       if (cycleTimerRef.current) {
         clearTimeout(cycleTimerRef.current);
@@ -172,7 +183,14 @@ export default function SplitFlapText({
     clearAnimation();
 
     const firstPhrase = normalizedPhrases[0] || '';
-    currentTextRef.current = firstPhrase;
+    // Re-seed the "current" text only when the phrase set itself changed.
+    // Re-seeding on every effect re-run (for example when the
+    // prefers-reduced-motion query resolves) would restart an in-flight
+    // animation from the first phrase and produce a fresh burst of flips.
+    if (lastPhrasesKeyRef.current !== phrasesKey) {
+      lastPhrasesKeyRef.current = phrasesKey;
+      currentTextRef.current = firstPhrase;
+    }
 
     if (normalizedPhrases.length <= 1 || typeof window === 'undefined') {
       return clearAnimation;
@@ -188,6 +206,11 @@ export default function SplitFlapText({
     const activeCharset = resolveCharset(charset);
 
     const animateTo = (targetPhrase: string): number => {
+      // Never leave a previous run alive: only one loop may run at a time.
+      cancelLoop();
+      const generation = generationRef.current + 1;
+      generationRef.current = generation;
+
       if (prefersReducedMotion) {
         currentTextRef.current = targetPhrase;
         setTiles(createTiles(targetPhrase));
@@ -228,24 +251,42 @@ export default function SplitFlapText({
 
       const updateTiles = (updates: TileUpdate[]) => {
         setTiles((previous) => {
-          const nextTiles = [...previous];
+          const nextTiles = previous.map((tile) => tile);
+          let changed = false;
+
           updates.forEach((update) => {
             const tile = nextTiles[update.index];
             if (!tile) return;
 
+            const flipping = !update.done;
+
+            // Skip tiles whose rendered value is unchanged: returning the same
+            // array lets React bail out of the re-render, and leaving `tick`
+            // alone stops the flap spans (keyed by it) from remounting on
+            // every frame.
+            if (
+              tile.current === update.current &&
+              tile.next === update.next &&
+              tile.flipping === flipping
+            ) {
+              return;
+            }
+
             nextTiles[update.index] = {
               current: update.current,
               next: update.next,
-              flipping: !update.done,
+              flipping,
               tick: tile.tick + 1,
             };
+            changed = true;
           });
-          return nextTiles;
+
+          return changed ? nextTiles : previous;
         });
       };
 
       const tick = (now: number) => {
-        if (cancelled) return;
+        if (cancelled || generationRef.current !== generation) return;
 
         const elapsed = now - startedAt;
         const updates: TileUpdate[] = [];
@@ -302,6 +343,14 @@ export default function SplitFlapText({
       cycleTimerRef.current = window.setTimeout(() => {
         if (cancelled) return;
 
+        // A hidden tab throttles or pauses requestAnimationFrame while timers
+        // keep firing. Advancing here would start an animation that cannot run
+        // to completion and strand a loop behind, so idle until visible again.
+        if (document.hidden) {
+          scheduleNext(safeCycleDelay);
+          return;
+        }
+
         const nextIndex = phraseIndex + 1;
 
         if (nextIndex >= normalizedPhrases.length && !loop) return;
@@ -320,6 +369,7 @@ export default function SplitFlapText({
     };
   }, [
     normalizedPhrases,
+    phrasesKey,
     width,
     loop,
     cycleDelay,

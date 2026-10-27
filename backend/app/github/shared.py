@@ -20,7 +20,9 @@ from app.orchestrator.models import (
     CONFIG_SOURCE_ROUTING,
 )
 from app.services.api_key_service import api_key_service
-from app.services.provider_registry import provider_registry_service
+from app.services.provider_registry import (
+    provider_registry_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +63,20 @@ async def resolve_provider_config(
                     db_key = await api_key_service.get_by_id(
                         db_session, uuid.UUID(api_key_id)
                     )
-                    if db_key and str(db_key.user_id) == user_id and db_key.is_valid:
+                    if (
+                        db_key
+                        and str(db_key.user_id) == str(user_id)
+                        and db_key.is_valid
+                        and db_key.is_enabled
+                    ):
                         key_valid = True
                 except Exception:
                     pass
             if not api_key_id or key_valid:
+                # Availability gate (phase 4, §9.3 #1): an admin-blocked
+                # provider fails fast — the mapping is retained (never
+                # auto-cleaned) and no provider/model is substituted (D2).
+                await provider_registry_service.ensure_usable(db_session, provider)
                 config_source = CONFIG_SOURCE_REPO
                 logger.info(f"MODE 1 (repo config): {provider}/{model}")
                 return provider, model, api_key_id, config_source
@@ -101,6 +112,11 @@ async def resolve_provider_config(
                     db_session, user_id
                 )
                 if provider in user_keys:
+                    # Availability gate (phase 4): a blocked provider never
+                    # executes — fail fast, never substitute another provider.
+                    await provider_registry_service.ensure_usable(
+                        db_session, provider
+                    )
                     api_key_id = str(user_keys[provider].id)
                     config_source = CONFIG_SOURCE_ROUTING
                     logger.info(f"MODE 2 (user routing): {provider}/{model}")
@@ -127,7 +143,7 @@ async def build_available_providers_for_user(
     """
     user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     user_keys = await api_key_service.get_all_usable_keys(db_session, user_uuid)
-    providers = await provider_registry_service.get_enabled(db_session)
+    providers = await provider_registry_service.get_usable(db_session)
 
     available = []
     for provider in providers:
@@ -330,11 +346,11 @@ async def get_or_create_review_records(
             )
             if not existing_exec_id:
                 await create_execution(
-                    db, 
-                    db_review.id, 
-                    trigger="webhook", 
-                    commit_sha=head_sha, 
-                    provider=provider, 
+                    db,
+                    db_review.id,
+                    trigger="webhook",
+                    commit_sha=head_sha,
+                    provider=provider,
                     model=model,
                     api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
                     repository_full_name=db_repo.full_name,

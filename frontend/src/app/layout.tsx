@@ -102,14 +102,21 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                const stored = localStorage.getItem('revora-theme');
-                let theme = 'dark';
-                if (stored) {
-                  theme = JSON.parse(stored).state.theme;
-                } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-                  theme = 'light';
+                const isAdmin = (window.location.pathname || '').startsWith('/admin');
+                if (isAdmin) {
+                  const stored = localStorage.getItem('revora-admin-theme');
+                  const theme = stored ? JSON.parse(stored).state.theme : 'dark';
+                  document.documentElement.classList.add(theme === 'dark' ? 'admin-dark' : 'admin-light');
+                } else {
+                  const stored = localStorage.getItem('revora-theme');
+                  let theme = 'dark';
+                  if (stored) {
+                    theme = JSON.parse(stored).state.theme;
+                  } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    theme = 'light';
+                  }
+                  document.documentElement.classList.add(theme);
                 }
-                document.documentElement.classList.add(theme);
               } catch (e) {}
             `,
           }}

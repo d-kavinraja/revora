@@ -9,12 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.models.user import User
 from app.security.content_guard import detect_injection, sanitize_messages
+from app.services.api_key_service import api_key_service
 from app.services.cost_estimator import cost_estimator
 from app.services.model_discovery import classify_provider_error
+from app.services.model_overrides import model_overrides_service
 from app.services.model_router import model_router
+from app.services.provider_registry import (
+    ProviderUnavailableError,
+    provider_registry_service,
+)
 from app.services.retry_failover import retry_failover
 from app.services.token_manager import token_manager
 from app.services.usage_tracker import usage_tracker
@@ -46,6 +53,7 @@ async def execute_llm(
     data: LLMExecuteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(require_feature("model_lab")),
 ):
     """Execute an LLM call using the user's own API keys."""
     # Sanitize messages and detect injection
@@ -84,6 +92,39 @@ async def execute_llm(
         provider = best_route.provider
         model = best_route.model
         api_key_id = best_route.api_key_id
+
+    # Provider/credential enforcement (C1): an admin-blocked provider or a
+    # disabled credential is refused before any provider call. The provider's
+    # actionable status_message is surfaced when available (CD2).
+    if provider:
+        try:
+            await provider_registry_service.ensure_usable(db, provider)
+        except ProviderUnavailableError as exc:
+            raise HTTPException(status_code=400, detail=exc.message)
+
+    if api_key_id:
+        try:
+            db_key = await api_key_service.get_by_id(db, uuid.UUID(api_key_id))
+        except (ValueError, AttributeError):
+            db_key = None
+        if (
+            db_key is None
+            or str(db_key.user_id) != str(current_user.id)
+            or not db_key.is_valid
+            or not db_key.is_enabled
+        ):
+            raise HTTPException(
+                status_code=400, detail="Invalid API key selected."
+            )
+
+    # Per-model overrides (§11.2): a disabled model is refused explicitly —
+    # other models and the provider stay usable (precedence: provider/credential
+    # blocks are checked upstream; the override is the last block).
+    if await model_overrides_service.is_model_disabled(db, provider, model):
+        raise HTTPException(
+            status_code=400,
+            detail="The selected model is currently unavailable. Please pick another model.",
+        )
 
     start_time = time.time()
     request_id = hashlib.sha256(

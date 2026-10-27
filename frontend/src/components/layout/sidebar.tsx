@@ -9,22 +9,32 @@ import { LoaderIcon } from '@/components/ui/loader-icon';
 import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon } from '@animateicons/react/lucide';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useRef, useState, useEffect } from 'react';
+import { usePlatformFeatures, isFeatureEnabled } from '@/lib/use-platform-features';
 
-const navLinks = [
+// `feature` links a nav entry to a platform flag (§11.1); entries without one
+// are always shown. Hiding is cosmetic — the server still enforces 503.
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutGridIcon;
+  feature?: string;
+};
+
+const navLinks: NavLink[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGridIcon },
-  { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon },
+  { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon, feature: 'guide' },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
   { href: '/reviews', label: 'Reviews', icon: ClipboardIcon },
-  { href: '/model-lab', label: 'Model Lab', icon: BrainIcon },
+  { href: '/model-lab', label: 'Model Lab', icon: BrainIcon, feature: 'model_lab' },
 ];
 
-const bottomLinks = [
+const bottomLinks: NavLink[] = [
   { href: '/settings/api-keys', label: 'API Keys', icon: KeyIcon },
   { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
   { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
-  { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon },
+  { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
   { href: '/settings/health', label: 'Health', icon: ActivityIcon },
-  { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon },
+  { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon, feature: 'analytics' },
 ];
 
 function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isNew?: boolean }) {
@@ -128,6 +138,14 @@ export function Sidebar() {
 
   const isActive = (href: string) => pathname === href;
 
+  const { data: features } = usePlatformFeatures();
+  const visibleNavLinks = navLinks.filter(
+    (link) => !link.feature || isFeatureEnabled(features, link.feature)
+  );
+  const visibleBottomLinks = bottomLinks.filter(
+    (link) => !link.feature || isFeatureEnabled(features, link.feature)
+  );
+
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[240px]';
 
   return (
@@ -202,7 +220,7 @@ export function Sidebar() {
               Navigation
             </div>
           )}
-          {navLinks.map((link) => (
+          {visibleNavLinks.map((link) => (
             <NavLinkItem
               key={link.href}
               isNew={link.href === '/model-lab'}
@@ -220,7 +238,7 @@ export function Sidebar() {
             </div>
           )}
           {collapsed && <div className="my-3 mx-2 border-t border-sidebar-border" />}
-          {bottomLinks.map((link) => (
+          {visibleBottomLinks.map((link) => (
             <BottomLinkItem
               key={link.href}
               href={link.href}

@@ -1,13 +1,28 @@
+'use client';
+
 import Link from 'next/link';
 import { Info } from 'lucide-react';
 import { FadeIn } from './_components/FadeIn';
 import { ModelCard } from './_components/ModelCard';
 import { ComingSoonCard } from './_components/ComingSoonCard';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 // Main content only — the sidebar/header chrome comes from (dashboard)/layout.tsx.
 // Revora's own trained models launch here; new model cards are appended beside
 // MouthMapCard. Third-party BYOK providers live under Settings, not here.
 export default function ModelLabPage() {
+  const { data: features } = usePlatformFeatures();
+  const { status, message } = featureState(features, 'model_lab');
+
+  if (status !== 'enabled') {
+    return (
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+        <FeatureUnavailable status={status} message={message} title="Model Lab is unavailable" />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       {/* Breadcrumb */}

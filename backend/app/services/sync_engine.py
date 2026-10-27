@@ -997,10 +997,9 @@ async def _login_reconciliation(user_id: uuid.UUID) -> None:
     This avoids GitHub API storms on login while ensuring fresh state for
     repositories the user actually cares about.
     """
-    from app.db.session import AsyncSessionLocal as _SessionLocal
-
     # Lazy import to avoid a circular import (repositories imports sync_engine).
     from app.api.v1.endpoints.repositories import _process_queued_sync
+    from app.db.session import AsyncSessionLocal as _SessionLocal
 
     logger.info(f"Login reconciliation started for user {user_id}")
 
@@ -1062,7 +1061,6 @@ async def _login_reconciliation(user_id: uuid.UUID) -> None:
             )
         )
         for run in queued_runs.scalars().all():
-            repo_id = uuid.UUID(run.details["repo_id"])
             await _process_queued_sync(run.id, user_id)
 
     logger.info(f"Login reconciliation completed for user {user_id}")
