@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import {
   adminApi,
   type AdminMaintenanceFull,
@@ -13,6 +13,15 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill } from '@/components/shared/pill';
 import { useToast } from '@/components/ui/toaster';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { AdminPage } from '@/components/admin/page-shell';
+import {
+  AdminButton,
+  ADMIN_INPUT_CLASS,
+  ADMIN_TEXTAREA_CLASS,
+  CheckboxRow,
+  Field,
+} from '@/components/admin/controls';
+import { QueryError } from '@/components/admin/states';
 
 interface MaintenanceForm {
   enabled: boolean;
@@ -82,10 +91,6 @@ function errorInfo(error: unknown): { title: string; description?: string } {
   return { title: 'Could not update maintenance mode' };
 }
 
-const fieldLabelCls = 'block text-xs font-medium text-muted-foreground mb-1';
-const fieldCls =
-  'w-full h-11 rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
-
 export default function AdminMaintenancePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -128,97 +133,66 @@ export default function AdminMaintenancePage() {
   const hasChanges = Object.keys(payload).length > 1; // version alone is not a change
 
   return (
-    <div>
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-          Maintenance
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Global maintenance switch. While enabled, every user API call answers
-          503 and page loads land on the public status page — the admin console
-          keeps working so this switch can always be turned back off. Sessions
-          are never revoked.
-        </p>
-      </div>
-
+    <AdminPage
+      eyebrow="System"
+      title="Maintenance"
+      description="Global maintenance switch. While enabled, every user API call answers 503 and page loads land on the public status page — the admin console keeps working so this switch can always be turned back off. Sessions are never revoked."
+    >
       {isError && !isPending && (
-        <div
-          role="alert"
-          className="mt-4 flex items-center gap-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            Could not load maintenance state.{' '}
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="underline underline-offset-2 cursor-pointer"
-            >
-              Try again
-            </button>
-          </span>
-        </div>
+        <QueryError
+          message="Could not load maintenance state."
+          onRetry={() => refetch()}
+        />
       )}
 
       {data && current && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          {/* State + form */}
-          <div className="rounded-xl border border-border bg-surface-1 p-5">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-2">
-                  <Wrench size={17} />
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
+                  <Wrench size={17} aria-hidden="true" />
                 </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-foreground">
                     Current state
-                  </p>
+                  </h2>
                   <p className="text-xs text-muted-foreground">
                     {data.changed_at
-                      ? `Changed ${formatDateTime(data.changed_at)} by ${
-                          data.changed_by ?? 'system'
-                        }`
+                      ? `Changed ${formatDateTime(data.changed_at)}`
                       : 'Never changed'}
                     {' · v'}
                     {data.version}
                   </p>
+                  {data.changed_at && (
+                    <p
+                      className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
+                      title={data.changed_by ?? 'system'}
+                    >
+                      by {data.changed_by ?? 'system'}
+                    </p>
+                  )}
                 </div>
               </div>
-              <Pill tone={data.enabled ? 'error' : 'success'}>
+              <Pill tone={data.enabled ? 'error' : 'success'} dot>
                 {data.enabled ? 'Enabled' : 'Disabled'}
               </Pill>
             </div>
 
             <div className="mt-5 space-y-3">
-              <label className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={current.enabled}
-                  onChange={(event) => {
-                    const next = event.target.checked;
-                    setForm((prev) => ({
-                      ...(prev ?? fromForm(data)),
-                      enabled: next,
-                    }));
-                  }}
-                  className="mt-0.5 h-4 w-4 rounded border-border text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                />
-                <span>
-                  <span className="block text-sm text-foreground">
-                    Maintenance mode enabled
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Blocks all user traffic (reads included). Healthchecks,
-                    webhooks, the public status page and the admin console stay
-                    available.
-                  </span>
-                </span>
-              </label>
+              <CheckboxRow
+                checked={current.enabled}
+                onChange={(next) => {
+                  setForm((prev) => ({
+                    ...(prev ?? fromForm(data)),
+                    enabled: next,
+                  }));
+                }}
+                title="Maintenance mode enabled"
+                description="Blocks all user traffic (reads included). Healthchecks, webhooks, the public status page and the admin console stay available."
+              />
 
-              <div>
-                <label htmlFor="maintenance-title" className={fieldLabelCls}>
-                  Public title (optional)
-                </label>
+              <Field label="Public title (optional)" htmlFor="maintenance-title">
                 <input
                   id="maintenance-title"
                   type="text"
@@ -232,12 +206,12 @@ export default function AdminMaintenancePage() {
                     }));
                   }}
                   placeholder="Under maintenance"
-                  className={fieldCls}
+                  className={ADMIN_INPUT_CLASS}
                 />
-              </div>
+              </Field>
 
               <div>
-                <label htmlFor="maintenance-message" className={fieldLabelCls}>
+                <label htmlFor="maintenance-message" className="mb-1 block text-xs font-medium text-muted-foreground">
                   Public message (optional)
                 </label>
                 <textarea
@@ -253,14 +227,11 @@ export default function AdminMaintenancePage() {
                     }));
                   }}
                   placeholder="Revora is receiving an upgrade. We will be back shortly."
-                  className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className={ADMIN_TEXTAREA_CLASS}
                 />
               </div>
 
-              <div>
-                <label htmlFor="maintenance-eta" className={fieldLabelCls}>
-                  Expected return (optional)
-                </label>
+              <Field label="Expected return (optional)" htmlFor="maintenance-eta">
                 <input
                   id="maintenance-eta"
                   type="datetime-local"
@@ -272,14 +243,14 @@ export default function AdminMaintenancePage() {
                       eta: value,
                     }));
                   }}
-                  className={fieldCls}
+                  className={ADMIN_INPUT_CLASS}
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label htmlFor="maintenance-reason" className={fieldLabelCls}>
-                  Internal reason (never shown to users)
-                </label>
+              <Field
+                label="Internal reason (never shown to users)"
+                htmlFor="maintenance-reason"
+              >
                 <input
                   id="maintenance-reason"
                   type="text"
@@ -293,27 +264,25 @@ export default function AdminMaintenancePage() {
                     }));
                   }}
                   placeholder="e.g. DB migration, incident #42"
-                  className={fieldCls}
+                  className={ADMIN_INPUT_CLASS}
                 />
-              </div>
+              </Field>
 
-              <button
-                type="button"
+              <AdminButton
+                variant="primary"
                 disabled={!hasChanges || updateMutation.isPending}
                 onClick={() => setConfirming(true)}
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 Save changes
-              </button>
+              </AdminButton>
             </div>
-          </div>
+          </section>
 
-          {/* Preview */}
-          <div className="rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-sm font-semibold text-foreground">
+          <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
+            <h2 className="text-sm font-semibold text-foreground">
               User-facing preview
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            </h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               Exactly what visitors see on <code>/maintenance</code> and in the
               banner (internal reason never leaves this console).
             </p>
@@ -322,7 +291,7 @@ export default function AdminMaintenancePage() {
               role="status"
               className="mt-4 rounded-xl border border-border bg-surface-2 p-5 text-center"
             >
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-warning/15 text-warning">
                 <Wrench size={22} aria-hidden="true" />
               </div>
               <p className="mt-3 text-lg font-semibold text-foreground">
@@ -345,14 +314,14 @@ export default function AdminMaintenancePage() {
               )}
             </div>
 
-            <p className="mt-4 text-xs text-muted-foreground">
-              Recovery paths while enabled: this console, or headless
-              {' '}
-              <code className="font-mono">python -m scripts.admin_cli maintenance off</code>
-              {' '}
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+              Recovery paths while enabled: this console, or headless{' '}
+              <code className="font-mono">
+                python -m scripts.admin_cli maintenance off
+              </code>{' '}
               on the server.
             </p>
-          </div>
+          </section>
         </div>
       )}
 
@@ -383,6 +352,6 @@ export default function AdminMaintenancePage() {
           The change is applied immediately and written to the audit log.
         </p>
       </ConfirmDialog>
-    </div>
+    </AdminPage>
   );
 }

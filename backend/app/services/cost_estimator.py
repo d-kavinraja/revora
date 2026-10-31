@@ -14,7 +14,6 @@ PROVIDER_COST_TABLE = {
     "groq": {"input": 0.00015, "output": 0.0006},  # GPT-OSS 120B flagship rate
     "deepseek": {"input": 0.00014, "output": 0.00028},  # DeepSeek Chat
     "openrouter": {"input": 0.003, "output": 0.015},  # Varies by model
-    "azure_openai": {"input": 0.0025, "output": 0.01},  # Same as OpenAI
     "ollama": {"input": 0.0, "output": 0.0},  # Local, free
     "ollama_cloud": {"input": 0.0, "output": 0.0},  # Cloud free tier, no token cost
     "cohere": {"input": 0.0015, "output": 0.002},  # Command R+

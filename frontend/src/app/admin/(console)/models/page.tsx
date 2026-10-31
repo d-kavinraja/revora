@@ -3,11 +3,18 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, RotateCcw } from 'lucide-react';
+import { Boxes, RotateCcw } from 'lucide-react';
 import { adminApi, type AdminModelOverrideUpdate } from '@/lib/api';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill } from '@/components/shared/pill';
 import { useToast } from '@/components/ui/toaster';
+import { AdminPage } from '@/components/admin/page-shell';
+import {
+  AdminButton,
+  ADMIN_INPUT_CLASS,
+  Field,
+} from '@/components/admin/controls';
+import { QueryError } from '@/components/admin/states';
 
 function errorDetail(error: unknown): string | null {
   if (axios.isAxiosError(error)) {
@@ -16,11 +23,6 @@ function errorDetail(error: unknown): string | null {
   }
   return null;
 }
-
-const fieldLabelCls =
-  'block text-xs font-medium text-muted-foreground mb-1';
-const fieldCls =
-  'w-full h-11 rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 
 export default function AdminModelsPage() {
   const queryClient = useQueryClient();
@@ -94,60 +96,36 @@ export default function AdminModelsPage() {
   const overrides = overridesQuery.data ?? [];
 
   return (
-    <div>
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-          Models
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Per-model overrides. A disabled model disappears from user-facing
-          model lists, is skipped by the router and is refused on explicit
-          execution — the provider and its other models are untouched.
-          Setting a model back to available clears the override immediately,
-          with no user action needed. All changes are audited.
-        </p>
-      </div>
-
+    <AdminPage
+      eyebrow="System"
+      title="Models"
+      description="Per-model overrides. A disabled model disappears from user-facing model lists, is skipped by the router and is refused on explicit execution — the provider and its other models are untouched. Setting a model back to available clears the override immediately, with no user action needed. All changes are audited."
+    >
       {loadError && (
-        <div
-          role="alert"
-          className="mt-4 flex items-center gap-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            Could not load model overrides.{' '}
-            <button
-              type="button"
-              onClick={() => {
-                void overridesQuery.refetch();
-                void providersQuery.refetch();
-              }}
-              className="underline underline-offset-2 cursor-pointer"
-            >
-              Try again
-            </button>
-          </span>
-        </div>
+        <QueryError
+          message="Could not load model overrides."
+          onRetry={() => {
+            void overridesQuery.refetch();
+            void providersQuery.refetch();
+          }}
+        />
       )}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-surface-1 p-5">
-          <p className="text-sm font-semibold text-foreground">Disable a model</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
+          <h2 className="text-sm font-semibold text-foreground">Disable a model</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             Pick the provider and type the exact model identifier (as it
             appears in user model lists, e.g. a registry model id).
           </p>
 
           <div className="mt-4 space-y-3">
-            <div>
-              <label htmlFor="override-provider" className={fieldLabelCls}>
-                Provider
-              </label>
+            <Field label="Provider" htmlFor="override-provider">
               <select
                 id="override-provider"
                 value={providerSlug}
                 onChange={(event) => setProviderSlug(event.target.value)}
-                className={`${fieldCls} cursor-pointer`}
+                className={`${ADMIN_INPUT_CLASS} cursor-pointer`}
               >
                 <option value="">Select a provider…</option>
                 {providers.map((provider) => (
@@ -156,11 +134,8 @@ export default function AdminModelsPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label htmlFor="override-model" className={fieldLabelCls}>
-                Model ID
-              </label>
+            </Field>
+            <Field label="Model ID" htmlFor="override-model">
               <input
                 id="override-model"
                 type="text"
@@ -168,13 +143,10 @@ export default function AdminModelsPage() {
                 maxLength={200}
                 placeholder="e.g. gemini-2.5-flash"
                 onChange={(event) => setModelId(event.target.value)}
-                className={fieldCls}
+                className={ADMIN_INPUT_CLASS}
               />
-            </div>
-            <div>
-              <label htmlFor="override-message" className={fieldLabelCls}>
-                User-facing message (optional)
-              </label>
+            </Field>
+            <Field label="User-facing message (optional)" htmlFor="override-message">
               <input
                 id="override-message"
                 type="text"
@@ -182,34 +154,29 @@ export default function AdminModelsPage() {
                 maxLength={300}
                 placeholder="Shown when this model is referenced (defaults to the standard unavailable message)."
                 onChange={(event) => setMessage(event.target.value)}
-                className={fieldCls}
+                className={ADMIN_INPUT_CLASS}
               />
-            </div>
-            <button
-              type="button"
-              disabled={
-                !providerSlug ||
-                !modelId.trim() ||
-                applyMutation.isPending
-              }
+            </Field>
+            <AdminButton
+              variant="dangerSoft"
+              disabled={!providerSlug || !modelId.trim() || applyMutation.isPending}
               onClick={() => setConfirmingDisable(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-lg border border-error/30 bg-error/10 px-4 text-sm font-medium text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               Disable model
-            </button>
+            </AdminButton>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-xl border border-border bg-surface-1 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-2">
-                <Boxes size={17} />
+        <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
+                <Boxes size={17} aria-hidden="true" />
               </span>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-foreground">
                   Active overrides
-                </p>
+                </h2>
                 <p className="text-xs text-muted-foreground">
                   {overrides.length === 0
                     ? 'No models are currently disabled.'
@@ -232,7 +199,7 @@ export default function AdminModelsPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {override.model_id}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -242,10 +209,13 @@ export default function AdminModelsPage() {
                           </span>
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Pill tone="error">Disabled</Pill>
-                        <button
-                          type="button"
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Pill tone="error" dot>
+                          Disabled
+                        </Pill>
+                        <AdminButton
+                          size="sm"
+                          variant="secondary"
                           disabled={applyMutation.isPending}
                           onClick={() => {
                             setRestoringKey(key);
@@ -256,11 +226,10 @@ export default function AdminModelsPage() {
                               message: null,
                             });
                           }}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 text-xs font-medium text-foreground transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                         >
                           <RotateCcw size={13} />
                           {busy ? 'Restoring…' : 'Restore'}
-                        </button>
+                        </AdminButton>
                       </div>
                     </div>
                     {override.message && (
@@ -273,7 +242,7 @@ export default function AdminModelsPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       <ConfirmDialog
@@ -300,6 +269,6 @@ export default function AdminModelsPage() {
           Restore the model at any time from “Active overrides”.
         </p>
       </ConfirmDialog>
-    </div>
+    </AdminPage>
   );
 }

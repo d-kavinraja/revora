@@ -13,7 +13,7 @@ import Waves from '@/components/ui/Waves';
 import { Footer } from '@/components/ui/footer';
 import { DataSignalHero } from '@/components/home/data-signal-hero';
 import { LogoLoop } from '@/components/ui/logo-loop';
-import { Gemini, OpenAI, Claude, DeepSeek, Groq, OpenRouter, Azure, Mistral, Cohere, Ollama } from '@lobehub/icons';
+import { Gemini, OpenAI, Claude, DeepSeek, Groq, OpenRouter, Mistral, Cohere, Ollama } from '@lobehub/icons';
 
 const apiLogos = [
   { node: <Gemini.Color />, title: "Google Gemini" },
@@ -22,7 +22,6 @@ const apiLogos = [
   { node: <DeepSeek.Color />, title: "DeepSeek" },
   { node: <Groq />, title: "Groq" },
   { node: <OpenRouter className="text-blue-500" />, title: "OpenRouter" },
-  { node: <Azure.Color />, title: "Azure OpenAI" },
   { node: <Mistral.Color />, title: "Mistral AI" },
   { node: <Cohere.Color />, title: "Cohere" },
   { node: <Ollama />, title: "Ollama" },

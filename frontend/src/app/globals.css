@@ -635,3 +635,123 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Admin console instrument layer.
+ * Additive only: the palette above stays the single source of truth. These
+ * variables describe admin chrome (rail, topbar, washes) and the readout
+ * voice, and resolve per admin theme because the root script always puts
+ * `.admin-light` or `.admin-dark` on <html> for /admin routes.
+ * ------------------------------------------------------------------------- */
+
+.admin-light {
+  --admin-rail: oklch(0.995 0 0);
+  --admin-topbar: oklch(1 0 0 / 0.82);
+  --admin-wash: oklch(0.145 0 0 / 0.04);
+  --admin-wash-strong: oklch(0.145 0 0 / 0.07);
+  --admin-hairline-strong: oklch(0.145 0 0 / 0.14);
+  --admin-unrecorded: oklch(0.55 0 0 / 0.6);
+  --admin-elev: 0 1px 2px oklch(0.145 0 0 / 0.05),
+    0 18px 40px -32px oklch(0.145 0 0 / 0.35);
+}
+
+.admin-dark {
+  --admin-rail: oklch(0.105 0.005 270);
+  --admin-topbar: oklch(0.105 0.005 270 / 0.82);
+  --admin-wash: oklch(1 0 0 / 0.045);
+  --admin-wash-strong: oklch(1 0 0 / 0.075);
+  --admin-hairline-strong: oklch(1 0 0 / 0.16);
+  --admin-unrecorded: oklch(0.78 0 0 / 0.45);
+  --admin-elev: 0 1px 0 oklch(1 0 0 / 0.03),
+    0 24px 48px -36px oklch(0 0 0 / 0.7);
+}
+
+.admin-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.admin-figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+}
+
+.admin-hairline {
+  border-color: var(--admin-hairline-strong);
+}
+
+.admin-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+}
+
+.admin-frame-elevated {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+  box-shadow: var(--admin-elev);
+}
+
+/* The recurring stat-card silhouette: a 2px signal tick on the top edge. */
+.admin-tick {
+  position: relative;
+}
+
+.admin-tick::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand), transparent 72%);
+  pointer-events: none;
+}
+
+.admin-unrecorded {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--admin-unrecorded) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* Mosaic for dashboard panels: natural-height cards, no stretched empties. */
+.admin-masonry {
+  columns: 1;
+  column-gap: 1rem;
+}
+
+.admin-masonry > * {
+  break-inside: avoid;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  .admin-masonry {
+    columns: 2;
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-masonry {
+    columns: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-motion,
+  .admin-motion * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

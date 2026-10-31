@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Megaphone, Plus } from 'lucide-react';
+import { Megaphone, Plus } from 'lucide-react';
 import {
   adminApi,
   type AdminAnnouncementRead,
@@ -14,7 +14,18 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Pill, toneForStatus } from '@/components/shared/pill';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { Modal } from '@/components/shared/modal';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { AdminPage } from '@/components/admin/page-shell';
+import {
+  AdminButton,
+  ADMIN_INPUT_CLASS,
+  ADMIN_TEXTAREA_CLASS,
+  CheckboxRow,
+  Field,
+  SelectFilter,
+} from '@/components/admin/controls';
+import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
 
@@ -26,6 +37,9 @@ const KINDS = [
   'provider_update',
   'general',
 ] as const;
+
+const actionLinkCls =
+  'cursor-pointer rounded text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 
 export default function AdminAnnouncementsPage() {
   const queryClient = useQueryClient();
@@ -74,8 +88,12 @@ export default function AdminAnnouncementsPage() {
       header: 'Title',
       render: (row) => (
         <div className="min-w-0">
-          <p className="font-medium text-foreground truncate max-w-[240px]" title={row.title}>{row.title}</p>
-          <p className="text-xs text-muted-foreground truncate max-w-[240px]" title={row.message}>{row.message}</p>
+          <p className="max-w-[240px] truncate font-medium text-foreground" title={row.title}>
+            {row.title}
+          </p>
+          <p className="max-w-[240px] truncate text-xs text-muted-foreground" title={row.message}>
+            {row.message}
+          </p>
         </div>
       ),
     },
@@ -88,7 +106,7 @@ export default function AdminAnnouncementsPage() {
       key: 'state',
       header: 'State',
       render: (row) => (
-        <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')}>
+        <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')} dot>
           {row.state}
         </Pill>
       ),
@@ -97,7 +115,7 @@ export default function AdminAnnouncementsPage() {
       key: 'window',
       header: 'Window',
       render: (row) => (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="admin-figure whitespace-nowrap text-xs text-muted-foreground">
           {row.starts_at ? formatDateTime(row.starts_at) : '—'} →{' '}
           {row.ends_at ? formatDateTime(row.ends_at) : '—'}
         </span>
@@ -106,25 +124,29 @@ export default function AdminAnnouncementsPage() {
     {
       key: 'enabled',
       header: 'Enabled',
-      render: (row) => <span className="tabular-nums">{row.is_enabled ? 'yes' : 'no'}</span>,
+      render: (row) => (
+        <span className="admin-figure text-muted-foreground">
+          {row.is_enabled ? 'yes' : 'no'}
+        </span>
+      ),
     },
     {
       key: 'actions',
       header: '',
       className: 'text-right',
       render: (row) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setEditing(row)}
-            className="text-xs text-brand hover:underline"
+            className={`${actionLinkCls} text-brand hover:underline`}
           >
             Edit
           </button>
           <button
             type="button"
             onClick={() => setDeleting(row)}
-            className="text-xs text-error hover:underline"
+            className={`${actionLinkCls} text-error hover:underline`}
           >
             Delete
           </button>
@@ -134,87 +156,69 @@ export default function AdminAnnouncementsPage() {
   ];
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Announcements
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {items.length} announcement{items.length === 1 ? '' : 's'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground hover:bg-brand/90"
-        >
-          <Plus size={16} /> New announcement
-        </button>
-      </div>
-
+    <AdminPage
+      eyebrow="System"
+      title="Announcements"
+      description={`${items.length} announcement${items.length === 1 ? '' : 's'}`}
+      actions={
+        <AdminButton variant="primary" onClick={() => setCreating(true)}>
+          <Plus size={16} />
+          New announcement
+        </AdminButton>
+      }
+    >
       {isError && !isPending && (
-        <div
-          role="alert"
-          className="mt-4 flex items-center gap-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            Could not load announcements.{' '}
-            <button onClick={() => refetch()} className="underline underline-offset-2">
-              Try again
-            </button>
-          </span>
-        </div>
+        <QueryError
+          message="Could not load announcements."
+          onRetry={() => refetch()}
+        />
       )}
 
-      <div className="mt-4">
-        <DataTable
-          columns={columns}
-          rows={paged}
-          keyOf={(row) => row.id}
-          isLoading={isPending}
-          empty={
-            <EmptyState
-              icon={<Megaphone size={22} />}
-              title="No announcements"
-              description="Create one to surface a landing-page banner."
-            />
-          }
-          ariaLabel="Announcements"
-          renderMobileCard={(row) => (
-            <div className="rounded-xl border border-border bg-surface-1 p-4 space-y-2">
-              <p className="font-medium text-foreground break-words">{row.title}</p>
-              <p className="text-xs text-muted-foreground break-words">{row.message}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Pill tone="muted">{row.kind}</Pill>
-                <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')}>
-                  {row.state}
-                </Pill>
-                <span className="text-xs text-muted-foreground">
-                  {row.is_enabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditing(row)}
-                  className="text-xs text-brand hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleting(row)}
-                  className="text-xs text-error hover:underline"
-                >
-                  Delete
-                </button>
-              </div>
+      <DataTable
+        columns={columns}
+        rows={paged}
+        keyOf={(row) => row.id}
+        isLoading={isPending}
+        empty={
+          <EmptyState
+            icon={<Megaphone size={22} />}
+            title="No announcements"
+            description="Create one to surface a landing-page banner."
+          />
+        }
+        ariaLabel="Announcements"
+        renderMobileCard={(row) => (
+          <div className="space-y-2 rounded-xl border border-border bg-surface-1 p-4">
+            <p className="break-words font-medium text-foreground">{row.title}</p>
+            <p className="break-words text-xs text-muted-foreground">{row.message}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill tone="muted">{row.kind}</Pill>
+              <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')} dot>
+                {row.state}
+              </Pill>
+              <span className="text-xs text-muted-foreground">
+                {row.is_enabled ? 'Enabled' : 'Disabled'}
+              </span>
             </div>
-          )}
-        />
-      </div>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditing(row)}
+                className={`${actionLinkCls} text-brand hover:underline`}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleting(row)}
+                className={`${actionLinkCls} text-error hover:underline`}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+      />
 
       {items.length > PAGE_SIZE && (
         <Pagination
@@ -222,7 +226,6 @@ export default function AdminAnnouncementsPage() {
           limit={PAGE_SIZE}
           offset={offset}
           onChange={setOffset}
-          className="mt-4"
         />
       )}
 
@@ -256,7 +259,7 @@ export default function AdminAnnouncementsPage() {
         onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
         onCancel={() => setDeleting(null)}
       />
-    </div>
+    </AdminPage>
   );
 }
 
@@ -301,96 +304,148 @@ function AnnouncementEditor({
     onSubmit(body);
   };
 
-  const inputCls =
-    'h-11 w-full rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-2xl space-y-4 rounded-xl border border-border bg-surface-1 p-6 shadow-xl max-h-[90dvh] overflow-y-auto"
-      >
-        <h2 className="text-lg font-semibold text-foreground">
-          {initial ? 'Edit announcement' : 'New announcement'}
-        </h2>
+    <Modal
+      open
+      onClose={onCancel}
+      busy={pending}
+      width="max-w-2xl"
+      title={initial ? 'Edit announcement' : 'New announcement'}
+      footer={
+        <>
+          <AdminButton variant="secondary" onClick={onCancel} disabled={pending}>
+            Cancel
+          </AdminButton>
+          <AdminButton
+            type="submit"
+            form="announcement-form"
+            variant="primary"
+            disabled={pending}
+          >
+            {pending ? 'Saving…' : initial ? 'Save' : 'Create (draft)'}
+          </AdminButton>
+        </>
+      }
+    >
+      <form id="announcement-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Title</span>
-            <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Kind</span>
-            <select className={inputCls} value={kind} onChange={(e) => setKind(e.target.value)}>
+          <Field label="Title" htmlFor="announcement-title">
+            <input
+              id="announcement-title"
+              className={ADMIN_INPUT_CLASS}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={200}
+            />
+          </Field>
+          <Field label="Kind" htmlFor="announcement-kind">
+            <SelectFilter
+              id="announcement-kind"
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              className="w-full"
+            >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
                   {k}
                 </option>
               ))}
-            </select>
-          </label>
+            </SelectFilter>
+          </Field>
         </div>
-        <label className="space-y-1 text-sm block">
-          <span className="text-muted-foreground">Message</span>
+
+        <div>
+          <label
+            htmlFor="announcement-message"
+            className="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            Message
+          </label>
           <textarea
-            className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            id="announcement-message"
+            className={ADMIN_TEXTAREA_CLASS}
             rows={4}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             required
             maxLength={2000}
           />
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Starts at (ISO)</span>
-            <input className={inputCls} value={startsAt} onChange={(e) => setStartsAt(e.target.value)} placeholder="2026-01-01T00:00:00Z" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Ends at (ISO)</span>
-            <input className={inputCls} value={endsAt} onChange={(e) => setEndsAt(e.target.value)} placeholder="2026-01-02T00:00:00Z" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Link URL</span>
-            <input className={inputCls} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Link label</span>
-            <input className={inputCls} value={linkLabel} onChange={(e) => setLinkLabel(e.target.value)} />
-          </label>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} />
-            Enabled
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={isDismissible} onChange={(e) => setIsDismissible(e.target.checked)} />
-            Dismissible
-          </label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Starts at (ISO)" htmlFor="announcement-starts">
+            <input
+              id="announcement-starts"
+              className={ADMIN_INPUT_CLASS}
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
+              placeholder="2026-01-01T00:00:00Z"
+            />
+          </Field>
+          <Field label="Ends at (ISO)" htmlFor="announcement-ends">
+            <input
+              id="announcement-ends"
+              className={ADMIN_INPUT_CLASS}
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              placeholder="2026-01-02T00:00:00Z"
+            />
+          </Field>
+          <Field label="Link URL" htmlFor="announcement-link-url">
+            <input
+              id="announcement-link-url"
+              className={ADMIN_INPUT_CLASS}
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+            />
+          </Field>
+          <Field label="Link label" htmlFor="announcement-link-label">
+            <input
+              id="announcement-link-label"
+              className={ADMIN_INPUT_CLASS}
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <CheckboxRow
+            checked={isEnabled}
+            onChange={setIsEnabled}
+            title="Enabled"
+          />
+          <CheckboxRow
+            checked={isDismissible}
+            onChange={setIsDismissible}
+            title="Dismissible"
+          />
           {initial && (
-            <label className="space-y-1 text-sm">
-              <span className="text-muted-foreground mr-2">State</span>
-              <select className={inputCls} value={state} onChange={(e) => setState(e.target.value)}>
+            <Field
+              label="State"
+              htmlFor="announcement-state"
+              className="min-w-[160px]"
+            >
+              <SelectFilter
+                id="announcement-state"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="w-full"
+              >
                 <option value="draft">draft</option>
                 <option value="published">published</option>
-              </select>
-            </label>
+              </SelectFilter>
+            </Field>
           )}
         </div>
-        {error && <p className="text-sm text-error">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground hover:bg-brand/90 disabled:opacity-60"
-          >
-            {pending ? 'Saving…' : initial ? 'Save' : 'Create (draft)'}
-          </button>
-        </div>
+
+        {error && (
+          <p role="alert" className="text-sm text-error">
+            {error}
+          </p>
+        )}
       </form>
-    </div>
+    </Modal>
   );
 }

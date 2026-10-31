@@ -113,8 +113,6 @@ export default function ProvidersPage() {
                   </div>
 
                   <div className="mt-2 text-xs text-muted-foreground">
-                    <span className="font-mono">Default: {provider.default_model}</span>
-                    <span className="mx-1.5">·</span>
                     <span>Timeout: {provider.timeout_seconds}s</span>
                     <span className="mx-1.5">·</span>
                     <span>Retries: {provider.max_retries}</span>

@@ -784,6 +784,7 @@ async def get_available_models(
     from app.ai.discovery.engine import discovery_engine
     from app.core.security import encryption_service
     from app.services.model_discovery import model_discovery_engine
+    from app.services.model_overrides import model_overrides_service
 
     logger = _logging.getLogger(__name__)
 
@@ -796,6 +797,7 @@ async def get_available_models(
         p.name.lower()
         for p in await provider_registry_service.get_usable(db)
     }
+    disabled_overrides = await model_overrides_service.get_disabled_map(db)
 
     provider_keys: dict[str, str] = {}
     for key_obj in api_keys_list:
@@ -842,6 +844,14 @@ async def get_available_models(
                     provider, raw_key
                 )
 
+            blocked = disabled_overrides.get(provider, set())
+            for model in models or []:
+                model_name = (
+                    model.get("canonical_model_name")
+                    or model.get("model_name")
+                    or model.get("model")
+                )
+                model["admin_disabled"] = model_name in blocked
             if models:
                 return provider, sorted(models, key=lambda x: x["model_name"])
         except Exception as e:
@@ -989,6 +999,15 @@ async def update_repository_config(
             raise HTTPException(
                 status_code=400,
                 detail=f"Model '{config.assigned_model}' is currently inaccessible with your API key.",
+            )
+        from app.services.model_overrides import model_overrides_service
+
+        if await model_overrides_service.is_model_disabled(
+            db, config.assigned_provider, config.assigned_model
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{config.assigned_model}' is temporarily disabled by admin.",
             )
 
     # Update fields

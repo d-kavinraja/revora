@@ -45,7 +45,7 @@ export function Pagination({ total, limit, offset, onChange, className }: Pagina
       aria-label="Pagination"
       className={`flex flex-wrap items-center justify-between gap-3 ${className ?? ''}`}
     >
-      <p className="text-sm text-muted-foreground" aria-live="polite">
+      <p className="admin-figure text-xs text-muted-foreground" aria-live="polite">
         {total === 0 ? 'No results' : `Showing ${first}–${last} of ${total}`}
       </p>
 
@@ -79,7 +79,7 @@ export function Pagination({ total, limit, offset, onChange, className }: Pagina
                 aria-current={entry === current ? 'page' : undefined}
                 className={`${buttonCls} ${
                   entry === current
-                    ? 'border-brand bg-brand/10 text-brand'
+                    ? 'border-brand/40 bg-brand/10 text-brand'
                     : 'border-border text-foreground/80 hover:bg-surface-2'
                 }`}
               >

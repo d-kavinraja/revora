@@ -46,6 +46,7 @@ export function TextFilter({
       <Search
         size={15}
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        aria-hidden="true"
       />
       <input
         type="search"
@@ -53,7 +54,7 @@ export function TextFilter({
         onChange={(event) => setLocal(event.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className="h-11 w-full rounded-lg border border-border bg-surface-1 pl-9 pr-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        className="h-11 w-full rounded-lg border border-border bg-surface-1 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors hover:border-[var(--admin-hairline-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       />
     </div>
   );

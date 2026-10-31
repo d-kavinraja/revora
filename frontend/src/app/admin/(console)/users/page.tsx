@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Users as UsersIcon } from 'lucide-react';
+import { Users as UsersIcon } from 'lucide-react';
 import {
   adminApi,
   type AdminUserListItem,
@@ -15,6 +15,9 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Pill, toneForStatus } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { AdminPage } from '@/components/admin/page-shell';
+import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
 
@@ -23,13 +26,19 @@ function UserIdentity({ user }: { user: AdminUserListItem }) {
     <div className="min-w-0">
       <Link
         href={`/admin/users/${user.id}`}
-        className="font-medium text-foreground hover:text-brand transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
+        className="rounded font-medium text-foreground transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         {user.name || '—'}
       </Link>
-      <p className="text-xs text-muted-foreground truncate max-w-[220px]" title={user.email}>{user.email}</p>
+      <p className="max-w-[220px] truncate text-xs text-muted-foreground" title={user.email}>
+        {user.email}
+      </p>
     </div>
   );
+}
+
+function statusTone(status: string) {
+  return status === 'disabled' ? 'muted' : toneForStatus(status);
 }
 
 export default function AdminUsersPage() {
@@ -70,35 +79,37 @@ export default function AdminUsersPage() {
       key: 'status',
       header: 'Status',
       render: (user) => (
-        <Pill tone={toneForStatus(user.status)}>{user.status}</Pill>
+        <Pill tone={statusTone(user.status)} dot>
+          {user.status}
+        </Pill>
       ),
     },
     {
       key: 'repos',
       header: 'Repos',
       className: 'text-right',
-      render: (user) => <span className="tabular-nums">{user.repo_count}</span>,
+      render: (user) => <span className="admin-figure">{user.repo_count}</span>,
     },
     {
       key: 'credentials',
       header: 'Credentials',
       className: 'text-right',
       render: (user) => (
-        <span className="tabular-nums">{user.credential_count}</span>
+        <span className="admin-figure">{user.credential_count}</span>
       ),
     },
     {
       key: 'reviews',
       header: 'Reviews',
       className: 'text-right',
-      render: (user) => <span className="tabular-nums">{user.review_count}</span>,
+      render: (user) => <span className="admin-figure">{user.review_count}</span>,
     },
     {
       key: 'created',
       header: 'Created',
       className: 'whitespace-nowrap',
       render: (user) => (
-        <span className="text-muted-foreground whitespace-nowrap">
+        <span className="admin-figure whitespace-nowrap text-muted-foreground">
           {formatDateTime(user.created_at)}
         </span>
       ),
@@ -108,34 +119,26 @@ export default function AdminUsersPage() {
       header: 'Last login',
       className: 'whitespace-nowrap',
       render: (user) => (
-        <span className="text-muted-foreground whitespace-nowrap">
+        <span className="admin-figure whitespace-nowrap text-muted-foreground">
           {user.last_login_at ? formatDateTime(user.last_login_at) : '—'}
         </span>
       ),
     },
   ];
 
-  const filterCls =
-    'min-w-0 max-w-[220px] h-11 rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
-
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Users
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data
-              ? `${data.total.toLocaleString()} registered user${
-                  data.total === 1 ? '' : 's'
-                }`
-              : 'Registered accounts and their activity.'}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+    <AdminPage
+      eyebrow="Manage"
+      title="Users"
+      description={
+        data
+          ? `${data.total.toLocaleString()} registered user${
+              data.total === 1 ? '' : 's'
+            }`
+          : 'Registered accounts and their activity.'
+      }
+    >
+      <FilterBar label="User filters">
         <TextFilter
           value={q}
           onChange={(value) => {
@@ -146,101 +149,86 @@ export default function AdminUsersPage() {
           ariaLabel="Search users"
           className="w-full sm:w-64"
         />
-        <select
+        <SelectFilter
           value={status}
           onChange={(event) => {
             setStatus(event.target.value as AdminUserStatusFilter | '');
             setOffset(0);
           }}
           aria-label="Filter by status"
-          className={filterCls}
+          className="w-full sm:w-44"
         >
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="disabled">Disabled</option>
-        </select>
-        <select
+        </SelectFilter>
+        <SelectFilter
           value={sort}
           onChange={(event) => {
             setSort(event.target.value as 'created' | 'last_login' | 'reviews');
             setOffset(0);
           }}
           aria-label="Sort users"
-          className={filterCls}
+          className="w-full sm:w-44"
         >
           <option value="created">Newest first</option>
           <option value="last_login">Last login</option>
           <option value="reviews">Most reviews</option>
-        </select>
-      </div>
+        </SelectFilter>
+      </FilterBar>
 
       {isError && !isPending && (
-        <div
-          role="alert"
-          className="mt-4 flex items-center gap-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            Could not load users.{' '}
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="underline underline-offset-2 cursor-pointer"
-            >
-              Try again
-            </button>
-          </span>
-        </div>
+        <QueryError message="Could not load users." onRetry={() => refetch()} />
       )}
 
-      <div className="mt-4">
-        <DataTable
-          columns={columns}
-          rows={data?.items ?? []}
-          keyOf={(user) => user.id}
-          isLoading={isPending}
-          empty={
-            <EmptyState
-              icon={<UsersIcon size={22} />}
-              title="No users found"
-              description={
-                q || status
-                  ? 'No accounts match the current filters.'
-                  : 'No users have registered yet.'
-              }
-            />
-          }
-          renderMobileCard={(user) => (
-            <div className="rounded-xl border border-border bg-surface-1 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <UserIdentity user={user} />
-                <Pill tone={toneForStatus(user.status)}>{user.status}</Pill>
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-                <div>
-                  <dt>Repos</dt>
-                  <dd className="text-foreground tabular-nums">{user.repo_count}</dd>
-                </div>
-                <div>
-                  <dt>Credentials</dt>
-                  <dd className="text-foreground tabular-nums">
-                    {user.credential_count}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reviews</dt>
-                  <dd className="text-foreground tabular-nums">{user.review_count}</dd>
-                </div>
-              </dl>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Joined {formatDateTime(user.created_at)} · Last login{' '}
-                {user.last_login_at ? formatDateTime(user.last_login_at) : '—'}
-              </p>
+      <DataTable
+        columns={columns}
+        rows={data?.items ?? []}
+        keyOf={(user) => user.id}
+        isLoading={isPending}
+        empty={
+          <EmptyState
+            icon={<UsersIcon size={22} />}
+            title="No users found"
+            description={
+              q || status
+                ? 'No accounts match the current filters.'
+                : 'No users have registered yet.'
+            }
+          />
+        }
+        renderMobileCard={(user) => (
+          <div className="rounded-xl border border-border bg-surface-1 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <UserIdentity user={user} />
+              <Pill tone={statusTone(user.status)} dot>
+                {user.status}
+              </Pill>
             </div>
-          )}
-          ariaLabel="Users"
-        />
-      </div>
+            <dl className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+              <div>
+                <dt>Repos</dt>
+                <dd className="admin-figure text-foreground">{user.repo_count}</dd>
+              </div>
+              <div>
+                <dt>Credentials</dt>
+                <dd className="admin-figure text-foreground">
+                  {user.credential_count}
+                </dd>
+              </div>
+              <div>
+                <dt>Reviews</dt>
+                <dd className="admin-figure text-foreground">{user.review_count}</dd>
+              </div>
+            </dl>
+            <p className="admin-figure mt-2 text-xs text-muted-foreground">
+              Joined {formatDateTime(user.created_at)} · Last login{' '}
+              {user.last_login_at ? formatDateTime(user.last_login_at) : '—'}
+            </p>
+          </div>
+        )}
+        ariaLabel="Users"
+      />
 
       {data && (
         <Pagination
@@ -248,9 +236,8 @@ export default function AdminUsersPage() {
           limit={data.limit}
           offset={data.offset}
           onChange={setOffset}
-          className="mt-4"
         />
       )}
-    </div>
+    </AdminPage>
   );
 }

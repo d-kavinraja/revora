@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.services.api_key_service import api_key_service
 from app.services.model_discovery import model_discovery_engine
+from app.services.model_overrides import model_overrides_service
 from app.services.model_router import model_router
 from app.services.provider_registry import provider_registry_service
 
@@ -49,6 +50,7 @@ async def get_models_per_provider(
     user_keys = {
         name: key for name, key in user_keys.items() if name in usable_providers
     }
+    disabled_overrides = await model_overrides_service.get_disabled_map(db)
 
     # Probe every provider concurrently: each branch is an independent external
     # HTTP round-trip (no DB access), so the endpoint costs the slowest provider
@@ -61,6 +63,7 @@ async def get_models_per_provider(
             models = await model_discovery_engine.get_available_models(
                 provider_name, raw_key
             )
+            blocked = disabled_overrides.get(provider_name) or set()
             return provider_name, [
                 {
                     "model": m["canonical_model_name"],
@@ -68,6 +71,12 @@ async def get_models_per_provider(
                 }
                 for m in models
                 if m.get("accessible", True)
+                and (
+                    m.get("canonical_model_name")
+                    or m.get("model_name")
+                    or m.get("model")
+                )
+                not in blocked
             ]
         except Exception:
             return provider_name, []

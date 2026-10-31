@@ -396,7 +396,8 @@ function ConfigModal({
                 >
                   {models.map((m, idx) => {
                     let badge = '';
-                    if (!m.accessible) badge = ' [Unavailable]';
+                    if (m.admin_disabled) badge = ' [Disabled]';
+                    else if (!m.accessible) badge = ' [Unavailable]';
                     else if (idx < 5) badge = ' [Recommended]';
                     else if (m.deprecated) badge = ' [Deprecated]';
                     else if (m.preview || m.experimental) badge = ' [Preview]';
@@ -404,7 +405,7 @@ function ConfigModal({
                     else badge = ' [High Load Server]';
                     
                     return (
-                      <option key={m.model_name} value={m.model_name} disabled={!m.accessible} title={!m.accessible ? 'This model is inaccessible with your current API key permissions.' : ''}>
+                      <option key={m.model_name} value={m.model_name} disabled={!m.accessible || !!m.admin_disabled} title={m.admin_disabled ? 'Temporarily disabled by admin.' : (!m.accessible ? 'This model is inaccessible with your current API key permissions.' : '')}>
                         {m.model_name}{badge}
                       </option>
                     );

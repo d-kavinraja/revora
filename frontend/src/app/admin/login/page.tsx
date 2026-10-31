@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
 import { adminApi } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
@@ -12,6 +12,7 @@ import { useAdminThemeStore } from '@/store/useAdminThemeStore';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const reducedMotion = useReducedMotion();
   const adminTheme = useAdminThemeStore((s) => s.theme);
   const toggleAdminTheme = useAdminThemeStore((s) => s.toggleTheme);
   const [username, setUsername] = useState('');
@@ -46,20 +47,21 @@ export default function AdminLoginPage() {
       <div className="absolute bottom-[10%] right-[20%] w-[35%] h-[35%] bg-info/10 blur-[140px] rounded-full pointer-events-none" />
 
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={reducedMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="w-full max-w-sm rounded-2xl border border-border bg-surface-1/90 backdrop-blur-xl p-8 shadow-2xl"
+        transition={{ duration: reducedMotion ? 0 : 0.4, ease: 'easeOut' }}
+        className="admin-tick w-full max-w-sm rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl backdrop-blur-xl"
       >
-        <div className="flex flex-col items-center text-center mb-8">
+        <div className="mb-8 flex flex-col items-center text-center">
           <Image
             src="/revora-logo.png"
             alt="Revora"
             width={44}
             height={44}
-            className="rounded-xl object-contain mb-4"
+            className="mb-4 rounded-xl object-contain"
           />
-          <h1 className="text-xl font-bold text-foreground">Admin Console</h1>
+          <p className="admin-eyebrow">Restricted access</p>
+          <h1 className="mt-1 text-xl font-bold text-foreground">Admin Console</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Sign in with your administrator credentials.
           </p>

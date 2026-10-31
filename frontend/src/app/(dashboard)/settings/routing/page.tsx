@@ -122,7 +122,6 @@ export default function RoutingPage() {
       groq: 'Groq',
       deepseek: 'DeepSeek',
       openrouter: 'OpenRouter',
-      azure_openai: 'Azure OpenAI',
       ollama: 'Ollama',
       ollama_cloud: 'Ollama Cloud',
       cohere: 'Cohere',

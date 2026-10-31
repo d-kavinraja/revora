@@ -24,7 +24,7 @@ interface DataTableProps<T> {
 function ShimmerBlock({ className }: { className?: string }) {
   return (
     <div
-      className={`rounded bg-muted/50 dark:bg-surface-2 animate-pulse ${className ?? ''}`}
+      className={`animate-pulse rounded bg-surface-2 ${className ?? ''}`}
     />
   );
 }
@@ -33,8 +33,8 @@ function ShimmerRow({ cols }: { cols: number }) {
   return (
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
-        <td key={i} className="px-4 py-3">
-          <ShimmerBlock className="h-4" />
+        <td key={i} className="px-4 py-3.5">
+          <ShimmerBlock className={`h-4 ${i === 0 ? 'w-40' : 'w-20'}`} />
         </td>
       ))}
     </tr>
@@ -43,7 +43,7 @@ function ShimmerRow({ cols }: { cols: number }) {
 
 function ShimmerCard() {
   return (
-    <div className="rounded-xl border border-border bg-surface-1 p-4 space-y-3">
+    <div className="space-y-3 rounded-xl border border-border bg-surface-1 p-4">
       <ShimmerBlock className="h-4 w-2/3" />
       <ShimmerBlock className="h-4 w-1/2" />
     </div>
@@ -55,7 +55,7 @@ export function DataTable<T>({
   rows,
   keyOf,
   isLoading = false,
-  loadingRows = 5,
+  loadingRows = 6,
   empty,
   renderMobileCard,
   ariaLabel,
@@ -68,25 +68,27 @@ export function DataTable<T>({
 
   const desktopTable = (
     <div
-      className={`w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border ${
+      className={`w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-surface-1 ${
         renderMobileCard ? 'hidden md:block' : ''
       }`}
     >
       <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
-        <thead className="bg-surface-2 text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="bg-surface-2 text-left">
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
                 scope="col"
-                className={`px-4 py-3 font-medium ${col.className ?? ''}`}
+                className={`border-b border-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ${
+                  col.className ?? ''
+                }`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-y divide-border/70">
           {isLoading
             ? Array.from({ length: loadingRows }).map((_, i) => (
                 <ShimmerRow key={i} cols={columns.length} />
@@ -94,7 +96,7 @@ export function DataTable<T>({
             : rows.map((row) => (
                 <tr
                   key={keyOf(row)}
-                  className="hover:bg-surface-2/60 transition-colors"
+                  className="min-h-11 transition-colors hover:bg-surface-2/60"
                 >
                   {columns.map((col) => (
                     <td
@@ -117,7 +119,7 @@ export function DataTable<T>({
 
   return (
     <>
-      <div className="md:hidden space-y-3">
+      <div className="space-y-3 md:hidden">
         {isLoading
           ? Array.from({ length: Math.min(loadingRows, 4) }).map((_, i) => (
               <ShimmerCard key={i} />

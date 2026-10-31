@@ -1,4 +1,6 @@
-﻿from fastapi import APIRouter, Depends
+﻿from typing import Any
+
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
@@ -12,6 +14,19 @@ from app.services.model_overrides import model_overrides_service
 from app.services.provider_registry import provider_registry_service
 
 router = APIRouter()
+
+
+def _model_name(model: Any) -> str:
+    if isinstance(model, str):
+        return model
+    if isinstance(model, dict):
+        return str(
+            model.get("canonical_model_name")
+            or model.get("model_name")
+            or model.get("model")
+            or ""
+        )
+    return str(model)
 
 
 @router.get("")
@@ -42,9 +57,13 @@ async def list_models(
             models = await model_discovery_engine.get_available_models(
                 prov_name, raw_key
             )
-            blocked = disabled_overrides.get(prov_name)
+            blocked = disabled_overrides.get(prov_name) or set()
             if blocked:
-                models = [m for m in models if m not in blocked]
+                models = [
+                    m
+                    for m in models
+                    if _model_name(m) not in blocked
+                ]
             all_models[prov_name] = models
         except Exception:
             all_models[prov_name] = []

@@ -1,14 +1,15 @@
 function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-muted/50 dark:bg-surface-2 animate-pulse ${className ?? ''}`} style={style}>
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-foreground/[0.04] dark:via-white/[0.04] to-transparent" />
-    </div>
+    <div
+      className={`animate-pulse rounded-xl bg-surface-2 ${className ?? ''}`}
+      style={style}
+    />
   );
 }
 
 export function SkeletonCard({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {Array.from({ length: count }).map((_, i) => (
         <Shimmer key={i} className="h-28 p-6" />
       ))}

@@ -197,7 +197,6 @@ class ModelDiscoveryEngine:
         "groq": "groq",
         "grok": "xai",
         "openrouter": "openrouter",
-        "azure_openai": "azure",
         "ollama": "ollama",
         "ollama_cloud": "openai",
         "cohere": "cohere",
@@ -958,8 +957,6 @@ class ModelDiscoveryEngine:
             "openrouter/"
         ):
             litellm_model_name = f"openrouter/{canonical_model_name}"
-        elif provider_lower == "azure_openai" and not model_name.startswith("azure/"):
-            litellm_model_name = f"azure/{canonical_model_name}"
         elif provider_lower == "ollama" and not model_name.startswith("ollama/"):
             litellm_model_name = f"ollama/{canonical_model_name}"
         elif provider_lower == "ollama_cloud" and not model_name.startswith("openai/"):
