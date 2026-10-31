@@ -18,12 +18,14 @@ class ApiKeyUpdate(BaseModel):
     label: str | None = Field(None, max_length=100)
     api_key: str | None = Field(None, description="The new raw API key")
     is_valid: bool | None = None
+    is_enabled: bool | None = None
 
 
 class ApiKeyInDBBase(ApiKeyBase):
     id: uuid.UUID
     user_id: uuid.UUID
     is_valid: bool
+    is_enabled: bool = True
     last_used_at: datetime | None = None
     created_at: datetime
 

@@ -184,7 +184,7 @@ function ConfigModal({
     return norm1 === norm2;
   };
 
-  const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && k.is_enabled);
+  const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
 
   const [selectedKeyId, setSelectedKeyId] = useState(() => {
     const saved = repo.settings?.assigned_key_id;
@@ -222,7 +222,7 @@ function ConfigModal({
   const routingEnabled = routingFlag.status === 'enabled';
 
   useEffect(() => {
-    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && k.is_enabled);
+    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
     if (keys.length > 0 && !keys.some(k => k.id === selectedKeyId)) {
       setSelectedKeyId(keys[0].id);
     } else if (keys.length === 0) {
@@ -348,7 +348,7 @@ function ConfigModal({
             </div>
 
             {/* API Key Selector */}
-            {providerKeys.length > 0 && (
+            {providerKeys.length > 0 ? (
               <div>
                 <label htmlFor="key-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
                 <select
@@ -364,6 +364,10 @@ function ConfigModal({
                     </option>
                   ))}
                 </select>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
+                No active API key found for this provider. Configure an API key in Settings &gt; API Keys to enable reviews.
               </div>
             )}
 
