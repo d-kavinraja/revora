@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Pencil, Server } from 'lucide-react';
+import { Pencil, Server } from 'lucide-react';
 import {
   adminApi,
   type AdminProviderRead,
@@ -16,6 +16,16 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useToast } from '@/components/ui/toaster';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { AdminPage } from '@/components/admin/page-shell';
+import {
+  AdminButton,
+  ADMIN_INPUT_CLASS,
+  ADMIN_LABEL_CLASS,
+  ADMIN_TEXTAREA_CLASS,
+  CheckboxRow,
+  Field,
+} from '@/components/admin/controls';
+import { QueryError } from '@/components/admin/states';
 
 const STATUS_META: Record<string, { label: string; tone: PillTone }> = {
   available: { label: 'Available', tone: 'success' },
@@ -95,10 +105,6 @@ function errorDetail(error: unknown): string | undefined {
   return undefined;
 }
 
-const fieldLabelCls = 'block text-xs font-medium text-muted-foreground mb-1';
-const fieldCls =
-  'w-full h-11 rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
-
 export default function AdminProvidersPage() {
   const [editing, setEditing] = useState<AdminProviderRead | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
@@ -159,14 +165,11 @@ export default function AdminProvidersPage() {
       key: 'provider',
       header: 'Provider',
       render: (provider) => (
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-surface-2 border border-border">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
             <ProviderIcon slug={provider.slug} size={16} />
           </span>
-          <p
-            className="font-medium text-foreground truncate"
-            title={provider.slug}
-          >
+          <p className="truncate font-medium text-foreground" title={provider.slug}>
             {provider.display_name}
           </p>
         </div>
@@ -179,14 +182,16 @@ export default function AdminProvidersPage() {
         const meta = statusMeta(provider.status);
         return (
           <div className="min-w-0 max-w-[260px]">
-            <Pill tone={meta.tone}>{meta.label}</Pill>
+            <Pill tone={meta.tone} dot>
+              {meta.label}
+            </Pill>
             {provider.status_message && (
-              <p className="mt-1 text-xs text-muted-foreground break-words">
+              <p className="mt-1 break-words text-xs text-muted-foreground">
                 {provider.status_message}
               </p>
             )}
             {provider.status_expires_at && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="admin-figure mt-0.5 text-xs text-muted-foreground">
                 Until {formatDateTime(provider.status_expires_at)}
               </p>
             )}
@@ -198,7 +203,7 @@ export default function AdminProvidersPage() {
       key: 'enabled',
       header: 'Master switch',
       render: (provider) => (
-        <Pill tone={provider.is_enabled ? 'success' : 'muted'}>
+        <Pill tone={provider.is_enabled ? 'success' : 'muted'} dot>
           {provider.is_enabled ? 'Enabled' : 'Disabled'}
         </Pill>
       ),
@@ -207,7 +212,7 @@ export default function AdminProvidersPage() {
       key: 'key_policy',
       header: 'New keys',
       render: (provider) => (
-        <Pill tone={provider.allow_key_addition ? 'success' : 'warning'}>
+        <Pill tone={provider.allow_key_addition ? 'success' : 'warning'} dot>
           {provider.allow_key_addition ? 'Allowed' : 'Blocked'}
         </Pill>
       ),
@@ -216,7 +221,7 @@ export default function AdminProvidersPage() {
       key: 'keys',
       header: 'Keys',
       render: (provider) => (
-        <span className="text-muted-foreground whitespace-nowrap tabular-nums">
+        <span className="admin-figure whitespace-nowrap text-muted-foreground">
           {provider.keys_enabled}/{provider.keys_total} enabled ·{' '}
           {provider.keys_valid} valid
         </span>
@@ -227,7 +232,7 @@ export default function AdminProvidersPage() {
       header: 'Repo mappings',
       className: 'text-right',
       render: (provider) => (
-        <span className="tabular-nums">{provider.mapped_repositories}</span>
+        <span className="admin-figure">{provider.mapped_repositories}</span>
       ),
     },
     {
@@ -244,7 +249,7 @@ export default function AdminProvidersPage() {
             <span className="text-muted-foreground">Not recorded</span>
           )}
           {provider.last_health_at && (
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="admin-figure mt-1 text-xs text-muted-foreground">
               {formatDateTime(provider.last_health_at)}
             </p>
           )}
@@ -256,124 +261,97 @@ export default function AdminProvidersPage() {
       header: '',
       className: 'text-right',
       render: (provider) => (
-        <button
-          type="button"
-          onClick={() => openEdit(provider)}
-          className="inline-flex items-center gap-2 h-11 px-3 rounded-lg border border-border text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-        >
-          <Pencil size={15} />
+        <AdminButton variant="secondary" size="sm" onClick={() => openEdit(provider)}>
+          <Pencil size={14} />
           Edit
-        </button>
+        </AdminButton>
       ),
     },
   ];
 
   return (
-    <div>
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-          Providers
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Availability, messages, master switches and key-addition policy. Every
-          change is audited; credentials, mappings and history are never touched.
-        </p>
-      </div>
-
+    <AdminPage
+      eyebrow="System"
+      title="Providers"
+      description="Availability, messages, master switches and key-addition policy. Every change is audited; credentials, mappings and history are never touched."
+    >
       {isError && !isPending && (
-        <div
-          role="alert"
-          className="mt-4 flex items-center gap-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            Could not load providers.{' '}
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="underline underline-offset-2 cursor-pointer"
-            >
-              Try again
-            </button>
-          </span>
-        </div>
+        <QueryError message="Could not load providers." onRetry={() => refetch()} />
       )}
 
-      <div className="mt-4">
-        <DataTable
-          columns={columns}
-          rows={data?.items ?? []}
-          keyOf={(provider) => provider.id}
-          isLoading={isPending}
-          empty={
-            <EmptyState
-              icon={<Server size={22} />}
-              title="No providers registered"
-              description="The provider registry is empty. Seed it via the platform migrations."
-            />
-          }
-          renderMobileCard={(provider) => {
-            const meta = statusMeta(provider.status);
-            return (
-              <div className="rounded-xl border border-border bg-surface-1 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <ProviderIcon slug={provider.slug} size={16} />
-                    <p
-                      className="font-medium text-foreground truncate"
-                      title={provider.slug}
-                    >
-                      {provider.display_name}
-                    </p>
-                  </div>
-                  <Pill tone={meta.tone}>{meta.label}</Pill>
-                </div>
-                {provider.status_message && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {provider.status_message}
+      <DataTable
+        columns={columns}
+        rows={data?.items ?? []}
+        keyOf={(provider) => provider.id}
+        isLoading={isPending}
+        empty={
+          <EmptyState
+            icon={<Server size={22} />}
+            title="No providers registered"
+            description="The provider registry is empty. Seed it via the platform migrations."
+          />
+        }
+        renderMobileCard={(provider) => {
+          const meta = statusMeta(provider.status);
+          return (
+            <div className="rounded-xl border border-border bg-surface-1 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <ProviderIcon slug={provider.slug} size={16} />
+                  <p className="truncate font-medium text-foreground" title={provider.slug}>
+                    {provider.display_name}
                   </p>
-                )}
-                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div>
-                    <dt>Master switch</dt>
-                    <dd className="text-foreground">
-                      {provider.is_enabled ? 'Enabled' : 'Disabled'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>New keys</dt>
-                    <dd className="text-foreground">
-                      {provider.allow_key_addition ? 'Allowed' : 'Blocked'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Keys</dt>
-                    <dd className="text-foreground tabular-nums">
-                      {provider.keys_enabled}/{provider.keys_total} ·{' '}
-                      {provider.keys_valid} valid
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Repo mappings</dt>
-                    <dd className="text-foreground tabular-nums">
-                      {provider.mapped_repositories}
-                    </dd>
-                  </div>
-                </dl>
-                <button
-                  type="button"
-                  onClick={() => openEdit(provider)}
-                  className="mt-3 inline-flex items-center gap-2 h-11 px-3 rounded-lg border border-border text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <Pencil size={15} />
-                  Edit
-                </button>
+                </div>
+                <Pill tone={meta.tone} dot>
+                  {meta.label}
+                </Pill>
               </div>
-            );
-          }}
-          ariaLabel="Providers"
-        />
-      </div>
+              {provider.status_message && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {provider.status_message}
+                </p>
+              )}
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>
+                  <dt>Master switch</dt>
+                  <dd className="text-foreground">
+                    {provider.is_enabled ? 'Enabled' : 'Disabled'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>New keys</dt>
+                  <dd className="text-foreground">
+                    {provider.allow_key_addition ? 'Allowed' : 'Blocked'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Keys</dt>
+                  <dd className="admin-figure text-foreground">
+                    {provider.keys_enabled}/{provider.keys_total} ·{' '}
+                    {provider.keys_valid} valid
+                  </dd>
+                </div>
+                <div>
+                  <dt>Repo mappings</dt>
+                  <dd className="admin-figure text-foreground">
+                    {provider.mapped_repositories}
+                  </dd>
+                </div>
+              </dl>
+              <AdminButton
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                onClick={() => openEdit(provider)}
+              >
+                <Pencil size={14} />
+                Edit
+              </AdminButton>
+            </div>
+          );
+        }}
+        ariaLabel="Providers"
+      />
 
       <ConfirmDialog
         open={editing !== null && form !== null}
@@ -391,10 +369,7 @@ export default function AdminProvidersPage() {
       >
         {form && (
           <div className="space-y-3">
-            <div>
-              <label htmlFor="provider-status" className={fieldLabelCls}>
-                Lifecycle status
-              </label>
+            <Field label="Lifecycle status" htmlFor="provider-status">
               <select
                 id="provider-status"
                 value={form.status}
@@ -411,7 +386,7 @@ export default function AdminProvidersPage() {
                       : current
                   );
                 }}
-                className={fieldCls}
+                className={`${ADMIN_INPUT_CLASS} cursor-pointer`}
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -419,10 +394,10 @@ export default function AdminProvidersPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </Field>
 
             <div>
-              <label htmlFor="provider-message" className={fieldLabelCls}>
+              <label htmlFor="provider-message" className={ADMIN_LABEL_CLASS}>
                 User-facing message (optional)
               </label>
               <textarea
@@ -436,14 +411,11 @@ export default function AdminProvidersPage() {
                   )
                 }
                 placeholder="Shown to users wherever the provider is blocked."
-                className="w-full rounded-lg border border-border bg-surface-1 px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className={ADMIN_TEXTAREA_CLASS}
               />
             </div>
 
-            <div>
-              <label htmlFor="provider-eta" className={fieldLabelCls}>
-                Expected back (optional)
-              </label>
+            <Field label="Expected back (optional)" htmlFor="provider-eta">
               <input
                 id="provider-eta"
                 type="datetime-local"
@@ -453,67 +425,44 @@ export default function AdminProvidersPage() {
                     current ? { ...current, eta: event.target.value } : current
                   )
                 }
-                className={fieldCls}
+                className={ADMIN_INPUT_CLASS}
               />
-            </div>
+            </Field>
 
-            <label className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isEnabled}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setForm((current) =>
-                    current
-                      ? {
-                          ...current,
-                          isEnabled: next,
-                          status: next
-                            ? current.status === 'disabled'
-                              ? 'available'
-                              : current.status
-                            : 'disabled',
-                        }
-                      : current
-                  );
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-border text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              />
-              <span>
-                <span className="block text-sm text-foreground">
-                  Provider enabled (master switch)
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Turning it off sets the status to Disabled; turning it back on
-                  restores availability without any user reconfiguration.
-                </span>
-              </span>
-            </label>
+            <CheckboxRow
+              checked={form.isEnabled}
+              onChange={(next) => {
+                setForm((current) =>
+                  current
+                    ? {
+                        ...current,
+                        isEnabled: next,
+                        status: next
+                          ? current.status === 'disabled'
+                            ? 'available'
+                            : current.status
+                          : 'disabled',
+                      }
+                    : current
+                );
+              }}
+              title="Provider enabled (master switch)"
+              description="Turning it off sets the status to Disabled; turning it back on restores availability without any user reconfiguration."
+            />
 
-            <label className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.allowKey}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setForm((current) =>
-                    current ? { ...current, allowKey: next } : current
-                  );
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-border text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              />
-              <span>
-                <span className="block text-sm text-foreground">
-                  Allow users to add new API keys
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Existing keys remain stored and rotatable either way.
-                </span>
-              </span>
-            </label>
+            <CheckboxRow
+              checked={form.allowKey}
+              onChange={(next) => {
+                setForm((current) =>
+                  current ? { ...current, allowKey: next } : current
+                );
+              }}
+              title="Allow users to add new API keys"
+              description="Existing keys remain stored and rotatable either way."
+            />
           </div>
         )}
       </ConfirmDialog>
-    </div>
+    </AdminPage>
   );
 }

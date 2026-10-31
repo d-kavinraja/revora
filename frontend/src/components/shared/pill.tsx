@@ -11,21 +11,38 @@ const TONE_CLASSES: Record<PillTone, string> = {
   brand: 'bg-brand/10 text-brand border-brand/30',
 };
 
+const TONE_DOT: Record<PillTone, string> = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  error: 'bg-error',
+  info: 'bg-info',
+  muted: 'bg-muted-foreground',
+  brand: 'bg-brand',
+};
+
 export function Pill({
   tone = 'muted',
   children,
   className,
+  dot = false,
 }: {
   tone?: PillTone;
   children: ReactNode;
   className?: string;
+  dot?: boolean;
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${
         TONE_CLASSES[tone]
       } ${className ?? ''}`}
     >
+      {dot && (
+        <span
+          aria-hidden="true"
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT[tone]}`}
+        />
+      )}
       {children}
     </span>
   );

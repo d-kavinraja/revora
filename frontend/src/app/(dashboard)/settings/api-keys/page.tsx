@@ -274,7 +274,7 @@ export default function ApiKeysSettingsPage() {
     const names: Record<string, string> = {
       openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini',
       groq: 'Groq', deepseek: 'DeepSeek', grok: 'Grok',
-      openrouter: 'OpenRouter', azure_openai: 'Azure OpenAI',
+      openrouter: 'OpenRouter',
       ollama: 'Ollama', ollama_cloud: 'Ollama Cloud', cohere: 'Cohere', mistral: 'Mistral',
       nvidia: 'NVIDIA NIM',
       nvidia_nim: 'NVIDIA NIM',

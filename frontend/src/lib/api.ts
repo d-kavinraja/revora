@@ -338,6 +338,7 @@ export interface ModelMetadata {
   model_name: string;
   provider: string;
   accessible: boolean;
+  admin_disabled?: boolean;
   deprecated: boolean;
   preview: boolean;
   experimental: boolean;

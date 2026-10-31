@@ -110,7 +110,7 @@ Reviews run as in-process background tasks behind a per-route concurrency gate �
 
 ## Supported AI providers
 
-Providers are configured in-app with your own keys and routed through LiteLLM — no Revora-hosted keys, no fallback to anyone else's quota. Verified working: **Groq** (first-class), **Gemini**, **OpenAI**, **Anthropic**, **Cohere**, **Mistral**, **DeepSeek**, **xAI/Grok**, **Azure OpenAI**, **NVIDIA NIM**, **Ollama Cloud**, **OpenRouter**. Any other LiteLLM-supported provider works the same way; the in-app Providers page is the source of truth for what your deployment offers.
+Providers are configured in-app with your own keys and routed through LiteLLM — no Revora-hosted keys, no fallback to anyone else's quota. Verified working: **Groq** (first-class), **Gemini**, **OpenAI**, **Anthropic**, **Cohere**, **Mistral**, **DeepSeek**, **xAI/Grok**, **NVIDIA NIM**, **Ollama Cloud**, **OpenRouter**. Any other LiteLLM-supported provider works the same way; the in-app Providers page is the source of truth for what your deployment offers.
 
 ## Repository map
 
