@@ -33,7 +33,7 @@ export default function ApiKeysSettingsPage() {
 
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
-  const [provider, setProvider] = useState('gemini');
+  const [provider, setProvider] = useState('openai');
   const [label, setLabel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});

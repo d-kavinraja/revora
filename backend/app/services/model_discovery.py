@@ -738,6 +738,180 @@ class ModelDiscoveryEngine:
                     raise ProviderUnavailableError(
                         "Provider returned no usable models."
                     )
+            elif provider.lower() == "openai":
+                try:
+                    import httpx
+
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            "https://api.openai.com/v1/models", headers=headers
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json().get("data", []) or []
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict) and "id" in m
+                            ]
+                        elif resp.status_code == 401:
+                            raise ProviderAuthError(
+                                "Invalid API key.", error_type="invalid_key"
+                            )
+                        elif resp.status_code == 403:
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type="authorization_error",
+                            )
+                        elif resp.status_code == 429:
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable.",
+                                error_type="rate_limited",
+                            )
+                        elif resp.status_code in (502, 503, 504):
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable."
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError):
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        "Direct OpenAI API model fetch failed: %s", type(e).__name__
+                    )
+                    lowered = str(e).lower()
+                    if "429" in lowered or "rate" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.",
+                            error_type="rate_limited",
+                        )
+                    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.", error_type="timeout"
+                        )
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError("Provider returned no usable models.")
+            elif provider.lower() == "anthropic":
+                try:
+                    import httpx
+
+                    headers = {
+                        "x-api-key": raw_key,
+                        "anthropic-version": "2023-06-01",
+                    } if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            "https://api.anthropic.com/v1/models", headers=headers
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json().get("data", []) or []
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict) and "id" in m
+                            ]
+                        elif resp.status_code == 401:
+                            raise ProviderAuthError(
+                                "Invalid API key.", error_type="invalid_key"
+                            )
+                        elif resp.status_code == 403:
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type="authorization_error",
+                            )
+                        elif resp.status_code == 429:
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable.",
+                                error_type="rate_limited",
+                            )
+                        elif resp.status_code in (502, 503, 504):
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable."
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError):
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        "Direct Anthropic API model fetch failed: %s", type(e).__name__
+                    )
+                    lowered = str(e).lower()
+                    if "429" in lowered or "rate" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.",
+                            error_type="rate_limited",
+                        )
+                    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.", error_type="timeout"
+                        )
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError("Provider returned no usable models.")
+            elif provider.lower() == "deepseek":
+                try:
+                    import httpx
+
+                    headers = {"Authorization": f"Bearer {raw_key}"} if raw_key else {}
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            "https://api.deepseek.com/v1/models", headers=headers
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json().get("data", []) or []
+                            live_models = [
+                                m["id"]
+                                for m in data
+                                if isinstance(m, dict) and "id" in m
+                            ]
+                        elif resp.status_code == 401:
+                            raise ProviderAuthError(
+                                "Invalid API key.", error_type="invalid_key"
+                            )
+                        elif resp.status_code == 403:
+                            raise ProviderAuthError(
+                                "Provider authentication failed.",
+                                error_type="authorization_error",
+                            )
+                        elif resp.status_code == 429:
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable.",
+                                error_type="rate_limited",
+                            )
+                        elif resp.status_code in (502, 503, 504):
+                            raise ProviderBusyError(
+                                "Provider is temporarily unavailable."
+                            )
+                        else:
+                            raise ProviderUnavailableError(
+                                "Provider is temporarily unavailable."
+                            )
+                except (ProviderAuthError, ProviderBusyError, ProviderUnavailableError):
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        "Direct DeepSeek API model fetch failed: %s", type(e).__name__
+                    )
+                    lowered = str(e).lower()
+                    if "429" in lowered or "rate" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.",
+                            error_type="rate_limited",
+                        )
+                    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+                        raise ProviderBusyError(
+                            "Provider is temporarily unavailable.", error_type="timeout"
+                        )
+                    raise ProviderBusyError("Provider is temporarily unavailable.")
+                if not live_models:
+                    raise ProviderUnavailableError("Provider returned no usable models.")
             else:
                 api_base = cls.PROVIDER_API_BASES.get(provider.lower())
 

@@ -3,10 +3,13 @@ import datetime
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.discovery.anthropic import AnthropicDiscoveryAdapter
 from app.ai.discovery.base import BaseDiscoveryAdapter
 from app.ai.discovery.cohere import CohereDiscoveryAdapter
+from app.ai.discovery.deepseek import DeepSeekDiscoveryAdapter
 from app.ai.discovery.mistral import MistralDiscoveryAdapter
 from app.ai.discovery.ollama_cloud import OllamaCloudDiscoveryAdapter
+from app.ai.discovery.openai import OpenAIDiscoveryAdapter
 from app.ai.discovery.openrouter import OpenRouterDiscoveryAdapter
 from app.core.security import encryption_service
 from app.models.api_key import ApiKey
@@ -16,6 +19,9 @@ from app.models.discovered_model import DiscoveredModel
 class DiscoveryEngineService:
     def __init__(self):
         self.adapters: dict[str, BaseDiscoveryAdapter] = {
+            "openai": OpenAIDiscoveryAdapter(),
+            "anthropic": AnthropicDiscoveryAdapter(),
+            "deepseek": DeepSeekDiscoveryAdapter(),
             "openrouter": OpenRouterDiscoveryAdapter(),
             "ollama_cloud": OllamaCloudDiscoveryAdapter(),
             "cohere": CohereDiscoveryAdapter(),

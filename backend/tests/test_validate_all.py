@@ -424,30 +424,69 @@ async def test_success_cached_and_failure_not_cached():
     from app.services import model_discovery as md
 
     md._MODEL_CACHE.clear()
-    # Patch the litellm object model_discovery references (see note above).
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "gpt-4o"}]}
+
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            self.calls += 1
+            return _FakeResp()
+
+    fake = _FakeClient()
     with (
-        patch.object(md.litellm, "get_valid_models", return_value=["gpt-4o"]) as mock_list,
+        patch("httpx.AsyncClient", return_value=fake),
         patch.object(md.litellm, "completion", return_value={"choices": []}),
     ):
         first = await md.model_discovery_engine.get_available_models("openai", "sk-valid-key-1234567890")
         second = await md.model_discovery_engine.get_available_models("openai", "sk-valid-key-1234567890")
         assert len(first) >= 1
         assert first == second
-        assert mock_list.call_count == 1  # second served from cache
+        assert fake.calls == 1  # second served from cache
 
     md._MODEL_CACHE.clear()
-    with patch.object(
-        md.litellm,
-        "get_valid_models",
-        side_effect=Exception("401 Unauthorized"),
-    ) as mock_list:
+
+    class _FakeBadResp:
+        status_code = 401
+
+        def json(self):
+            return {"error": {"code": 401}}
+
+    class _FakeBadClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            self.calls += 1
+            return _FakeBadResp()
+
+    fake_bad = _FakeBadClient()
+    with patch("httpx.AsyncClient", return_value=fake_bad):
         from app.services.model_discovery import ProviderAuthError
 
         with pytest.raises(ProviderAuthError):
             await md.model_discovery_engine.get_available_models("openai", "sk-bad-key-0000000000")
         with pytest.raises(ProviderAuthError):
             await md.model_discovery_engine.get_available_models("openai", "sk-bad-key-0000000000")
-        assert mock_list.call_count == 2  # failures never cached
+        assert fake_bad.calls == 2  # failures never cached
 
 
 @pytest.mark.asyncio
@@ -459,15 +498,37 @@ async def test_validate_all_uses_fresh_discovery_not_stale_cache(
 
     md._MODEL_CACHE.clear()
     key = await _make_key(test_db, mock_user, provider="openai", raw="sk-fresh-key-1234567890")
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "gpt-4o"}]}
+
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            self.calls += 1
+            return _FakeResp()
+
+    fake = _FakeClient()
     with (
-        patch.object(md.litellm, "get_valid_models", return_value=["gpt-4o"]) as mock_list,
+        patch("httpx.AsyncClient", return_value=fake),
         patch.object(md.litellm, "completion", return_value={"choices": []}),
     ):
         # Prime the cache with a success.
         await md.model_discovery_engine.get_available_models("openai", "sk-fresh-key-1234567890")
-        assert mock_list.call_count == 1
+        assert fake.calls == 1
         # Bulk validation must revalidate rather than trust the cache.
         response = client.post("/api/v1/api-keys/validate-all")
         assert response.status_code == 200
         assert _result(response.json(), key)["status"] == "success"
-        assert mock_list.call_count == 2
+        assert fake.calls == 2
