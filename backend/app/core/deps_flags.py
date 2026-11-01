@@ -24,6 +24,7 @@ from app.services.platform_settings import platform_settings_service
 DEFAULT_FLAG_MESSAGES: dict[str, str] = {
     "model_lab": "Model Lab is temporarily unavailable while we update the service.",
     "mouthmap": "MouthMap is temporarily unavailable while we update the service.",
+    "botaniq": "BotaniQ is temporarily unavailable while we update the service.",
 }
 
 GENERIC_FLAG_MESSAGE = "This feature is temporarily unavailable. Please try again later."

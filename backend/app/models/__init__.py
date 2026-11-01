@@ -13,6 +13,7 @@ from app.models.knowledge import (
     ReviewEvent,
     ReviewMetrics,
 )
+from app.models.botaniq import BotaniqInferenceRun
 from app.models.mouthmap import MouthmapInferenceRun
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
@@ -52,6 +53,7 @@ __all__ = [
     "ApiKey",
     "ApiKeyHealth",
     "AuditLog",
+    "BotaniqInferenceRun",
     "CostBudget",
     "DiscoveredModel",
     "FailoverLog",

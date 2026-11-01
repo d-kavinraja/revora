@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     analytics,
     api_keys,
     auth,
+    botaniq,
     cost,
     dashboard,
     health,
@@ -55,6 +56,7 @@ api_router.include_router(
 )
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
 api_router.include_router(mouthmap.router, prefix="/mouthmap", tags=["mouthmap"])
+api_router.include_router(botaniq.router, prefix="/botaniq", tags=["botaniq"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(cost.router, prefix="/cost", tags=["cost"])
 api_router.include_router(verification.router, prefix="/verify", tags=["verification"])

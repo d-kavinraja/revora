@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Info } from 'lucide-react';
 import { FadeIn } from './_components/FadeIn';
 import { ModelCard } from './_components/ModelCard';
+import { BotaniQCard } from './_components/BotaniQCard';
 import { ComingSoonCard } from './_components/ComingSoonCard';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
@@ -47,17 +48,20 @@ export default function ModelLabPage() {
       </FadeIn>
 
       {/* Model cards */}
-      <div className="grid gap-4 md:gap-5 md:grid-cols-2 items-stretch mt-5 md:mt-7">
+      <div className="grid gap-4 md:gap-5 md:grid-cols-2 lg:grid-cols-3 items-stretch mt-5 md:mt-7">
         <FadeIn delay={0.05} className="h-full">
           <ModelCard />
         </FadeIn>
         <FadeIn delay={0.11} className="h-full">
+          <BotaniQCard />
+        </FadeIn>
+        <FadeIn delay={0.17} className="h-full">
           <ComingSoonCard />
         </FadeIn>
       </div>
 
       {/* Footer note */}
-      <FadeIn delay={0.17}>
+      <FadeIn delay={0.23}>
         <p className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed mt-6 md:mt-8 max-w-[70ch]">
           <Info size={14} className="shrink-0 mt-px" aria-hidden="true" />
           <span>

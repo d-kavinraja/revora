@@ -186,6 +186,48 @@ class Settings(BaseSettings):
         default="mouthmap-v1", description="Deployed MouthMap model version label"
     )
 
+    # BotaniQ Model Lab (medicinal plant classifier, same HF Space as MouthMap)
+    # Reuses MOUTHMAP_HF_ENDPOINT_URL and MOUTHMAP_HF_API_TOKEN.
+    BOTANIQ_MAX_UPLOAD_MB: int = Field(
+        default=20, description="Maximum BotaniQ image upload size in megabytes"
+    )
+    BOTANIQ_ALLOWED_EXTENSIONS: list[str] = Field(
+        default=[".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"],
+        description="Image extensions accepted by the BotaniQ service",
+    )
+    BOTANIQ_HF_TIMEOUT_S: int = Field(
+        default=120, description="Timeout for a full BotaniQ HF inference round-trip"
+    )
+    BOTANIQ_UPLOAD_TIMEOUT_S: int = Field(
+        default=60, description="Timeout for the BotaniQ image upload step alone"
+    )
+    BOTANIQ_MAX_CONCURRENT_INFERENCES: int = Field(
+        default=2,
+        description="Max simultaneous BotaniQ inferences; extra callers get 429",
+    )
+    BOTANIQ_STREAM_CHUNK_BYTES: int = Field(
+        default=512 * 1024, description="Chunk size for streaming BotaniQ uploads"
+    )
+    BOTANIQ_WAKE_TIMEOUT_S: int = Field(
+        default=180,
+        description="Max seconds to wait for the Space to become ready for BotaniQ",
+    )
+    BOTANIQ_WAKE_POLL_INTERVAL_S: float = Field(
+        default=4.0,
+        description="Seconds between readiness probes while waking for BotaniQ",
+    )
+    BOTANIQ_READY_TTL_S: int = Field(
+        default=600,
+        description="Seconds a confirmed-ready Space is trusted before re-probing (BotaniQ)",
+    )
+    BOTANIQ_DATASET_DIR: str = Field(
+        default="app/botaniq/dataset",
+        description="Server-side directory holding BotaniQ sample images",
+    )
+    BOTANIQ_MODEL_VERSION: str = Field(
+        default="botaniq-v1", description="Deployed BotaniQ model version label"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
