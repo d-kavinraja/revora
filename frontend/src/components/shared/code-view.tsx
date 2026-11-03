@@ -192,7 +192,7 @@ export function CodeView({
             wordWrap: 'off',
             quickSuggestions: false,
             suggestOnTriggerCharacters: false,
-            hover: { enabled: true },
+            hover: { enabled: 'on' },
             links: false,
             contextmenu: false,
             selectionHighlight: true,
