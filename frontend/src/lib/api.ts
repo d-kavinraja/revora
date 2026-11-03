@@ -1383,6 +1383,132 @@ export interface MouthMapHistoryItem {
   created_at: string | null;
 }
 
+// ─── BotaniQ types ───────────────────────────────────────────
+
+export interface BotaniQTop5Item {
+  rank: number;
+  label: string;
+  confidence: number;
+}
+
+export interface BotaniQConfig {
+  model: string;
+  model_version: string;
+  input_resolution: string;
+  provider: string;
+  compute: string;
+  max_upload_mb: number;
+  allowed_extensions: string[];
+  classes_available: number | null;
+}
+
+export interface BotaniQSampleImage {
+  id: string;
+  filename: string;
+  size_bytes: number | null;
+  label: string | null;
+  plant_name: string | null;
+  plant_type: string | null;
+  status: string;
+}
+
+export interface BotaniQInferenceResult {
+  prediction: string;
+  predicted_class: string | null;
+  plant_name: string | null;
+  plant_type: string | null;
+  confidence: number | null;        // 0–100
+  model: string;
+  model_version: string | null;
+  classes_available: number | null;
+  top_5_predictions: BotaniQTop5Item[];
+  inference_time_ms: number | null;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
+export interface BotaniQHistoryItem {
+  id: string;
+  image_filename: string;
+  source: string;
+  test_image_id: string | null;
+  prediction: string | null;
+  predicted_class: string | null;
+  plant_name: string | null;
+  plant_type: string | null;
+  confidence: number | null;
+  top_5_predictions: BotaniQTop5Item[];
+  inference_time_ms: number | null;
+  model_version: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+export const botaniqApi = {
+  getConfig: () => apiClient.get<BotaniQConfig>('/botaniq/config').then((r) => r.data),
+  getHealth: () =>
+    apiClient.get<{ status: string; endpoint: string; detail: string | null }>('/botaniq/health').then((r) => r.data),
+  warm: (opts?: { signal?: AbortSignal }) =>
+    apiClient
+      .post<{ status: string }>('/botaniq/warm', null, { timeout: 200000, signal: opts?.signal })
+      .then((r) => r.data),
+  getDataset: () => apiClient.get<BotaniQSampleImage[]>('/botaniq/dataset').then((r) => r.data),
+  streamUrl: (id: string) => `${API_BASE}/botaniq/dataset/${encodeURIComponent(id)}/stream`,
+  getDatasetBlob: (id: string) =>
+    apiClient
+      .get<Blob>(`/botaniq/dataset/${encodeURIComponent(id)}/stream`, {
+        responseType: 'blob',
+      })
+      .then((r) => r.data),
+  runInferenceUrl: (imageUrl: string, opts?: { test_image_id?: string; signal?: AbortSignal }) => {
+    const form = new FormData();
+    form.append('image_url', imageUrl);
+    if (opts?.test_image_id) form.append('test_image_id', opts.test_image_id);
+    return apiClient
+      .post<BotaniQInferenceResult>('/botaniq/inference/url', form, {
+        transformRequest: [(data, headers) => {
+          const h = headers as unknown as { delete?: (k: string) => void };
+          if (typeof h?.delete === 'function') h.delete('Content-Type');
+          else if (headers) delete (headers as Record<string, unknown>)['Content-Type'];
+          return data;
+        }],
+        timeout: 200000,
+        signal: opts?.signal,
+      })
+      .then((r) => r.data);
+  },
+  runInference: (
+    file: Blob,
+    filename: string,
+    opts?: { test_image_id?: string; source?: string; signal?: AbortSignal },
+    onUploadProgress?: (pct: number, uploadComplete: boolean) => void,
+  ) => {
+    const form = new FormData();
+    form.append('image', file, filename);
+    if (opts?.test_image_id) form.append('test_image_id', opts.test_image_id);
+    form.append('source', opts?.source ?? 'upload');
+    return apiClient
+      .post<BotaniQInferenceResult>('/botaniq/inference', form, {
+        transformRequest: [(data, headers) => {
+          const h = headers as unknown as { delete?: (k: string) => void };
+          if (typeof h?.delete === 'function') h.delete('Content-Type');
+          else if (headers) delete (headers as Record<string, unknown>)['Content-Type'];
+          return data;
+        }],
+        timeout: 200000,
+        signal: opts?.signal,
+        onUploadProgress: (e) => {
+          if (onUploadProgress && e.total) {
+            onUploadProgress(Math.round((e.loaded / e.total) * 100), e.loaded >= e.total);
+          }
+        },
+      })
+      .then((r) => r.data);
+  },
+  getHistory: (limit = 20, offset = 0) =>
+    apiClient.get<BotaniQHistoryItem[]>(`/botaniq/history?limit=${limit}&offset=${offset}`).then((r) => r.data),
+};
+
 export const mouthmapApi = {
   getConfig: () => apiClient.get<MouthMapConfig>('/mouthmap/config').then((r) => r.data),
   getHealth: () =>

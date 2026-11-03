@@ -1,0 +1,30 @@
+[
+  {
+    "id": "10",
+    "filename": "10.jpg",
+    "plant_name": "Medicinal Sample #10",
+    "plant_type": "Leaf",
+    "label": "Test Specimen 10"
+  },
+  {
+    "id": "110",
+    "filename": "110.jpg",
+    "plant_name": "Medicinal Sample #110",
+    "plant_type": "Leaf",
+    "label": "Test Specimen 110"
+  },
+  {
+    "id": "236",
+    "filename": "236.jpg",
+    "plant_name": "Medicinal Sample #236",
+    "plant_type": "Plant",
+    "label": "Test Specimen 236"
+  },
+  {
+    "id": "1162",
+    "filename": "1162.jpg",
+    "plant_name": "Medicinal Sample #1162",
+    "plant_type": "Plant",
+    "label": "Test Specimen 1162"
+  }
+]
