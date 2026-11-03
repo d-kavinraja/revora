@@ -34,6 +34,30 @@ export function ModelLabHero() {
           <div className="min-w-0 flex-1">
             <div className="ml-anim-text min-w-0">
               <h1 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-2 flex-wrap">
+                <span
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-[0_4px_12px_rgba(8,126,173,0.25)]"
+                  style={{ background: '#087EAD' }}
+                >
+                  <svg
+                    viewBox="0 0 64 64"
+                    width="26"
+                    height="26"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M10 22V13a3 3 0 0 1 3-3h9" />
+                    <path d="M42 10h9a3 3 0 0 1 3 3v9" />
+                    <path d="M54 42v9a3 3 0 0 1-3 3h-9" />
+                    <path d="M22 54h-9a3 3 0 0 1-3-3v-9" />
+                    <path d="M16 32 C21 31 25 25 32 25 C39 25 43 31 48 32 C43 33 38 40 32 40 C26 40 21 33 16 32Z" />
+                    <path d="M16 32C22 32 26 35 32 35 C38 35 42 32 48 32" />
+                    <path d="M23 46h18" opacity="0.8" />
+                  </svg>
+                </span>
                 MouthMap Model
                 <span className="ml-hero-beta text-xs font-semibold px-2 py-0.5 rounded-full bg-ai-purple/20 text-ai-purple border border-ai-purple/30">
                   v1

@@ -156,6 +156,8 @@ async def run_inference_url(
         ext = os.path.splitext(url_stem.lower())[1]
         if ext not in (".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"):
             ext = ".jpg"  # fallback; MIME will override
+        if not os.path.splitext(url_stem.lower())[1]:
+            url_stem = url_stem + ext
 
         fd, tmp_path = tempfile.mkstemp(prefix="botaniq_url_", suffix=ext)
         content_type: str | None = None
@@ -169,6 +171,12 @@ async def run_inference_url(
                             kind="unsupported_format",
                         )
                     content_type = resp.headers.get("content-type", "").split(";")[0].strip() or None
+                    if content_type and not content_type.startswith("image/"):
+                        raise BotaniQHFError(
+                            "The URL does not point to a valid image. "
+                            "Please provide a direct link to an image file.",
+                            kind="unsupported_format",
+                        )
                     with os.fdopen(fd, "wb") as fh:
                         async for chunk in resp.aiter_bytes(chunk_size):
                             size_bytes += len(chunk)
@@ -187,6 +195,8 @@ async def run_inference_url(
             ) from exc
 
         filename = url_stem or "image.jpg"
+        if os.path.splitext(filename.lower())[1] not in (".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"):
+            filename = filename + (ext if ext else ".jpg")
         try:
             await botaniq_service.warm()
 
