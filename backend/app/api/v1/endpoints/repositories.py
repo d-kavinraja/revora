@@ -14,6 +14,7 @@ from app.core.deps import get_current_user
 from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.github.auth import github_app_auth
+from app.github.errors import GitHubAuthError
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.sync_run import (
@@ -39,6 +40,17 @@ from app.services.sync_engine import record_sync_run
 SYNC_IN_PROGRESS_WINDOW = timedelta(minutes=30)
 
 logger = logging.getLogger(__name__)
+
+
+def _installation_auth_http_exception(exc: GitHubAuthError) -> HTTPException:
+    category = exc.category
+    if category in {"suspended", "inaccessible", "reauthorization_required"}:
+        return HTTPException(status_code=409, detail=f"GitHub installation is {category}.")
+    if category == "rate_limited":
+        return HTTPException(status_code=429, detail=exc.message)
+    if category == "configuration_error":
+        return HTTPException(status_code=503, detail="GitHub App configuration error.")
+    return HTTPException(status_code=503, detail="GitHub authentication is temporarily unavailable.")
 
 router = APIRouter()
 
@@ -156,10 +168,15 @@ async def list_repositories(
 
         inst = inst_by_id.get(repo.installation_id)
 
-        # Status: removed | permission_required | disabled | active
+        # Status: removed | installation_suspended | installation_inaccessible |
+        # permission_required | disabled | active
         status = "active"
         if repo.removed_at is not None:
             status = "removed"
+        elif inst is not None and inst.lifecycle_status == "suspended":
+            status = "installation_suspended"
+        elif inst is not None and inst.lifecycle_status == "inaccessible":
+            status = "installation_inaccessible"
         elif inst is not None and not inst.permissions_ok:
             status = "permission_required"
         elif not repo.reviews_enabled:
@@ -370,10 +387,12 @@ async def sync_repository(
             await github_app_auth.get_installation_token(
                 installation.installation_id
             )
+        except GitHubAuthError as e:
+            raise _installation_auth_http_exception(e) from e
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Failed to authenticate with GitHub App: {e}"
-            )
+                status_code=503, detail=f"Failed to authenticate with GitHub App: {e}"
+            ) from e
 
         # Duplicate-sync guard (browser refresh / double-click safe): an
         # in-progress sync owns this repository, so do not schedule another.
@@ -708,8 +727,10 @@ async def get_repo_github_stats(
 
     try:
         token = await github_app_auth.get_installation_token(inst.installation_id)
+    except GitHubAuthError as e:
+        raise _installation_auth_http_exception(e) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to authenticate with GitHub App: {e}")
+        raise HTTPException(status_code=503, detail=f"Failed to authenticate with GitHub App: {e}") from e
 
     headers = {
         "Authorization": f"Bearer {token}",

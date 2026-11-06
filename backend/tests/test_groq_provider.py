@@ -291,8 +291,10 @@ async def test_individual_test_groq_success(
     mock_models.return_value = [{"id": "openai/gpt-oss-120b"}]
     key = await _make_key(test_db, mock_user)
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 200
-    assert response.json()["status"] == "success"
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job)[str(key.id)]["status"] == "success"
     await test_db.refresh(key)
     assert key.is_valid is True
 
@@ -309,8 +311,12 @@ async def test_individual_test_groq_invalid(
     )
     key = await _make_key(test_db, mock_user)
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 400
-    assert "Invalid API key" in response.json()["detail"]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    item = job_items(job)[str(key.id)]
+    assert item["status"] == "failed"
+    assert item["error_type"] == "invalid_key"
     await test_db.refresh(key)
     assert key.is_valid is False
 
@@ -323,7 +329,8 @@ async def test_validate_all_groq_success(
     mock_models.return_value = [{"id": "openai/gpt-oss-120b"}]
     key = await _make_key(test_db, mock_user)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["results"][str(key.id)]["status"] == "success"
-    assert data["summary"] == {"total": 1, "succeeded": 1, "failed": 0, "busy": 0}
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job)[str(key.id)]["status"] == "success"
+    assert job_summary(job) == {"total": 1, "succeeded": 1, "failed": 0, "busy": 0}

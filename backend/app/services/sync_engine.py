@@ -34,6 +34,7 @@ from sqlalchemy import select, text
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.github.auth import github_app_auth
+from app.github.errors import GitHubAuthError
 from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
@@ -47,6 +48,21 @@ from app.models.sync_run import (
     SYNC_STATUS_RUNNING,
     SYNC_STATUS_SUCCESS,
     SyncRun,
+)
+from app.services.installation_lifecycle import (
+    ACTIVE as LIFECYCLE_ACTIVE,
+)
+from app.services.installation_lifecycle import (
+    app_id_matches,
+    can_attempt_token,
+    clear_auth_state,
+    mark_configuration_error,
+    mark_inaccessible,
+    mark_reauthorization_required,
+    mark_suspended,
+    metadata_recheck_due,
+    record_auth_failure,
+    record_auth_success,
 )
 
 logger = logging.getLogger(__name__)
@@ -211,167 +227,328 @@ async def sync_repositories_once(
             inst_started_at = now
             inst_ok = True
             inst_error: str | None = None
+            skipped = False
             try:
-                token = await github_app_auth.get_installation_token(
-                    inst.installation_id
-                )
-                auth_headers = {**headers, "Authorization": f"Bearer {token}"}
-
-                async with httpx.AsyncClient() as client:
-                    repos_res = await client.get(
-                        f"{GITHUB_API}/installation/repositories",
-                        headers=auth_headers,
-                    )
-                    if not repos_res.is_success:
-                        raise RuntimeError(
-                            f"GitHub repo list failed: {repos_res.status_code} "
-                            f"{repos_res.text[:300]}"
-                        )
-                    gh_repos = repos_res.json().get("repositories", [])
-
-                    gh_ids = set()
-                    for r in gh_repos:
-                        gh_id = r.get("id")
-                        if not gh_id:
-                            continue
-                        gh_ids.add(gh_id)
-                        counts["repo_count"] += 1
-                        try:
-                            res = await db.execute(
-                                select(Repository).where(Repository.github_id == gh_id)
-                            )
-                            db_repo = res.scalars().first()
-
-                            if db_repo is None:
-                                db_repo = Repository(
-                                    github_id=gh_id,
-                                    name=r.get("name") or "",
-                                    full_name=r.get("full_name") or "",
-                                    description=r.get("description"),
-                                    language=r.get("language"),
-                                    is_private=bool(r.get("private", False)),
-                                    installation_id=inst.id,
-                                    reviews_enabled=True,
-                                    is_archived=bool(r.get("archived", False)),
-                                    last_synced_at=now,
-                                )
-                                db.add(db_repo)
-                                counts["repos_added"] += 1
-                                logger.info(
-                                    f"[sync:{reason}] New repository: {db_repo.full_name}"
-                                )
-                            else:
-                                changed = False
-                                for attr, key in (
-                                    ("name", "name"),
-                                    ("full_name", "full_name"),
-                                    ("description", "description"),
-                                    ("language", "language"),
-                                    ("is_private", "private"),
-                                ):
-                                    new_val = r.get(key)
-                                    if (
-                                        new_val is not None
-                                        and getattr(db_repo, attr) != new_val
-                                    ):
-                                        setattr(db_repo, attr, new_val)
-                                        changed = True
-                                gh_archived = bool(r.get("archived", False))
-                                if db_repo.is_archived != gh_archived:
-                                    db_repo.is_archived = gh_archived
-                                    changed = True
-
-                                # User intent (reviews_enabled) is preserved on
-                                # metadata refreshes — only flipped on explicit
-                                # re-add or removal.
-                                if db_repo.removed_at is not None:
-                                    db_repo.removed_at = None
-                                    db_repo.reviews_enabled = True
-                                    changed = True
-                                    logger.info(
-                                        f"[sync:{reason}] Repository re-added: {db_repo.full_name}"
-                                    )
-                                db_repo.installation_id = inst.id
-                                db_repo.last_synced_at = now
-                                if changed:
-                                    counts["repos_updated"] += 1
-                        except Exception as e:
-                            full_name = r.get("full_name") or str(gh_id)
-                            counts["failures"][full_name] = f"{type(e).__name__}: {e}"
-                            logger.error(
-                                f"[sync:{reason}] Repo upsert failed for {full_name}: {e}",
-                                exc_info=True,
-                            )
-
-                    # Mark removed — only when the fetched list is non-empty to
-                    # avoid mass-removal on a transient API glitch.
-                    if gh_ids:
-                        stale_res = await db.execute(
-                            select(Repository).where(
-                                Repository.installation_id == inst.id,
-                                Repository.github_id.not_in(list(gh_ids)),
-                            )
-                        )
-                        for stale in stale_res.scalars().all():
-                            if stale.removed_at is None:
-                                stale.removed_at = now
-                                stale.installation_id = None
-                                stale.reviews_enabled = False
-                                db.add(stale)
-                                counts["repos_removed"] += 1
-                                counts["failures"].pop(stale.full_name, None)
-                                logger.info(
-                                    f"[sync:{reason}] Repository removed from installation: {stale.full_name}"
-                                )
-
-                # Permission refresh (best-effort — never fails the pass).
-                try:
-                    gh_inst = await github_app_auth.get_installation(
-                        inst.installation_id
-                    )
-                    if gh_inst is None:
-                        # Installation vanished on GitHub (uninstall missed by
-                        # webhooks) — unlink everything under it.
-                        inst.permissions_ok = False
-                        inst.suspended_at = now
-                        orphan_res = await db.execute(
-                            select(Repository).where(
-                                Repository.installation_id == inst.id
-                            )
-                        )
-                        for orphan in orphan_res.scalars().all():
-                            if orphan.removed_at is None:
-                                orphan.removed_at = now
-                                orphan.installation_id = None
-                                orphan.reviews_enabled = False
-                                counts["repos_removed"] += 1
+                async with db.begin_nested():
+                    # App identity gate: a row owned by another App must never
+                    # receive a token request from this process.
+                    if not app_id_matches(inst):
+                        mark_configuration_error(inst, now=now)
+                        inst.lifecycle_status = "configuration_error"
+                        inst.last_auth_error_category = "app_mismatch"
+                        skipped = True
                         logger.warning(
-                            f"[sync:{reason}] Installation {inst.installation_id} no longer "
-                            f"exists on GitHub — unlinked its repositories"
+                            f"[sync:{reason}] Installation {inst.installation_id} "
+                            "belongs to a different GitHub App; skipping token requests"
                         )
                     else:
-                        gh_perms = gh_inst.get("permissions") or {}
-                        if gh_perms:
-                            inst.permissions = gh_perms
-                        suspended = gh_inst.get("suspended_at")
-                        inst.suspended_at = (
-                            datetime.fromisoformat(str(suspended))
-                            if suspended
-                            else None
+                        # Blocked state: no token request unless a metadata
+                        # recheck is due. A successful metadata check can recover
+                        # the installation in the same pass.
+                        if not can_attempt_token(inst, now):
+                            if not metadata_recheck_due(inst, now):
+                                skipped = True
+                            else:
+                                try:
+                                    gh_inst = await github_app_auth.get_installation(
+                                        inst.installation_id
+                                    )
+                                except GitHubAuthError as exc:
+                                    record_auth_failure(
+                                        inst,
+                                        exc.category,
+                                        status_code=exc.status_code,
+                                        retry_after=exc.retry_after,
+                                        now=now,
+                                    )
+                                    skipped = True
+                                    inst_ok = False
+                                    inst_error = exc.message
+                                    gh_inst = None
+                                else:
+                                    if gh_inst is None:
+                                        mark_inaccessible(inst, now=now)
+                                        skipped = True
+                                    else:
+                                        suspended = gh_inst.get("suspended_at")
+                                        inst.suspended_at = (
+                                            datetime.fromisoformat(str(suspended))
+                                            if suspended
+                                            else None
+                                        )
+                                        gh_perms = gh_inst.get("permissions") or {}
+                                        if gh_perms:
+                                            inst.permissions = gh_perms
+                                        inst.permissions_ok = _has_required_permissions(
+                                            inst.permissions, inst.suspended_at
+                                        )
+                                        payload_app_id = gh_inst.get("app_id")
+                                        if payload_app_id is not None:
+                                            inst.app_id = int(payload_app_id)
+                                        if inst.permissions_ok and inst.suspended_at is None:
+                                            clear_auth_state(inst, now=now)
+                                            record_auth_success(
+                                                inst,
+                                                app_id=inst.app_id or settings.GITHUB_APP_ID,
+                                                now=now,
+                                            )
+                                        elif inst.suspended_at is not None:
+                                            mark_suspended(inst, now=now)
+                                            skipped = True
+                                        else:
+                                            mark_reauthorization_required(inst, now=now)
+                                            skipped = True
+
+                        if skipped:
+                            pass
+                        elif not can_attempt_token(inst, now):
+                            skipped = True
+                        else:
+                            try:
+                                token = await github_app_auth.get_installation_token(
+                                    inst.installation_id
+                                )
+                                record_auth_success(
+                                    inst,
+                                    app_id=settings.GITHUB_APP_ID,
+                                    now=now,
+                                )
+                                auth_headers = {
+                                    **headers,
+                                    "Authorization": f"Bearer {token}",
+                                }
+
+                                async with httpx.AsyncClient() as client:
+                                    repos_res = await client.get(
+                                        f"{GITHUB_API}/installation/repositories",
+                                        headers=auth_headers,
+                                    )
+                                    if not repos_res.is_success:
+                                        raise RuntimeError(
+                                            "GitHub repo list failed: "
+                                            f"{repos_res.status_code}"
+                                        )
+                                    gh_repos = repos_res.json().get("repositories", [])
+
+                                    gh_ids = set()
+                                    for r in gh_repos:
+                                        gh_id = r.get("id")
+                                        if not gh_id:
+                                            continue
+                                        gh_ids.add(gh_id)
+                                        counts["repo_count"] += 1
+                                        try:
+                                            res = await db.execute(
+                                                select(Repository).where(
+                                                    Repository.github_id == gh_id
+                                                )
+                                            )
+                                            db_repo = res.scalars().first()
+
+                                            if db_repo is None:
+                                                db_repo = Repository(
+                                                    github_id=gh_id,
+                                                    name=r.get("name") or "",
+                                                    full_name=r.get("full_name") or "",
+                                                    description=r.get("description"),
+                                                    language=r.get("language"),
+                                                    is_private=bool(r.get("private", False)),
+                                                    installation_id=inst.id,
+                                                    reviews_enabled=True,
+                                                    is_archived=bool(r.get("archived", False)),
+                                                    last_synced_at=now,
+                                                )
+                                                db.add(db_repo)
+                                                counts["repos_added"] += 1
+                                                logger.info(
+                                                    f"[sync:{reason}] New repository: {db_repo.full_name}"
+                                                )
+                                            else:
+                                                changed = False
+                                                for attr, key in (
+                                                    ("name", "name"),
+                                                    ("full_name", "full_name"),
+                                                    ("description", "description"),
+                                                    ("language", "language"),
+                                                    ("is_private", "private"),
+                                                ):
+                                                    new_val = r.get(key)
+                                                    if (
+                                                        new_val is not None
+                                                        and getattr(db_repo, attr) != new_val
+                                                    ):
+                                                        setattr(db_repo, attr, new_val)
+                                                        changed = True
+                                                gh_archived = bool(r.get("archived", False))
+                                                if db_repo.is_archived != gh_archived:
+                                                    db_repo.is_archived = gh_archived
+                                                    changed = True
+
+                                                if db_repo.removed_at is not None:
+                                                    db_repo.removed_at = None
+                                                    db_repo.reviews_enabled = True
+                                                    changed = True
+                                                    logger.info(
+                                                        f"[sync:{reason}] Repository re-added: {db_repo.full_name}"
+                                                    )
+                                                db_repo.installation_id = inst.id
+                                                db_repo.last_synced_at = now
+                                                if changed:
+                                                    counts["repos_updated"] += 1
+                                        except Exception as e:
+                                            full_name = r.get("full_name") or str(gh_id)
+                                            counts["failures"][full_name] = (
+                                                f"{type(e).__name__}: {e}"
+                                            )
+                                            logger.error(
+                                                f"[sync:{reason}] Repo upsert failed for {full_name}: {e}",
+                                                exc_info=True,
+                                            )
+
+                                    if gh_ids:
+                                        stale_res = await db.execute(
+                                            select(Repository).where(
+                                                Repository.installation_id == inst.id,
+                                                Repository.github_id.not_in(list(gh_ids)),
+                                            )
+                                        )
+                                        for stale in stale_res.scalars().all():
+                                            if stale.removed_at is None:
+                                                stale.removed_at = now
+                                                stale.installation_id = None
+                                                stale.reviews_enabled = False
+                                                db.add(stale)
+                                                counts["repos_removed"] += 1
+                                                counts["failures"].pop(stale.full_name, None)
+                                                logger.info(
+                                                    f"[sync:{reason}] Repository removed from installation: {stale.full_name}"
+                                                )
+
+                                # Permission refresh, best-effort.
+                                if metadata_recheck_due(inst, now):
+                                    try:
+                                        gh_inst = await github_app_auth.get_installation(
+                                            inst.installation_id
+                                        )
+                                        if gh_inst is None:
+                                            # Token succeeded but metadata is gone:
+                                            # treat as transient, not inaccessible.
+                                            record_auth_failure(
+                                                inst,
+                                                "transient_not_found",
+                                                now=now,
+                                            )
+                                        else:
+                                            gh_perms = gh_inst.get("permissions") or {}
+                                            if gh_perms:
+                                                inst.permissions = gh_perms
+                                            suspended = gh_inst.get("suspended_at")
+                                            inst.suspended_at = (
+                                                datetime.fromisoformat(str(suspended))
+                                                if suspended
+                                                else None
+                                            )
+                                            inst.permissions_ok = _has_required_permissions(
+                                                inst.permissions, inst.suspended_at
+                                            )
+                                            payload_app_id = gh_inst.get("app_id")
+                                            if payload_app_id is not None:
+                                                inst.app_id = int(payload_app_id)
+                                            if inst.permissions_ok and inst.suspended_at is None:
+                                                clear_auth_state(inst, now=now)
+                                            elif inst.suspended_at is not None:
+                                                mark_suspended(inst, now=now)
+                                            else:
+                                                mark_reauthorization_required(inst, now=now)
+                                    except GitHubAuthError as exc:
+                                        record_auth_failure(
+                                            inst,
+                                            exc.category,
+                                            status_code=exc.status_code,
+                                            retry_after=exc.retry_after,
+                                            now=now,
+                                        )
+                                        if exc.category not in (
+                                            "transient",
+                                            "transient_not_found",
+                                            "rate_limited",
+                                        ):
+                                            skipped = True
+
+                            except GitHubAuthError as exc:
+                                category = exc.category
+                                # Clarify 404/403 with metadata when possible.
+                                if category in (
+                                    "transient_not_found",
+                                    "reauthorization_required",
+                                ) and metadata_recheck_due(inst, now):
+                                    try:
+                                        gh_inst = await github_app_auth.get_installation(
+                                            inst.installation_id
+                                        )
+                                        if gh_inst is None:
+                                            category = "inaccessible"
+                                        elif gh_inst.get("suspended_at"):
+                                            category = "suspended"
+                                    except GitHubAuthError:
+                                        pass
+
+                                if category == "suspended":
+                                    mark_suspended(inst, now=now)
+                                    skipped = True
+                                elif category == "inaccessible":
+                                    mark_inaccessible(inst, now=now)
+                                    skipped = True
+                                elif category == "reauthorization_required":
+                                    mark_reauthorization_required(inst, now=now)
+                                    skipped = True
+                                elif category == "configuration_error":
+                                    mark_configuration_error(inst, now=now)
+                                    skipped = True
+                                else:
+                                    record_auth_failure(
+                                        inst,
+                                        category,
+                                        status_code=exc.status_code,
+                                        retry_after=exc.retry_after,
+                                        now=now,
+                                    )
+                                    inst_ok = False
+                                    inst_error = exc.message
+                                    counts["failures"][
+                                        f"installation:{inst.installation_id}"
+                                    ] = inst_error
+
+                            except Exception as e:
+                                record_auth_failure(
+                                    inst,
+                                    "transient",
+                                    now=now,
+                                )
+                                inst_ok = False
+                                inst_error = f"{type(e).__name__}: {e}"
+                                counts["failures"][
+                                    f"installation:{inst.installation_id}"
+                                ] = inst_error
+                                logger.error(
+                                    f"[sync:{reason}] Installation {inst.installation_id} failed: {e}",
+                                    exc_info=True,
+                                )
+
+                    # Per-installation last-sync markers.
+                    inst.last_sync_started_at = inst_started_at
+                    inst.last_sync_completed_at = datetime.now(UTC)
+                    if skipped:
+                        inst.last_sync_status = "skipped"
+                        inst.last_sync_error = None
+                        counts["installations_skipped"] = (
+                            counts.get("installations_skipped", 0) + 1
                         )
-                        inst.permissions_ok = _has_required_permissions(
-                            inst.permissions, inst.suspended_at
-                        )
-                        if not inst.permissions_ok:
-                            logger.warning(
-                                f"[sync:{reason}] Installation {inst.installation_id} is "
-                                f"missing required permissions or is suspended — reviews gated"
-                            )
-                except Exception as e:
-                    logger.warning(
-                        f"[sync:{reason}] Permission refresh failed for installation "
-                        f"{inst.installation_id}: {e}"
-                    )
+                    else:
+                        inst.last_sync_status = "success" if inst_ok else "failed"
+                        inst.last_sync_error = inst_error
+                    inst.last_sync_reason = reason
+                    db.add(inst)
             except Exception as e:
                 inst_ok = False
                 inst_error = f"{type(e).__name__}: {e}"
@@ -380,18 +557,20 @@ async def sync_repositories_once(
                     f"[sync:{reason}] Installation {inst.installation_id} failed: {e}",
                     exc_info=True,
                 )
-
-            # Per-installation last-sync markers (UI: "Last synchronized X ago").
-            inst.last_sync_started_at = inst_started_at
-            inst.last_sync_completed_at = datetime.now(UTC)
-            inst.last_sync_status = "success" if inst_ok else "failed"
-            inst.last_sync_error = inst_error
-            inst.last_sync_reason = reason
-            db.add(inst)
+                try:
+                    db.add(inst)
+                except Exception:
+                    pass
 
         await db.commit()
 
     counts["repos_failed"] = len(counts["failures"])
+    if "installations_skipped" not in counts:
+        counts["installations_skipped"] = 0
+    if "installations_failed" not in counts:
+        counts["installations_failed"] = len(
+            [k for k in counts["failures"] if k.startswith("installation:")]
+        )
     return counts
 
 
@@ -439,12 +618,14 @@ async def sync_prs_once(
             select(Repository, Installation)
             .join(Installation, Repository.installation_id == Installation.id)
             .where(
-                Repository.installation_id.isnot(None),
-                Repository.removed_at.is_(None),
-                Repository.reviews_enabled.is_(True),
-                Repository.is_archived.is_(False),
-                Installation.permissions_ok.is_(True),
-            )
+            Repository.installation_id.isnot(None),
+            Repository.removed_at.is_(None),
+            Repository.reviews_enabled.is_(True),
+            Repository.is_archived.is_(False),
+            Installation.permissions_ok.is_(True),
+            Installation.lifecycle_status == LIFECYCLE_ACTIVE,
+            Installation.retry_after.is_(None),
+        )
         )
         if user_id:
             q = q.where(Installation.user_id == user_id)
@@ -540,6 +721,8 @@ async def _sync_repository_prs(
     before PR #2 exists.
     """
     owner, repo_name = repo.full_name.split("/", 1)
+    if not can_attempt_token(inst, datetime.now(UTC)):
+        raise RuntimeError(f"installation {inst.installation_id} is not eligible for token access")
     token = await github_app_auth.get_installation_token(inst.installation_id)
     auth_headers = {**headers, "Authorization": f"Bearer {token}"}
 
@@ -1030,6 +1213,8 @@ async def _login_reconciliation(user_id: uuid.UUID) -> None:
                 Repository.is_archived.is_(False),
                 Installation.user_id == user_id,
                 Installation.permissions_ok.is_(True),
+                Installation.lifecycle_status == LIFECYCLE_ACTIVE,
+                Installation.retry_after.is_(None),
             )
         )
 

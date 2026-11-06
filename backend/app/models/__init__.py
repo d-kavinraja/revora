@@ -45,6 +45,7 @@ from app.models.verification import (
     VerificationResultModel,
 )
 from app.queue.models import ReviewJob
+from app.queue.operation_models import OperationJob
 
 __all__ = [
     "AdminSession",
@@ -65,6 +66,7 @@ __all__ = [
     "LlmTokenUsage",
     "ModelOverride",
     "MouthmapInferenceRun",
+    "OperationJob",
     "OrgMember",
     "Organization",
     "PlatformSetting",

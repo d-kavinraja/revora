@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.health import FailoverLog, ProviderHealth
 
-CIRCUIT_BREAKER_THRESHOLD = 5  # failures before opening
-CIRCUIT_BREAKER_TIMEOUT = 300  # seconds before half_open
+CIRCUIT_BREAKER_THRESHOLD = 5
+CIRCUIT_BREAKER_TIMEOUT = 300
 
 
 class HealthMonitor:
@@ -15,13 +15,24 @@ class HealthMonitor:
     OPEN = "open"
     HALF_OPEN = "half_open"
 
-    async def get_or_create(self, db: AsyncSession, provider: str) -> ProviderHealth:
-        result = await db.execute(
-            select(ProviderHealth).where(ProviderHealth.provider == provider)
-        )
+    async def get_or_create(
+        self, db: AsyncSession, provider: str, user_id: uuid.UUID | None = None
+    ) -> ProviderHealth:
+        if user_id is None:
+            stmt = select(ProviderHealth).where(
+                ProviderHealth.user_id.is_(None),
+                ProviderHealth.provider == provider,
+            )
+        else:
+            stmt = select(ProviderHealth).where(
+                ProviderHealth.user_id == user_id,
+                ProviderHealth.provider == provider,
+            )
+        result = await db.execute(stmt)
         health = result.scalars().first()
         if not health:
             health = ProviderHealth(
+                user_id=user_id,
                 provider=provider,
                 status="healthy",
                 circuit_state=self.CLOSED,
@@ -32,72 +43,112 @@ class HealthMonitor:
         return health
 
     async def record_success(
-        self, db: AsyncSession, provider: str, latency_ms: float
+        self,
+        db: AsyncSession,
+        provider: str,
+        latency_ms: float,
+        model_name: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> None:
-        health = await self.get_or_create(db, provider)
+        health = await self.get_or_create(db, provider, user_id=user_id)
         health.total_requests += 1
         health.avg_latency_ms = (
             health.avg_latency_ms * (health.total_requests - 1) + latency_ms
         ) / health.total_requests
-        health.success_rate = min(1.0, health.success_rate + 0.05)
-        health.error_rate = max(0.0, health.error_rate - 0.02)
+        health.failed_requests = min(health.failed_requests, health.total_requests)
+        health.success_rate = (
+            (health.total_requests - health.failed_requests) / health.total_requests
+            if health.total_requests
+            else 1.0
+        )
+        health.error_rate = (
+            health.failed_requests / health.total_requests
+            if health.total_requests
+            else 0.0
+        )
         health.consecutive_failures = 0
         health.status = "healthy"
+        health.last_error = None
+        health.last_error_at = None
+        health.last_checked_at = datetime.now(UTC)
+        health.last_latency_ms = latency_ms
+        health.last_model = model_name
 
-        # Proper state transitions
         if health.circuit_state == self.OPEN:
-            # Open -> Half Open (testing recovery)
             health.circuit_state = self.HALF_OPEN
         elif health.circuit_state == self.HALF_OPEN:
-            # Half Open -> Closed (recovery confirmed)
             health.circuit_state = self.CLOSED
             health.circuit_opened_at = None
-        # Closed -> Closed (no change needed)
 
         db.add(health)
         await db.commit()
 
     async def record_failure(
-        self, db: AsyncSession, provider: str, error_type: str, error_msg: str
+        self,
+        db: AsyncSession,
+        provider: str,
+        error_type: str,
+        error_msg: str,
+        latency_ms: float | None = None,
+        model_name: str | None = None,
+        user_id: uuid.UUID | None = None,
+        auth_failure: bool = False,
     ) -> None:
-        health = await self.get_or_create(db, provider)
+        health = await self.get_or_create(db, provider, user_id=user_id)
         health.total_requests += 1
         health.failed_requests += 1
-        health.success_rate = max(0.0, health.success_rate - 0.1)
-        health.error_rate = min(1.0, health.error_rate + 0.1)
-        health.consecutive_failures += 1
-        health.last_error = error_msg
+        health.avg_latency_ms = (
+            (health.avg_latency_ms * (health.total_requests - 1) + (latency_ms or 0.0))
+            / health.total_requests
+            if health.total_requests
+            else 0.0
+        )
+        health.success_rate = (
+            (health.total_requests - health.failed_requests) / health.total_requests
+            if health.total_requests
+            else 0.0
+        )
+        health.error_rate = (
+            health.failed_requests / health.total_requests
+            if health.total_requests
+            else 1.0
+        )
+        health.last_error = error_msg[:300] if error_msg else None
         health.last_error_at = datetime.now(UTC)
+        health.last_checked_at = datetime.now(UTC)
+        health.last_latency_ms = latency_ms
+        health.last_model = model_name
 
-        # Proper state transitions
-        if health.circuit_state == self.HALF_OPEN:
-            # Half Open -> Open (recovery failed)
-            health.circuit_state = self.OPEN
-            health.circuit_opened_at = datetime.now(UTC)
-            health.status = "down"
-        elif health.consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
-            # Closed -> Open (too many failures)
-            health.circuit_state = self.OPEN
-            health.circuit_opened_at = datetime.now(UTC)
-            health.status = "down"
-        elif health.consecutive_failures >= 2:
+        if auth_failure:
             health.status = "degraded"
+        else:
+            health.consecutive_failures += 1
+            if health.circuit_state == self.HALF_OPEN:
+                health.circuit_state = self.OPEN
+                health.circuit_opened_at = datetime.now(UTC)
+                health.status = "down"
+            elif health.consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                health.circuit_state = self.OPEN
+                health.circuit_opened_at = datetime.now(UTC)
+                health.status = "down"
+            elif health.consecutive_failures >= 2:
+                health.status = "degraded"
 
         db.add(health)
         await db.commit()
 
-    async def should_allow_request(self, db: AsyncSession, provider: str) -> bool:
-        health = await self.get_or_create(db, provider)
+    async def should_allow_request(
+        self, db: AsyncSession, provider: str, user_id: uuid.UUID | None = None
+    ) -> bool:
+        health = await self.get_or_create(db, provider, user_id=user_id)
 
         if health.circuit_state == self.CLOSED:
             return True
 
         if health.circuit_state == self.OPEN:
-            # Check if timeout has passed
             if health.circuit_opened_at:
                 elapsed = (datetime.now(UTC) - health.circuit_opened_at).total_seconds()
                 if elapsed > CIRCUIT_BREAKER_TIMEOUT:
-                    # Transition to half_open to test recovery
                     health.circuit_state = self.HALF_OPEN
                     db.add(health)
                     await db.commit()
@@ -105,22 +156,29 @@ class HealthMonitor:
             return False
 
         if health.circuit_state == self.HALF_OPEN:
-            # Allow one request to test recovery
             return True
 
         return True
 
-    async def get_all_health(self, db: AsyncSession) -> list[ProviderHealth]:
-        result = await db.execute(select(ProviderHealth))
+    async def get_all_health(
+        self, db: AsyncSession, user_id: uuid.UUID | None = None
+    ) -> list[ProviderHealth]:
+        if user_id is None:
+            stmt = select(ProviderHealth).where(ProviderHealth.user_id.is_(None))
+        else:
+            stmt = select(ProviderHealth).where(ProviderHealth.user_id == user_id)
+        result = await db.execute(stmt)
         return list(result.scalars().all())
 
     async def get_health(
-        self, db: AsyncSession, provider: str
+        self, db: AsyncSession, provider: str, user_id: uuid.UUID | None = None
     ) -> ProviderHealth | None:
-        return await self.get_or_create(db, provider)
+        return await self.get_or_create(db, provider, user_id=user_id)
 
-    async def get_circuit_breakers(self, db: AsyncSession) -> dict[str, str]:
-        healths = await self.get_all_health(db)
+    async def get_circuit_breakers(
+        self, db: AsyncSession, user_id: uuid.UUID | None = None
+    ) -> dict[str, str]:
+        healths = await self.get_all_health(db, user_id=user_id)
         return {h.provider: h.circuit_state for h in healths}
 
     async def log_failover(

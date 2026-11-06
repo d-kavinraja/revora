@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.sync_run import SYNC_STATUS_QUEUED, SYNC_STATUS_RUNNING, SyncRun
 from app.queue.worker import run_worker
+from app.queue.operation_worker import run_operation_worker
 from app.services.admin_audit import admin_audit
 from app.services.admin_auth import get_admin_by_username, provision_admin
 from app.services.recovery import recover_stale_reviews_on_startup
@@ -144,11 +145,18 @@ async def lifespan(app: FastAPI):
         sync_task = asyncio.create_task(sync_loop())
 
     worker_task = asyncio.create_task(run_worker(standalone=False))
+    operation_worker_task = None
+    if settings.OPERATION_WORKER_ENABLED:
+        operation_worker_task = asyncio.create_task(
+            run_operation_worker(standalone=False)
+        )
 
     try:
         yield
     finally:
         worker_task.cancel()
+        if operation_worker_task is not None:
+            operation_worker_task.cancel()
         if sync_task:
             sync_task.cancel()
         if startup_sync_task and not startup_sync_task.done():
@@ -158,6 +166,8 @@ async def lifespan(app: FastAPI):
                     await sync_task
                 await startup_sync_task
                 await worker_task
+                if operation_worker_task is not None:
+                    await operation_worker_task
             except asyncio.CancelledError:
                 pass
 

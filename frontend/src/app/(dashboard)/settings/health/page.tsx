@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { api, ProviderHealth, FailoverLog } from '@/lib/api';
+import { api, ProviderHealth, FailoverLog, OperationJob } from '@/lib/api';
+import { pollOperation } from '@/lib/use-operation-job';
 import { ActivityIcon, CircleCheckIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
@@ -12,6 +13,7 @@ export default function HealthPage() {
   const [failovers, setFailovers] = useState<FailoverLog[]>([]);
   const [circuitBreakers, setCircuitBreakers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [checkingProvider, setCheckingProvider] = useState<string | null>(null);
   const { toast } = useToast();
 
   const loadData = useCallback(async () => {
@@ -32,18 +34,67 @@ export default function HealthPage() {
     }
   }, [toast]);
 
+  const resumeProviderCheck = useCallback(
+    async (job: OperationJob) => {
+      const provider = String(job.payload?.provider ?? '');
+      if (!provider) return;
+      setCheckingProvider(provider);
+      try {
+        await pollOperation(job.id, (updated) => {
+          if (updated.status === 'completed' || updated.status === 'failed') {
+            void loadData();
+          }
+        });
+        toast({
+          title: `Health check finished for ${provider}`,
+          type: 'success',
+        });
+        await loadData();
+      } catch (err) {
+        toast({ title: `Health check failed for ${provider}`, type: 'error' });
+      } finally {
+        setCheckingProvider(null);
+      }
+    },
+    [loadData, toast],
+  );
+
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    void api
+      .listOperations({ active_only: true, operation_type: 'provider_health_check' })
+      .then((jobs) => {
+        for (const job of jobs) {
+          void resumeProviderCheck(job);
+        }
+      })
+      .catch(() => undefined);
+  }, [loadData, resumeProviderCheck]);
 
   const handleCheckHealth = async (slug: string) => {
+    if (checkingProvider) return;
+    setCheckingProvider(slug);
     try {
-      await api.checkProviderHealth(slug);
-      toast({ title: `Health check initiated for ${slug}`, type: 'info' });
-      // Refresh data after health check
+      const job = await api.checkProviderHealth(slug);
+      toast({ title: `Health check started for ${slug}`, type: 'info' });
+      const final = await pollOperation(job.id, (updated) => {
+        if (updated.status === 'completed' || updated.status === 'failed') {
+          void loadData();
+        }
+      });
+      const result = final.result;
+      toast({
+        title: `Health check ${final.status} for ${slug}`,
+        description:
+          result?.message ??
+          (result?.model ? `Tested ${result.model}` : final.error_text ?? undefined),
+        type: final.status === 'completed' ? 'success' : 'error',
+      });
       await loadData();
     } catch (err) {
       toast({ title: 'Health check failed', type: 'error' });
+    } finally {
+      setCheckingProvider(null);
     }
   };
 
@@ -114,19 +165,24 @@ export default function HealthPage() {
                 </div>
                 <button
                   onClick={() => handleCheckHealth(h.provider)}
-                  className="text-xs font-semibold px-2 py-1 rounded-lg bg-background text-foreground hover:bg-surface-2 border border-border transition-colors"
+                  disabled={checkingProvider !== null}
+                  className="text-xs font-semibold px-2 py-1 rounded-lg bg-background text-foreground hover:bg-surface-2 border border-border transition-colors disabled:opacity-50"
                 >
-                  Check
+                  {checkingProvider === h.provider ? 'Checking...' : 'Check'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
+               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-muted-foreground">Avg Latency</span>
-                  <div className="font-mono text-foreground">{h.avg_latency_ms.toFixed(0)}ms</div>
+                  <div className="font-mono text-foreground">
+                    {h.total_requests > 0 ? `${h.avg_latency_ms.toFixed(0)}ms` : '—'}
+                  </div>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Success Rate</span>
-                  <div className="font-mono text-foreground">{(h.success_rate * 100).toFixed(1)}%</div>
+                  <div className="font-mono text-foreground">
+                    {h.total_requests > 0 ? `${(h.success_rate * 100).toFixed(1)}%` : '—'}
+                  </div>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Requests</span>
@@ -137,6 +193,13 @@ export default function HealthPage() {
                   <div className={`font-mono font-bold ${getCircuitColor(h.circuit_state)}`}>{h.circuit_state}</div>
                 </div>
               </div>
+              {h.last_checked_at && (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Last checked {new Date(h.last_checked_at).toLocaleString()}
+                  {h.last_model ? ` · ${h.last_model}` : ''}
+                  {h.last_latency_ms != null ? ` · ${h.last_latency_ms.toFixed(0)}ms` : ''}
+                </div>
+              )}
               {h.last_error && (
                 <div className="mt-3 p-2 rounded-lg bg-error/10 border border-error/30 text-xs text-error">
                   {h.last_error}

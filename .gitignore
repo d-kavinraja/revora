@@ -63,6 +63,8 @@ TEST_INFRA.md
 
 # Logs & Scratch Scripts
 *.log
+*_output.txt
+pytest_*.txt
 scratch*.py
 backend/scratch*.py
 backend/test.py

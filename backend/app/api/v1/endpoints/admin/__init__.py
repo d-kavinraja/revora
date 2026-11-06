@@ -12,6 +12,7 @@ from app.api.v1.endpoints.admin import (
     audit,
     auth,
     features,
+    installations,
     keys,
     maintenance,
     models,
@@ -32,6 +33,7 @@ router.include_router(providers.router, tags=["admin"])
 router.include_router(keys.router, tags=["admin"])
 router.include_router(models.router, tags=["admin"])
 router.include_router(features.router, tags=["admin"])
+router.include_router(installations.router, tags=["admin"])
 router.include_router(maintenance.router, tags=["admin"])
 router.include_router(announcements.router, tags=["admin"])
 router.include_router(audit.router, tags=["admin"])

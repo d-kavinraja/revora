@@ -587,6 +587,16 @@ function RepositoryCard({
                     Permission Required
                   </span>
                 )}
+                {repo.status === 'installation_suspended' && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                    Installation Suspended
+                  </span>
+                )}
+                {repo.status === 'installation_inaccessible' && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-700 border border-red-500/30">
+                    Installation Inaccessible
+                  </span>
+                )}
                 {isReviewActive && (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-700 border border-amber-500/30 animate-pulse">
                     <RefreshCw className="w-2.5 h-2.5 animate-spin" />

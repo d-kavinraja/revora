@@ -284,6 +284,36 @@ class AdminRepositoryListResponse(BaseModel):
     offset: int
 
 
+class AdminInstallationItem(BaseModel):
+    id: uuid.UUID
+    installation_id: int
+    account_login: str | None
+    account_type: str | None
+    target_type: str | None = None
+    app_id: int | None
+    lifecycle_status: str
+    suspended_at: datetime | None
+    permissions_ok: bool | None
+    last_auth_checked_at: datetime | None
+    last_auth_success_at: datetime | None
+    last_auth_error_category: str | None
+    auth_failure_count: int
+    retry_after: datetime | None
+    last_sync_status: str | None
+    last_sync_completed_at: datetime | None
+    last_sync_error: str | None
+    repository_count: int
+    created_at: datetime
+    updated_at: datetime | None
+
+
+class AdminInstallationListResponse(BaseModel):
+    items: list[AdminInstallationItem]
+    total: int
+    limit: int
+    offset: int
+
+
 # ---------------------------------------------------------------------------
 # Reviews (§7.3)
 # ---------------------------------------------------------------------------

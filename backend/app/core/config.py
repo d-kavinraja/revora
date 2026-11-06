@@ -109,6 +109,15 @@ class Settings(BaseSettings):
         default=3,
         description="DEPRECATED — alias for SYNC_RECOVERY_INTERVAL_MINUTES (kept for back-compat)",
     )
+    # Persistent operation worker (Render Free: runs inside the web process).
+    OPERATION_WORKER_ENABLED: bool = Field(default=True, description="Enable the persistent operation worker")
+    OPERATION_WORKER_CONCURRENCY: int = Field(default=1, description="Max concurrent operation jobs")
+    OPERATION_POLL_INTERVAL_SECONDS: float = Field(default=1.0, description="Operation worker poll interval")
+    OPERATION_LEASE_SECONDS: int = Field(default=90, description="Operation job lease duration")
+    OPERATION_HEARTBEAT_SECONDS: int = Field(default=15, description="Operation job heartbeat interval")
+    OPERATION_MAX_ATTEMPTS: int = Field(default=3, description="Maximum operation job attempts")
+    OPERATION_RETRY_BACKOFF_SECONDS: int = Field(default=15, description="Base retry backoff")
+    OPERATION_JOB_RETENTION_DAYS: int = Field(default=7, description="Finished operation job retention")
     # Tier 1: repos with open PRs / new repos — every N minutes.
     SYNC_RECOVERY_INTERVAL_MINUTES: int = Field(
         default=3,

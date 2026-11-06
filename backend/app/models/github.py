@@ -30,6 +30,23 @@ class Installation(Base):
     # True while the installation has every permission Revora needs to review.
     # When False, repos under this installation are gated (status "permission_required").
     permissions_ok: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # GitHub App that owns this installation. NULL means "legacy / not yet probed".
+    app_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    # Authentication lifecycle state for sync/API token gating.
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(32), default="active", server_default="active", nullable=False
+    )
+    last_auth_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_auth_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_auth_error_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    auth_failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    retry_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Last sync pass state for this installation (powers the UI "last synchronized" line).
     last_sync_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -152,6 +152,7 @@ class ApiKeyService:
         error_type: str | None = None,
         error_message: str | None = None,
         latency_ms: float | None = None,
+        model_name: str | None = None,
     ) -> ApiKeyHealth:
         health = ApiKeyHealth(
             key_id=key_id,
@@ -159,6 +160,7 @@ class ApiKeyService:
             error_type=error_type,
             error_message=error_message,
             latency_ms=latency_ms,
+            model_name=model_name,
             checked_at=datetime.now(UTC),
         )
         db.add(health)

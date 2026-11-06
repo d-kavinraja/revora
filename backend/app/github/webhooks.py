@@ -2,12 +2,13 @@ import asyncio
 import hashlib
 import hmac
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, PullRequest, Repository
 from app.models.sync_run import (
@@ -16,9 +17,36 @@ from app.models.sync_run import (
 )
 from app.models.user import User
 from app.services.github_service import github_service
+from app.services.installation_lifecycle import (
+    clear_auth_state,
+    mark_reauthorization_required,
+    mark_suspended,
+    record_auth_success,
+)
 from app.services.sync_engine import _has_required_permissions, record_sync_run
 
 logger = logging.getLogger(__name__)
+
+
+def _payload_app_id(payload: dict[str, Any]) -> int | None:
+    installation_payload = payload.get("installation", {}) or {}
+    raw = installation_payload.get("app_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _app_id_allowed(payload: dict[str, Any]) -> bool:
+    configured = settings.GITHUB_APP_ID
+    if configured is None:
+        return True
+    payload_id = _payload_app_id(payload)
+    if payload_id is None:
+        return True
+    return str(payload_id) == str(configured)
 
 
 async def _schedule_initial_repo_syncs(
@@ -65,6 +93,9 @@ async def _schedule_initial_repo_syncs(
 
 async def handle_installation_created(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation.created event...")
+    if not _app_id_allowed(payload):
+        print(f"[{delivery_id}] Ignoring installation.created for a different GitHub App.")
+        return
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
     account = installation_payload.get("account", {})
@@ -74,6 +105,7 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
     repository_selection = installation_payload.get("repository_selection")
     permissions = installation_payload.get("permissions", {})
     events = installation_payload.get("events", [])
+    payload_app_id = _payload_app_id(payload)
 
     sender = payload.get("sender", {})
     sender_github_id = sender.get("id")
@@ -103,6 +135,7 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
             select(Installation).where(Installation.installation_id == inst_id)
         )
         db_inst = res.scalars().first()
+        permissions_ok = _has_required_permissions(permissions, None)
         if not db_inst:
             db_inst = Installation(
                 installation_id=inst_id,
@@ -113,6 +146,10 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                 repository_selection=repository_selection,
                 permissions=permissions,
                 events=events,
+                app_id=payload_app_id
+                if payload_app_id is not None
+                else (int(settings.GITHUB_APP_ID) if settings.GITHUB_APP_ID else None),
+                permissions_ok=permissions_ok,
             )
             db.add(db_inst)
             await db.commit()
@@ -128,9 +165,18 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
             db_inst.repository_selection = repository_selection
             db_inst.permissions = permissions
             db_inst.events = events
-            # Re-install (same installation id reappears) — resume monitoring.
+            if payload_app_id is not None:
+                db_inst.app_id = payload_app_id
             db_inst.suspended_at = None
-            db_inst.permissions_ok = True
+            db_inst.permissions_ok = permissions_ok
+            if permissions_ok:
+                clear_auth_state(db_inst)
+                record_auth_success(
+                    db_inst,
+                    app_id=db_inst.app_id or settings.GITHUB_APP_ID,
+                )
+            else:
+                mark_reauthorization_required(db_inst)
             db.add(db_inst)
             await db.commit()
             await db.refresh(db_inst)
@@ -162,7 +208,6 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                 db_repo.full_name = r.get("full_name")
                 db_repo.is_private = r.get("private", False)
                 db_repo.reviews_enabled = True
-                # Explicit re-add: clear the Removed marker, history stays attached.
                 if db_repo.removed_at is not None:
                     db_repo.removed_at = None
                     print(
@@ -174,9 +219,6 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
                 )
             initial_sync_repos.append(db_repo)
         await db.commit()
-        # Immediate background initial sync (P1-2): discover this
-        # installation's OPEN PRs now instead of waiting for the next
-        # periodic pass. Fire-and-forget — never blocks the webhook.
         await _schedule_initial_repo_syncs(
             initial_sync_repos, db_inst.user_id, "installation.created"
         )
@@ -184,8 +226,12 @@ async def handle_installation_created(payload: dict[str, Any], delivery_id: str)
 
 async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation.deleted event...")
+    if not _app_id_allowed(payload):
+        print(f"[{delivery_id}] Ignoring installation.deleted for a different GitHub App.")
+        return
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
+    payload_app_id = _payload_app_id(payload)
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
@@ -193,13 +239,13 @@ async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str)
         )
         db_inst = res.scalars().first()
         if db_inst:
+            if payload_app_id is not None:
+                db_inst.app_id = payload_app_id
             repos_res = await db.execute(
                 select(Repository).where(Repository.installation_id == db_inst.id)
             )
             repos = repos_res.scalars().all()
             for r in repos:
-                # Keep installation_id for history attribution; the removed_at
-                # marker hides the repo from the active list.
                 r.reviews_enabled = False
                 if r.removed_at is None:
                     r.removed_at = datetime.now(UTC)
@@ -208,22 +254,30 @@ async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str)
                     f"Marked repository {r.full_name} as removed due to app uninstallation."
                 )
 
-            # Keep the installation row for history attribution; mark it
-            # suspended so the sync engine stops trying to fetch it.
-            db_inst.suspended_at = datetime.now(UTC)
+            db_inst.suspended_at = None
             db_inst.permissions_ok = False
+            db_inst.lifecycle_status = "inaccessible"
+            db_inst.last_auth_error_category = "uninstalled"
+            db_inst.auth_failure_count = (db_inst.auth_failure_count or 0) + 1
+            db_inst.retry_after = datetime.now(UTC) + timedelta(hours=24)
+            db_inst.last_auth_checked_at = datetime.now(UTC)
             db.add(db_inst)
             await db.commit()
             print(
-                f"Marked installation {inst_id} as suspended while preserving "
+                f"Marked installation {inst_id} as inaccessible while preserving "
                 f"repositories and historical reviews."
             )
 
 
 async def handle_installation_repositories(payload: dict[str, Any], delivery_id: str):
     print(f"[{delivery_id}] Handling installation_repositories event...")
+    if not _app_id_allowed(payload):
+        print(f"[{delivery_id}] Ignoring installation_repositories for a different GitHub App.")
+        return
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
+    payload_app_id = _payload_app_id(payload)
+    permissions = installation_payload.get("permissions", {})
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
@@ -233,6 +287,19 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
             return
+        if payload_app_id is not None:
+            db_inst.app_id = payload_app_id
+        if permissions:
+            db_inst.permissions = permissions
+            db_inst.permissions_ok = _has_required_permissions(
+                db_inst.permissions, db_inst.suspended_at
+            )
+        if db_inst.permissions_ok and db_inst.suspended_at is None:
+            clear_auth_state(db_inst)
+            record_auth_success(
+                db_inst, app_id=db_inst.app_id or settings.GITHUB_APP_ID
+            )
+        db.add(db_inst)
 
         added_sync_repos: list[Repository] = []
         for r in payload.get("repositories_added", []):
@@ -276,8 +343,6 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
             )
             db_repo = res.scalars().first()
             if db_repo:
-                # Keep installation_id for history attribution; removed_at
-                # hides the repo from the active list.
                 db_repo.reviews_enabled = False
                 if db_repo.removed_at is None:
                     db_repo.removed_at = datetime.now(UTC)
@@ -285,24 +350,20 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
                 print(f"Marked repository {r.get('full_name')} as removed via webhook.")
 
         await db.commit()
-        # Immediate background initial sync for newly added repos (P1-2).
         await _schedule_initial_repo_syncs(
             added_sync_repos, db_inst.user_id, "installation_repositories.added"
         )
 
 
 async def handle_installation_permissions(payload: dict[str, Any], delivery_id: str):
-    """Handle installation.new_permissions_accepted.
-
-    Updates the stored permission set and re-evaluates the review gate. If
-    required permissions are missing, repos under this installation are
-    surfaced as "Permission Required" and no new reviews are queued until
-    permissions are restored.
-    """
     print(f"[{delivery_id}] Handling installation.new_permissions_accepted event...")
+    if not _app_id_allowed(payload):
+        print(f"[{delivery_id}] Ignoring permission event for a different GitHub App.")
+        return
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
     permissions = installation_payload.get("permissions", {})
+    payload_app_id = _payload_app_id(payload)
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
@@ -312,11 +373,20 @@ async def handle_installation_permissions(payload: dict[str, Any], delivery_id: 
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
             return
+        if payload_app_id is not None:
+            db_inst.app_id = payload_app_id
         if permissions:
             db_inst.permissions = permissions
         db_inst.permissions_ok = _has_required_permissions(
             db_inst.permissions, db_inst.suspended_at
         )
+        if db_inst.permissions_ok and db_inst.suspended_at is None:
+            clear_auth_state(db_inst)
+            record_auth_success(
+                db_inst, app_id=db_inst.app_id or settings.GITHUB_APP_ID
+            )
+        else:
+            mark_reauthorization_required(db_inst)
         db.add(db_inst)
         await db.commit()
         print(
@@ -327,12 +397,16 @@ async def handle_installation_permissions(payload: dict[str, Any], delivery_id: 
 async def handle_installation_suspend(
     payload: dict[str, Any], delivery_id: str, suspended: bool
 ):
-    """Handle installation.suspend / installation.unsuspend."""
     print(
         f"[{delivery_id}] Handling installation.{'suspend' if suspended else 'unsuspend'} event..."
     )
+    if not _app_id_allowed(payload):
+        print(f"[{delivery_id}] Ignoring suspend event for a different GitHub App.")
+        return
     installation_payload = payload.get("installation", {})
     inst_id = installation_payload.get("id")
+    payload_app_id = _payload_app_id(payload)
+    permissions = installation_payload.get("permissions", {})
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
@@ -342,13 +416,26 @@ async def handle_installation_suspend(
         if not db_inst:
             print(f"Installation {inst_id} not found in DB.")
             return
+        if payload_app_id is not None:
+            db_inst.app_id = payload_app_id
+        if permissions:
+            db_inst.permissions = permissions
         if suspended:
             db_inst.suspended_at = datetime.now(UTC)
+            db_inst.permissions_ok = False
+            mark_suspended(db_inst)
         else:
             db_inst.suspended_at = None
-        db_inst.permissions_ok = _has_required_permissions(
-            db_inst.permissions, db_inst.suspended_at
-        )
+            db_inst.permissions_ok = _has_required_permissions(
+                db_inst.permissions, None
+            )
+            if db_inst.permissions_ok:
+                clear_auth_state(db_inst)
+                record_auth_success(
+                    db_inst, app_id=db_inst.app_id or settings.GITHUB_APP_ID
+                )
+            else:
+                mark_reauthorization_required(db_inst)
         db.add(db_inst)
         await db.commit()
         print(f"Installation {inst_id} suspended_at={db_inst.suspended_at}")

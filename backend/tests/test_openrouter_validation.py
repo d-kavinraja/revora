@@ -724,13 +724,14 @@ async def test_validate_all_openrouter_insufficient_credits_preserves_validity(
     )
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    r = data["results"][str(key.id)]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "insufficient_credits"
     assert "credits" in r["message"].lower()
-    assert data["summary"] == {"total": 1, "succeeded": 0, "failed": 0, "busy": 1}
+    assert job_summary(job) == {"total": 1, "succeeded": 0, "failed": 0, "busy": 1}
     await test_db.refresh(key)
     assert key.is_valid is True  # transient: never auto-invalidated
 
@@ -747,8 +748,10 @@ async def test_validate_all_openrouter_timeout_preserves_validity(
     )
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = response.json()["results"][str(key.id)]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "timeout"
     await test_db.refresh(key)
@@ -768,13 +771,14 @@ async def test_validate_all_openrouter_no_free_model_preserves_validity(
     )
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    r = data["results"][str(key.id)]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "no_free_model"
     assert "add credits" not in r["message"].lower()
-    assert data["summary"] == {"total": 1, "succeeded": 0, "failed": 0, "busy": 1}
+    assert job_summary(job) == {"total": 1, "succeeded": 0, "failed": 0, "busy": 1}
     await test_db.refresh(key)
     assert key.is_valid is True  # valid key, only free-model access unverified
 
@@ -791,7 +795,11 @@ async def test_individual_test_openrouter_invalid_key(
     )
     key = await _make_key(test_db, mock_user)
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 400
-    assert "Invalid API key" in response.json()["detail"]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    item = job_items(job)[str(key.id)]
+    assert item["status"] == "failed"
+    assert item["error_type"] == "invalid_key"
     await test_db.refresh(key)
     assert key.is_valid is False

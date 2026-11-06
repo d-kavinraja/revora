@@ -11,6 +11,7 @@ class ApiKeyHealthRead(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     latency_ms: float | None = None
+    model_name: str | None = None
     checked_at: datetime
     created_at: datetime | None = None
 

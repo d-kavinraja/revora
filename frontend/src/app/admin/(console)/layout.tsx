@@ -56,6 +56,12 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<NavItem> }
         icon: FolderGit2,
         exact: false,
       },
+      {
+        href: '/admin/installations',
+        label: 'Installations',
+        icon: Server,
+        exact: false,
+      },
     ],
   },
   {
@@ -91,6 +97,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin': 'Overview',
   '/admin/users': 'Users',
   '/admin/repositories': 'Repositories',
+  '/admin/installations': 'Installations',
   '/admin/reviews': 'Reviews',
   '/admin/providers': 'Providers',
   '/admin/models': 'Models',

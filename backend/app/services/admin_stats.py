@@ -1370,3 +1370,96 @@ async def list_reviews(
         )
         items.append(item)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+async def list_installations(
+    db: AsyncSession,
+    *,
+    status: str | None = None,
+    q: str | None = None,
+    app_id: int | None = None,
+    limit: int = DEFAULT_PAGE,
+    offset: int = 0,
+) -> dict[str, Any]:
+    limit, offset = validate_pagination(limit, offset)
+    filters = []
+    if status:
+        filters.append(Installation.lifecycle_status == status)
+    if app_id is not None:
+        filters.append(Installation.app_id == app_id)
+    if q:
+        q = q.strip()
+        try:
+            filters.append(Installation.installation_id == int(q))
+        except ValueError:
+            pattern = _like(q)
+            filters.append(Installation.account_login.ilike(pattern, escape="\\"))
+
+    repo_count = (
+        select(func.count(Repository.id))
+        .where(Repository.installation_id == Installation.id)
+        .correlate(Installation)
+        .scalar_subquery()
+    )
+
+    base = select(
+        Installation.id,
+        Installation.installation_id,
+        Installation.account_login,
+        Installation.account_type,
+        Installation.app_id,
+        Installation.lifecycle_status,
+        Installation.suspended_at,
+        Installation.permissions_ok,
+        Installation.last_auth_checked_at,
+        Installation.last_auth_success_at,
+        Installation.last_auth_error_category,
+        Installation.auth_failure_count,
+        Installation.retry_after,
+        Installation.last_sync_status,
+        Installation.last_sync_completed_at,
+        Installation.last_sync_error,
+        Installation.created_at,
+        Installation.updated_at,
+        repo_count.label("repository_count"),
+    )
+    if filters:
+        base = base.where(*filters)
+
+    count_stmt = select(func.count(Installation.id))
+    if filters:
+        count_stmt = count_stmt.where(*filters)
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    rows = (
+        await db.execute(
+            base.order_by(desc(Installation.created_at)).limit(limit).offset(offset)
+        )
+    ).all()
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "id": row.id,
+                "installation_id": row.installation_id,
+                "account_login": row.account_login,
+                "account_type": row.account_type,
+                "target_type": None,
+                "app_id": row.app_id,
+                "lifecycle_status": row.lifecycle_status,
+                "suspended_at": row.suspended_at,
+                "permissions_ok": row.permissions_ok,
+                "last_auth_checked_at": row.last_auth_checked_at,
+                "last_auth_success_at": row.last_auth_success_at,
+                "last_auth_error_category": row.last_auth_error_category,
+                "auth_failure_count": row.auth_failure_count,
+                "retry_after": row.retry_after,
+                "last_sync_status": row.last_sync_status,
+                "last_sync_completed_at": row.last_sync_completed_at,
+                "last_sync_error": row.last_sync_error,
+                "repository_count": row.repository_count or 0,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+            }
+        )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}

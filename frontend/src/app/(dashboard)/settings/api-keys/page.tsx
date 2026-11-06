@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, ApiKey, ThemeConfig, ApiKeyHealth, Provider } from '@/lib/api';
+import { api, ApiKey, ThemeConfig, ApiKeyHealth, Provider, OperationJob } from '@/lib/api';
+import { pollOperation } from '@/lib/use-operation-job';
 import {
   KeyIcon,
   TrashIcon,
@@ -56,6 +57,8 @@ export default function ApiKeysSettingsPage() {
 
   // Validate all state
   const [validatingAll, setValidatingAll] = useState(false);
+  const [validationProgress, setValidationProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchJobId, setBatchJobId] = useState<string | null>(null);
 
   const trashIconRefs = useRef<Record<string, any>>({});
   const refreshIconRefs = useRef<Record<string, any>>({});
@@ -64,10 +67,11 @@ export default function ApiKeysSettingsPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [keysData, themeData, providersData] = await Promise.all([
+        const [keysData, themeData, providersData, recentOps] = await Promise.all([
           api.getApiKeys(),
           api.getThemeConfig(),
           api.getProviders(),
+          api.listOperations({ limit: 20 }),
         ]);
         setKeys(keysData);
         setThemeConfig(themeData);
@@ -87,6 +91,89 @@ export default function ApiKeysSettingsPage() {
               ? prev
               : usable.slug,
           );
+        }
+
+        const hydrated: Record<string, { status: string; message: string; error_type?: string | null }> = {};
+        for (const job of recentOps) {
+          const items = job.result?.items ?? {};
+          for (const [id, item] of Object.entries(items)) {
+            hydrated[id] = {
+              status: item.status,
+              message: item.message,
+              error_type: item.error_type ?? null,
+            };
+          }
+        }
+        if (Object.keys(hydrated).length > 0) {
+          setTestResults((prev) => ({ ...hydrated, ...prev }));
+        }
+
+        const activeOps = recentOps.filter((job) => job.status === 'queued' || job.status === 'running');
+        const activeBatch = activeOps.find((job) => job.operation_type === 'api_key_validate_all');
+        if (activeBatch) {
+          setBatchJobId(activeBatch.id);
+          setValidatingAll(true);
+          setValidationProgress({
+            current: activeBatch.progress_current,
+            total: activeBatch.progress_total,
+          });
+          void pollOperation(activeBatch.id, (updated) => {
+            const items = updated.result?.items ?? {};
+            setTestResults((prev) => {
+              const next = { ...prev };
+              for (const [id, item] of Object.entries(items)) {
+                next[id] = {
+                  status: item.status,
+                  message: item.message,
+                  error_type: item.error_type ?? null,
+                };
+              }
+              return next;
+            });
+            setKeys((prev) =>
+              prev.map((key) => {
+                const item = items[key.id];
+                if (!item) return key;
+                if (item.status === 'success') return { ...key, is_valid: true };
+                if (item.status === 'failed') return { ...key, is_valid: false };
+                return key;
+              }),
+            );
+            setValidationProgress({
+              current: updated.progress_current,
+              total: updated.progress_total,
+            });
+          }).then(() => {
+            setBatchJobId(null);
+            setValidatingAll(false);
+            setValidationProgress(null);
+            void api.getApiKeys().then(setKeys).catch(() => undefined);
+          });
+        }
+
+        for (const job of activeOps.filter((item) => item.operation_type === 'api_key_test')) {
+          const keyId = String(job.payload?.key_id ?? '');
+          if (!keyId) continue;
+          setTestingKeyId(keyId);
+          void pollOperation(job.id, (updated) => {
+            const item = updated.result?.items?.[keyId];
+            if (!item) return;
+            setTestResults((prev) => ({
+              ...prev,
+              [keyId]: {
+                status: item.status,
+                message: item.message,
+                error_type: item.error_type ?? null,
+              },
+            }));
+            if (item.status !== 'busy') {
+              setKeys((prev) =>
+                prev.map((key) =>
+                  key.id === keyId ? { ...key, is_valid: item.status === 'success' } : key,
+                ),
+              );
+            }
+          }).finally(() => setTestingKeyId(null));
         }
       } catch (err) {
         console.error('Failed to load settings data', err);
@@ -158,21 +245,38 @@ export default function ApiKeysSettingsPage() {
     refreshIconRefs.current[id]?.startAnimation();
 
     try {
-      const res = await api.testApiKey(id);
-      setTestResults(prev => ({ ...prev, [id]: { status: res.status, message: res.message, error_type: res.error_type ?? null } }));
-      // Transient busy outcomes must not deactivate a valid credential —
-      // only explicit success/failed verdicts flip is_valid.
-      setKeys(prev => prev.map(k => {
-        if (k.id !== id) return k;
-        if (res.status === 'busy') return k;
-        return { ...k, is_valid: res.status === 'success' };
-      }));
-      toast({ title: `Test ${res.status}`, description: res.message, type: res.status === 'success' ? 'success' : 'error' });
+      const job = await api.testApiKey(id);
+      const final = await pollOperation(job.id, (updated) => {
+        const item = updated.result?.items?.[id];
+        if (!item) return;
+        setTestResults((prev) => ({
+          ...prev,
+          [id]: {
+            status: item.status,
+            message: item.message,
+            error_type: item.error_type ?? null,
+          },
+        }));
+        if (item.status !== 'busy') {
+          setKeys((prev) =>
+            prev.map((key) =>
+              key.id === id ? { ...key, is_valid: item.status === 'success' } : key,
+            ),
+          );
+        }
+      });
+      const item = final.result?.items?.[id];
+      toast({
+        title: `Test ${item?.status ?? final.status}`,
+        description: item?.message ?? final.error_text ?? 'Connectivity test finished.',
+        type: item?.status === 'success' ? 'success' : 'error',
+      });
+      void api.getApiKeys().then(setKeys).catch(() => undefined);
     } catch (err: any) {
       console.error('Failed to test key', err);
       const errMsg = err.response?.data?.detail || 'Connectivity test failed.';
-      setTestResults(prev => ({ ...prev, [id]: { status: 'failed', message: errMsg } }));
-      setKeys(prev => prev.map(k => k.id === id ? { ...k, is_valid: false } : k));
+      setTestResults((prev) => ({ ...prev, [id]: { status: 'failed', message: errMsg } }));
+      setKeys((prev) => prev.map((key) => (key.id === id ? { ...key, is_valid: false } : key)));
       toast({ title: 'Test failed', description: errMsg, type: 'error' });
     } finally {
       setTestingKeyId(null);
@@ -215,32 +319,49 @@ export default function ApiKeysSettingsPage() {
   };
 
   const handleValidateAll = async () => {
-    if (validatingAll) return;
+    if (validatingAll || batchJobId) return;
     if (keys.length === 0) {
       toast({ title: 'No API keys to validate.', type: 'info' });
       return;
     }
     setValidatingAll(true);
+    setValidationProgress({ current: 0, total: keys.length });
     try {
-      const res = await api.validateAllKeys();
-      const results = res.results ?? {};
-      const summary = res.summary ?? { total: keys.length, succeeded: 0, failed: 0, busy: 0 };
-      // Merge per-key outcomes into existing state. Busy (transient)
-      // preserves the previous validity instead of marking keys invalid.
-      setKeys(prev => prev.map(k => {
-        const r = results[k.id];
-        if (!r) return k;
-        if (r.status === 'success') return { ...k, is_valid: true };
-        if (r.status === 'failed') return { ...k, is_valid: false };
-        return k;
-      }));
-      setTestResults(prev => {
-        const next = { ...prev };
-        for (const [id, r] of Object.entries(results)) {
-          next[id] = { status: r.status, message: r.message, error_type: r.error_type ?? null };
-        }
-        return next;
+      const job = await api.validateAllKeys();
+      setBatchJobId(job.id);
+      const final = await pollOperation(job.id, (updated) => {
+        const items = updated.result?.items ?? {};
+        setTestResults((prev) => {
+          const next = { ...prev };
+          for (const [id, item] of Object.entries(items)) {
+            next[id] = {
+              status: item.status,
+              message: item.message,
+              error_type: item.error_type ?? null,
+            };
+          }
+          return next;
+        });
+        setKeys((prev) =>
+          prev.map((key) => {
+            const item = items[key.id];
+            if (!item) return key;
+            if (item.status === 'success') return { ...key, is_valid: true };
+            if (item.status === 'failed') return { ...key, is_valid: false };
+            return key;
+          }),
+        );
+        setValidationProgress({
+          current: updated.progress_current,
+          total: updated.progress_total || keys.length,
+        });
       });
+      const summary = final.result?.summary ?? {
+        total: keys.length,
+        succeeded: 0,
+        failed: 0,
+        busy: 0,
+      };
       const parts: string[] = [];
       if (summary.succeeded > 0) parts.push(`${summary.succeeded} valid`);
       if (summary.failed > 0) parts.push(`${summary.failed} failed`);
@@ -251,6 +372,8 @@ export default function ApiKeysSettingsPage() {
         title: `Validation complete: ${detail}`,
         type: hasProblems ? 'error' : 'success',
       });
+      setBatchJobId(null);
+      void api.getApiKeys().then(setKeys).catch(() => undefined);
     } catch (err: any) {
       const status = err?.response?.status;
       const detail = err?.response?.data?.detail;
@@ -267,6 +390,8 @@ export default function ApiKeysSettingsPage() {
       }
     } finally {
       setValidatingAll(false);
+      setValidationProgress(null);
+      setBatchJobId(null);
     }
   };
 
@@ -311,7 +436,11 @@ export default function ApiKeysSettingsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-surface-2 border border-border rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
-            {validatingAll ? 'Validating...' : 'Validate All'}
+            {validatingAll && validationProgress
+              ? `Validating ${validationProgress.current}/${validationProgress.total}...`
+              : validatingAll
+                ? 'Validating...'
+                : 'Validate All'}
           </button>
           {addEnabled && (
             <button

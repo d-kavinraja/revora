@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, select, text, update
 
 from app.db.session import AsyncSessionLocal
 from app.queue.models import JobStatus, ReviewJob
+from app.services.installation_lifecycle import can_attempt_token
 from app.services.platform_settings import platform_settings_service
 
 logger = logging.getLogger(__name__)
@@ -169,13 +170,14 @@ async def process_job(job_row) -> bool:
 
     try:
         # Import the pipeline
-        from app.db.session import AsyncSessionLocal
         from app.github.auth import github_app_auth
+        from app.github.errors import GitHubAuthError
         from app.github.shared import (
             get_or_create_review_records,
             resolve_provider_config,
         )
         from app.github.webhooks import get_pr_diff
+        from app.models.github import Installation
         from app.pipeline.orchestrator import review_pipeline
 
         installation = payload.get("installation", {}) or {}
@@ -194,7 +196,22 @@ async def process_job(job_row) -> bool:
             raise ValueError(f"Missing installation_id in payload for job {job_id}")
 
         # Get installation token
-        token = await github_app_auth.get_installation_token(installation_id)
+        async with AsyncSessionLocal() as install_db:
+            inst_result = await install_db.execute(
+                select(Installation).where(Installation.installation_id == installation_id)
+            )
+            inst = inst_result.scalars().first()
+        if inst is not None and not can_attempt_token(inst, datetime.now(UTC)):
+            raise RuntimeError(
+                f"GitHub installation {installation_id} is {inst.lifecycle_status}; "
+                "token requests are paused"
+            )
+        try:
+            token = await github_app_auth.get_installation_token(installation_id)
+        except GitHubAuthError as exc:
+            raise RuntimeError(
+                f"GitHub installation {installation_id} authentication failed: {exc.category}"
+            ) from exc
 
         # Get diff content
         diff_content = await get_pr_diff(owner, repo_name, pr_number, token)

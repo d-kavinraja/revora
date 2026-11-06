@@ -19,6 +19,9 @@ class ProviderHealthRead(BaseModel):
     consecutive_failures: int
     last_error: str | None = None
     last_error_at: datetime | None = None
+    last_checked_at: datetime | None = None
+    last_latency_ms: float | None = None
+    last_model: str | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

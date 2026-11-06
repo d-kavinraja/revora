@@ -69,6 +69,23 @@ async def test_db(test_engine) -> AsyncGenerator[AsyncSession, None]:
     await connection.close()
 
 
+
+@pytest.fixture(autouse=True)
+def _disable_operation_worker(monkeypatch):
+    # Prevent the app lifespan from starting the real operation worker against
+    # the production database during tests.
+    from app.core import config as _cfg
+
+    monkeypatch.setattr(_cfg.settings, "OPERATION_WORKER_ENABLED", False, raising=False)
+    try:
+        from app import main as _main
+
+        monkeypatch.setattr(_main.settings, "OPERATION_WORKER_ENABLED", False, raising=False)
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 async def mock_user(test_db) -> User:
     import uuid

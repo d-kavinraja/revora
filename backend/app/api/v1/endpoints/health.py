@@ -5,8 +5,10 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.health import FailoverLogRead, ProviderHealthRead
+from app.schemas.operation import OperationJobRead
 from app.services.api_key_service import api_key_service
 from app.services.health_monitor import health_monitor
+from app.services.operation_service import operation_service
 
 router = APIRouter()
 
@@ -21,9 +23,9 @@ async def list_provider_health(
     user_providers = {k.provider.lower() for k in user_keys if k.provider}
 
     for p in user_providers:
-        await health_monitor.get_or_create(db, p)
+        await health_monitor.get_or_create(db, p, user_id=current_user.id)
 
-    all_health = await health_monitor.get_all_health(db)
+    all_health = await health_monitor.get_all_health(db, user_id=current_user.id)
     return [h for h in all_health if h.provider.lower() in user_providers]
 
 
@@ -34,25 +36,29 @@ async def get_provider_health(
     current_user: User = Depends(get_current_user),
 ):
     """Get health status for a specific provider."""
-    health = await health_monitor.get_health(db, provider)
+    health = await health_monitor.get_health(
+        db, provider, user_id=current_user.id
+    )
     if not health:
         raise HTTPException(status_code=404, detail="Provider health not found")
     return health
 
 
-@router.post("/providers/{provider}/check")
+@router.post(
+    "/providers/{provider}/check",
+    response_model=OperationJobRead,
+    status_code=202,
+)
 async def check_provider_health(
     provider: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Run an on-demand health check for a provider."""
-    health = await health_monitor.get_or_create(db, provider)
-    return {
-        "provider": provider,
-        "status": health.status,
-        "circuit_state": health.circuit_state,
-    }
+    """Enqueue a durable provider health check."""
+    job, _ = await operation_service.enqueue_provider_health_check(
+        db, current_user, provider
+    )
+    return job
 
 
 @router.get("/failovers", response_model=list[FailoverLogRead])
@@ -72,7 +78,7 @@ async def get_circuit_breakers(
     """Get circuit breaker states for user-registered providers."""
     user_keys = await api_key_service.get_all_for_user(db, current_user.id)
     user_providers = {k.provider.lower() for k in user_keys if k.provider}
-    all_cb = await health_monitor.get_circuit_breakers(db)
+    all_cb = await health_monitor.get_circuit_breakers(db, user_id=current_user.id)
     return {
         prov: state for prov, state in all_cb.items() if prov.lower() in user_providers
     }

@@ -251,7 +251,7 @@ export interface Repository {
   last_reviewed_at: string | null;
   removed_at: string | null;
   permissions_ok: boolean;
-  status?: 'active' | 'removed' | 'permission_required' | 'disabled';
+  status?: 'active' | 'removed' | 'permission_required' | 'disabled' | 'installation_suspended' | 'installation_inaccessible';
   last_sync?: {
     completed_at: string | null;
     status: string | null;
@@ -406,6 +406,10 @@ export interface ProviderHealth {
   consecutive_failures: number;
   last_error: string | null;
   last_error_at: string | null;
+  last_checked_at: string | null;
+  last_latency_ms: number | null;
+  last_model: string | null;
+  created_at: string | null;
 }
 
 export interface ApiKeyHealth {
@@ -415,7 +419,43 @@ export interface ApiKeyHealth {
   error_type: string | null;
   error_message: string | null;
   latency_ms: number | null;
+  model_name?: string | null;
   checked_at: string;
+}
+
+export interface OperationItemResult {
+  status: string;
+  message: string;
+  error_type: string | null;
+  model: string | null;
+  latency_ms: number | null;
+  checked_at: string | null;
+}
+
+export interface OperationJob {
+  id: string;
+  operation_type: string;
+  status: string;
+  payload: Record<string, unknown> | null;
+  result: {
+    summary?: { total: number; succeeded: number; failed: number; busy: number };
+    items?: Record<string, OperationItemResult>;
+    provider?: string;
+    status?: string;
+    message?: string;
+    error_type?: string | null;
+    model?: string | null;
+    latency_ms?: number | null;
+    checked_at?: string | null;
+    progress_current?: number;
+  } | null;
+  progress_current: number;
+  progress_total: number;
+  created_at: string | null;
+  updated_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error_text: string | null;
 }
 
 export interface UsageSummary {
@@ -602,7 +642,7 @@ export const api = {
   createApiKey: (data: ApiKeyCreate) => apiClient.post<ApiKey>('/api-keys', data).then((r) => r.data),
   updateApiKey: (id: string, data: ApiKeyUpdate) => apiClient.put<ApiKey>(`/api-keys/${id}`, data).then((r) => r.data),
   deleteApiKey: (id: string) => apiClient.delete<void>(`/api-keys/${id}`).then((r) => r.data),
-  testApiKey: (id: string) => apiClient.post<{ status: string; message: string; error_type?: string | null }>(`/api-keys/${id}/test`).then((r) => r.data),
+  testApiKey: (id: string) => apiClient.post<OperationJob>(`/api-keys/${id}/test`).then((r) => r.data),
   getThemeConfig: () => apiClient.get<ThemeConfig>('/ui/settings/theme').then((r) => r.data),
   validateForm: (data: { provider: string; api_key: string; label: string }) =>
     apiClient.post<{ valid: boolean; errors: Record<string, string> }>('/ui/settings/validate-form', data).then((r) => r.data),
@@ -625,19 +665,18 @@ export const api = {
   rotateApiKey: (id: string, newKey: string) =>
     apiClient.post<ApiKey>(`/api-keys/${id}/rotate`, { api_key: newKey }).then((r) => r.data),
   validateAllKeys: () =>
-    apiClient.post<{
-      results: Record<string, { status: string; message: string; error_type?: string | null }>;
-      summary: { total: number; succeeded: number; failed: number; busy: number };
-    }>(
+    apiClient.post<OperationJob>(
       '/api-keys/validate-all',
       {},
-      // Bulk validation runs bounded sequential per-key checks server-side
-      // (~22s per key worst case); keep the 100s cap so legitimate
-      // multi-key runs don't get truncated by browser or proxy limits.
-      { timeout: 100000 },
+      // Enqueue only; the worker performs validation asynchronously.
+      { timeout: 30000 },
     ).then((r) => r.data),
   getKeyHealth: (id: string) =>
     apiClient.get<ApiKeyHealth[]>(`/api-keys/${id}/health`).then((r) => r.data),
+  getOperation: (id: string) =>
+    apiClient.get<OperationJob>(`/operations/${id}`).then((r) => r.data),
+  listOperations: (params?: { active_only?: boolean; operation_type?: string; limit?: number }) =>
+    apiClient.get<OperationJob[]>('/operations', { params }).then((r) => r.data),
 
   // Providers
   getProviders: () => apiClient.get<Provider[]>('/providers').then((r) => r.data),
@@ -677,7 +716,7 @@ export const api = {
   getProviderHealthDetail: (slug: string) =>
     apiClient.get<ProviderHealth>(`/health/providers/${slug}`).then((r) => r.data),
   checkProviderHealth: (slug: string) =>
-    apiClient.post<{ provider: string; status: string; circuit_state: string }>(`/health/providers/${slug}/check`).then((r) => r.data),
+    apiClient.post<OperationJob>(`/health/providers/${slug}/check`).then((r) => r.data),
   getFailovers: () => apiClient.get<FailoverLog[]>('/health/failovers').then((r) => r.data),
   getCircuitBreakers: () => apiClient.get<Record<string, string>>('/health/circuit-breakers').then((r) => r.data),
 
@@ -1123,6 +1162,44 @@ export interface AdminRepositoryList {
   offset: number;
 }
 
+export interface AdminInstallationItem {
+  id: string;
+  installation_id: number;
+  account_login: string | null;
+  account_type: string | null;
+  target_type: string | null;
+  app_id: number | null;
+  lifecycle_status: string;
+  suspended_at: string | null;
+  permissions_ok: boolean | null;
+  last_auth_checked_at: string | null;
+  last_auth_success_at: string | null;
+  last_auth_error_category: string | null;
+  auth_failure_count: number;
+  retry_after: string | null;
+  last_sync_status: string | null;
+  last_sync_completed_at: string | null;
+  last_sync_error: string | null;
+  repository_count: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface AdminInstallationList {
+  items: AdminInstallationItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminInstallationListParams {
+  status?: string;
+  q?: string;
+  app_id?: number;
+  limit?: number;
+  offset?: number;
+}
+
 export interface AdminReviewItem {
   id: string;
   status: string;
@@ -1269,6 +1346,8 @@ export const adminApi = {
       .then((r) => r.data),
   repositories: (params?: AdminRepositoryListParams) =>
     apiClient.get<AdminRepositoryList>('/admin/repositories', { params }).then((r) => r.data),
+  installations: (params?: AdminInstallationListParams) =>
+    apiClient.get<AdminInstallationList>('/admin/installations', { params }).then((r) => r.data),
   reviews: (params?: AdminReviewListParams) =>
     apiClient.get<AdminReviewList>('/admin/reviews', { params }).then((r) => r.data),
 

@@ -6,13 +6,11 @@ isolation, auth, secret sanitization, and discovery-layer correctness
 (NVIDIA/Cohere 401-403, quota auth failures, cache behavior).
 """
 
-import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import encryption_service
 from app.models.api_key import ApiKey
@@ -40,12 +38,13 @@ def _result(data, key):
 # --- endpoint: basic shapes -------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_validate_all_no_keys(client: TestClient):
+async def test_validate_all_no_keys(client: TestClient, test_db):
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["results"] == {}
-    assert data["summary"] == {"total": 0, "succeeded": 0, "failed": 0, "busy": 0}
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job) == {}
+    assert job_summary(job) == {"total": 0, "succeeded": 0, "failed": 0, "busy": 0}
 
 
 @pytest.mark.asyncio
@@ -54,12 +53,13 @@ async def test_validate_all_one_valid_key(mock_models, client, test_db, mock_use
     mock_models.return_value = [{"id": "m1"}]
     key = await _make_key(test_db, mock_user)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    r = _result(data, key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "success"
     assert r["error_type"] is None
-    assert data["summary"] == {"total": 1, "succeeded": 1, "failed": 0, "busy": 0}
+    assert job_summary(job) == {"total": 1, "succeeded": 1, "failed": 0, "busy": 0}
     await test_db.refresh(key)
     assert key.is_valid is True
 
@@ -71,11 +71,12 @@ async def test_validate_all_multiple_valid_keys(mock_models, client, test_db, mo
     k1 = await _make_key(test_db, mock_user, label="A")
     k2 = await _make_key(test_db, mock_user, label="B", provider="openai")
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    assert _result(data, k1)["status"] == "success"
-    assert _result(data, k2)["status"] == "success"
-    assert data["summary"] == {"total": 2, "succeeded": 2, "failed": 0, "busy": 0}
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job)[str(k1.id)]["status"] == "success"
+    assert job_items(job)[str(k2.id)]["status"] == "success"
+    assert job_summary(job) == {"total": 2, "succeeded": 2, "failed": 0, "busy": 0}
 
 
 # --- endpoint: failure classification ---------------------------------------
@@ -86,8 +87,10 @@ async def test_validate_all_invalid_401(mock_models, client, test_db, mock_user)
     mock_models.side_effect = Exception("Invalid API Key credentials — 401 unauthorized")
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200  # partial result, not HTTP error
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "failed"
     assert r["error_type"] == "invalid_key"
     assert r["message"] == "Invalid API key."
@@ -101,8 +104,10 @@ async def test_validate_all_forbidden_403(mock_models, client, test_db, mock_use
     mock_models.side_effect = Exception("403 forbidden: permission denied")
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "failed"
     assert r["error_type"] == "authorization_error"
     await test_db.refresh(key)
@@ -117,11 +122,13 @@ async def test_validate_all_rate_limited_429_preserves_validity(
     mock_models.side_effect = Exception("429 rate_limit_exceeded")
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "rate_limited"
-    assert response.json()["summary"]["busy"] == 1
+    assert job_summary(job)["busy"] == 1
     await test_db.refresh(key)
     assert key.is_valid is True  # busy must not invalidate
 
@@ -132,8 +139,10 @@ async def test_validate_all_provider_503_busy(mock_models, client, test_db, mock
     mock_models.side_effect = Exception("503 Service Unavailable")
     key = await _make_key(test_db, mock_user, is_valid=False)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "provider_unavailable"
     await test_db.refresh(key)
@@ -143,11 +152,13 @@ async def test_validate_all_provider_503_busy(mock_models, client, test_db, mock
 @pytest.mark.asyncio
 @patch("app.services.model_discovery.model_discovery_engine.get_available_models")
 async def test_validate_all_provider_timeout_busy(mock_models, client, test_db, mock_user):
-    mock_models.side_effect = asyncio.TimeoutError()
+    mock_models.side_effect = TimeoutError()
     key = await _make_key(test_db, mock_user, is_valid=True)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "busy"
     assert r["error_type"] == "timeout"
     await test_db.refresh(key)
@@ -171,8 +182,10 @@ async def test_validate_all_decryption_failure_isolated(client, test_db, mock_us
         return_value=[{"id": "m"}],
     ):
         response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), bad)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(bad.id)]
     assert r["status"] == "failed"
     assert r["error_type"] == "decryption_error"
 
@@ -181,8 +194,10 @@ async def test_validate_all_decryption_failure_isolated(client, test_db, mock_us
 async def test_validate_all_unknown_provider(client, test_db, mock_user):
     key = await _make_key(test_db, mock_user, provider="mystery_provider")
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert r["status"] == "failed"
     assert r["error_type"] == "unknown_provider"
 
@@ -203,12 +218,13 @@ async def test_validate_all_mixed_partial_results(mock_models, client, test_db, 
 
     mock_models.side_effect = _route
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    assert _result(data, good)["status"] == "success"
-    assert _result(data, bad)["status"] == "failed"
-    assert _result(data, busy_key)["status"] == "busy"
-    assert data["summary"] == {"total": 3, "succeeded": 1, "failed": 1, "busy": 1}
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, job_summary, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job)[str(good.id)]["status"] == "success"
+    assert job_items(job)[str(bad.id)]["status"] == "failed"
+    assert job_items(job)[str(busy_key.id)]["status"] == "busy"
+    assert job_summary(job) == {"total": 3, "succeeded": 1, "failed": 1, "busy": 1}
     await test_db.refresh(good)
     await test_db.refresh(bad)
     await test_db.refresh(busy_key)
@@ -240,11 +256,16 @@ async def test_validate_all_persistence_isolated_per_key(
 
     with patch.object(svc, "record_health", side_effect=_flaky):
         response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    data = response.json()
-    assert _result(data, k1)["status"] == "success"
-    assert _result(data, k2)["status"] == "success"
-    assert data["summary"]["succeeded"] == 2
+        assert response.status_code == 202
+        from tests.operation_helpers import (
+            job_items,
+            job_summary,
+            run_operation_job_inline,
+        )
+        job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    assert job_items(job)[str(k1.id)]["status"] == "success"
+    assert job_items(job)[str(k2.id)]["status"] == "success"
+    assert job_summary(job)["succeeded"] == 2
 
 
 @pytest.mark.asyncio
@@ -276,8 +297,10 @@ async def test_validate_all_sanitizes_secrets(mock_models, client, test_db, mock
     mock_models.side_effect = Exception(f"401 bad key {secret} Bearer TOKXYZ")
     key = await _make_key(test_db, mock_user)
     response = client.post("/api/v1/api-keys/validate-all")
-    assert response.status_code == 200
-    r = _result(response.json(), key)
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    r = job_items(job)[str(key.id)]
     assert secret not in r["message"]
     assert "TOKXYZ" not in r["message"]
     result = await test_db.execute(
@@ -529,6 +552,8 @@ async def test_validate_all_uses_fresh_discovery_not_stale_cache(
         assert fake.calls == 1
         # Bulk validation must revalidate rather than trust the cache.
         response = client.post("/api/v1/api-keys/validate-all")
-        assert response.status_code == 200
-        assert _result(response.json(), key)["status"] == "success"
+        assert response.status_code == 202
+        from tests.operation_helpers import job_items, run_operation_job_inline
+        job = await run_operation_job_inline(client, test_db, response.json()["id"])
+        assert job_items(job)[str(key.id)]["status"] == "success"
         assert fake.calls == 2

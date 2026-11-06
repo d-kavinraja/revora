@@ -159,9 +159,11 @@ async def test_test_api_key_valid(
     await test_db.commit()
 
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    item = job_items(job)[str(key.id)]
+    assert item["status"] == "success"
 
     # Check key is marked valid in DB
     await test_db.refresh(key)
@@ -190,9 +192,12 @@ async def test_test_api_key_invalid(
     await test_db.commit()
 
     response = client.post(f"/api/v1/api-keys/{key.id}/test")
-    assert response.status_code == 400
-    data = response.json()
-    assert "Connectivity test failed" in data["detail"]
+    assert response.status_code == 202
+    from tests.operation_helpers import job_items, run_operation_job_inline
+    job = await run_operation_job_inline(client, test_db, response.json()["id"])
+    item = job_items(job)[str(key.id)]
+    assert item["status"] == "failed"
+    assert item["error_type"] == "invalid_key"
 
     # Check key is marked invalid in DB
     await test_db.refresh(key)

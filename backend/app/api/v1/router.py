@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     llm,
     models,
     mouthmap,
+    operations,
     platform,
     providers,
     repositories,
@@ -44,6 +45,7 @@ api_router.include_router(
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(api_keys.router, prefix="/api-keys", tags=["api-keys"])
+api_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(
     ui_settings.router, prefix="/ui/settings", tags=["ui-settings"]
 )
