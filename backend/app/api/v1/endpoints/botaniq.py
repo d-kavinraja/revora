@@ -1,20 +1,18 @@
 """BotaniQ Model Lab API (inference-only). Thin router → service → HF client."""
 
 import asyncio
+import ipaddress
 import logging
 import os
+import socket
 import tempfile
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.deps import get_current_user
-from app.core.deps_flags import require_feature
-from app.db.session import get_db
-from app.models.user import User
 from app.botaniq import dataset as dataset_mod
 from app.botaniq.hf_client import BotaniQHFError
 from app.botaniq.schemas import (
@@ -26,6 +24,11 @@ from app.botaniq.schemas import (
     SampleImage,
 )
 from app.botaniq.service import botaniq_service
+from app.core.config import settings
+from app.core.deps import get_current_user
+from app.core.deps_flags import require_feature
+from app.db.session import get_db
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +56,47 @@ def _hf_error_to_http(exc: BotaniQHFError) -> HTTPException:
 
 _inference_semaphore: asyncio.Semaphore | None = None
 _inference_semaphore_size = 0
+_MAX_URL_REDIRECTS = 3
+
+
+async def _validate_public_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(
+            status_code=422, detail="Only public http and https URLs are supported."
+        )
+    if parsed.username or parsed.password:
+        raise HTTPException(
+            status_code=422, detail="URLs with embedded credentials are not supported."
+        )
+    try:
+        explicit_port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="The URL has an invalid port."
+        ) from exc
+
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname in {"localhost", "localhost.localdomain"}:
+        raise HTTPException(
+            status_code=422, detail="Private network URLs are not supported."
+        )
+    try:
+        port = explicit_port or (443 if parsed.scheme == "https" else 80)
+        addresses = {
+            ipaddress.ip_address(info[4][0])
+            for info in await asyncio.to_thread(
+                socket.getaddrinfo, hostname, port, type=socket.SOCK_STREAM
+            )
+        }
+    except socket.gaierror as exc:
+        raise HTTPException(
+            status_code=422, detail="The image host could not be resolved."
+        ) from exc
+    if not addresses or any(not address.is_global for address in addresses):
+        raise HTTPException(
+            status_code=422, detail="Private network URLs are not supported."
+        )
 
 
 def _inference_slot() -> asyncio.Semaphore:
@@ -136,8 +180,7 @@ async def run_inference_url(
     schemes are permitted. On fetch failure the user receives an actionable
     422 rather than a generic 502.
     """
-    if not image_url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=422, detail="Only http and https URLs are supported.")
+    await _validate_public_url(image_url)
 
     slot = _inference_slot()
     if slot.locked():
@@ -163,30 +206,46 @@ async def run_inference_url(
         content_type: str | None = None
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
-                async with client.stream("GET", image_url, follow_redirects=True) as resp:
-                    if resp.status_code >= 400:
-                        raise BotaniQHFError(
-                            f"Could not fetch image: HTTP {resp.status_code}. "
-                            "Check the URL and ensure the image is publicly accessible.",
-                            kind="unsupported_format",
-                        )
-                    content_type = resp.headers.get("content-type", "").split(";")[0].strip() or None
-                    if content_type and not content_type.startswith("image/"):
-                        raise BotaniQHFError(
-                            "The URL does not point to a valid image. "
-                            "Please provide a direct link to an image file.",
-                            kind="unsupported_format",
-                        )
-                    with os.fdopen(fd, "wb") as fh:
-                        async for chunk in resp.aiter_bytes(chunk_size):
-                            size_bytes += len(chunk)
-                            if size_bytes > max_bytes:
+                fetch_url = image_url
+                for redirect_count in range(_MAX_URL_REDIRECTS + 1):
+                    await _validate_public_url(fetch_url)
+                    async with client.stream("GET", fetch_url, follow_redirects=False) as resp:
+                        if resp.is_redirect:
+                            location = resp.headers.get("location")
+                            if not location or redirect_count == _MAX_URL_REDIRECTS:
                                 raise BotaniQHFError(
-                                    f"Image from URL is too large. Maximum is "
-                                    f"{settings.BOTANIQ_MAX_UPLOAD_MB} MB.",
+                                    "The image URL redirects too many times.",
                                     kind="unsupported_format",
                                 )
-                            await asyncio.to_thread(fh.write, chunk)
+                            fetch_url = urljoin(fetch_url, location)
+                            continue
+                        if resp.status_code >= 400:
+                            raise BotaniQHFError(
+                                f"Could not fetch image: HTTP {resp.status_code}. "
+                                "Check the URL and ensure the image is publicly accessible.",
+                                kind="unsupported_format",
+                            )
+                        content_type = (
+                            resp.headers.get("content-type", "").split(";")[0].strip()
+                            or None
+                        )
+                        if content_type and not content_type.startswith("image/"):
+                            raise BotaniQHFError(
+                                "The URL does not point to a valid image. "
+                                "Please provide a direct link to an image file.",
+                                kind="unsupported_format",
+                            )
+                        with os.fdopen(fd, "wb") as fh:
+                            async for chunk in resp.aiter_bytes(chunk_size):
+                                size_bytes += len(chunk)
+                                if size_bytes > max_bytes:
+                                    raise BotaniQHFError(
+                                        f"Image from URL is too large. Maximum is "
+                                        f"{settings.BOTANIQ_MAX_UPLOAD_MB} MB.",
+                                        kind="unsupported_format",
+                                    )
+                                await asyncio.to_thread(fh.write, chunk)
+                    break
         except httpx.HTTPError as exc:
             raise BotaniQHFError(
                 "Could not fetch image from the provided URL. "
