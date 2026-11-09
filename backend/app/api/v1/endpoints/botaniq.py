@@ -269,7 +269,8 @@ async def run_inference_url(
                     httpx.AsyncClient(
                         timeout=httpx.Timeout(30), transport=transport
                     ) as client,
-                    client.stream(  # lgtm [py/full-ssrf]
+                    # lgtm [py/full-ssrf]
+                    client.stream(
                         "GET", fetch_url, follow_redirects=False
                     ) as resp,
                 ):
