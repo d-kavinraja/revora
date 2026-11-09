@@ -59,7 +59,9 @@ _inference_semaphore_size = 0
 _MAX_URL_REDIRECTS = 3
 
 
-async def _validate_public_url(url: str) -> None:
+async def _validate_public_url(
+    url: str,
+) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise HTTPException(
@@ -97,6 +99,58 @@ async def _validate_public_url(url: str) -> None:
         raise HTTPException(
             status_code=422, detail="Private network URLs are not supported."
         )
+    return addresses
+
+
+class _PinnedNetworkBackend:
+    """Resolve each request once, then connect only to those validated addresses."""
+
+    def __init__(
+        self, addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address]
+    ):
+        import httpcore
+
+        self._addresses = tuple(str(address) for address in addresses)
+        self._backend = httpcore.AutoBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        last_error: OSError | None = None
+        for address in self._addresses:
+            try:
+                return await self._backend.connect_tcp(
+                    address,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except OSError as exc:
+                last_error = exc
+        raise last_error or OSError("Could not connect to the validated image host.")
+
+    async def connect_unix_socket(
+        self, path: str, timeout: float | None = None, socket_options=None
+    ):
+        raise OSError("Unix sockets are not supported for image URLs.")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._backend.sleep(seconds)
+
+
+class _PinnedHTTPTransport(httpx.AsyncHTTPTransport):
+    def __init__(
+        self,
+        addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address],
+    ):
+        super().__init__(trust_env=False)
+        self._pool._network_backend = _PinnedNetworkBackend(addresses)
 
 
 def _inference_slot() -> asyncio.Semaphore:
@@ -203,55 +257,73 @@ async def run_inference_url(
             url_stem = url_stem + ext
 
         fd, tmp_path = tempfile.mkstemp(prefix="botaniq_url_", suffix=ext)
+        fd_open = False
         content_type: str | None = None
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
-                fetch_url = image_url
-                for redirect_count in range(_MAX_URL_REDIRECTS + 1):
-                    await _validate_public_url(fetch_url)
-                    async with client.stream("GET", fetch_url, follow_redirects=False) as resp:
-                        if resp.is_redirect:
-                            location = resp.headers.get("location")
-                            if not location or redirect_count == _MAX_URL_REDIRECTS:
+            fetch_url = image_url
+            for redirect_count in range(_MAX_URL_REDIRECTS + 1):
+                addresses = await _validate_public_url(fetch_url)
+                transport = _PinnedHTTPTransport(addresses)
+                # The transport pins the socket to the validated DNS result.
+                async with (
+                    httpx.AsyncClient(
+                        timeout=httpx.Timeout(30), transport=transport
+                    ) as client,
+                    client.stream(  # lgtm [py/full-ssrf]
+                        "GET", fetch_url, follow_redirects=False
+                    ) as resp,
+                ):
+                    if resp.is_redirect:
+                        location = resp.headers.get("location")
+                        if not location:
+                            raise BotaniQHFError(
+                                "Redirect response missing Location header.",
+                                kind="unsupported_format",
+                            )
+                        if redirect_count == _MAX_URL_REDIRECTS:
+                            raise BotaniQHFError(
+                                "The image URL redirects too many times.",
+                                kind="unsupported_format",
+                            )
+                        fetch_url = urljoin(fetch_url, location)
+                        continue
+                    if resp.status_code >= 400:
+                        raise BotaniQHFError(
+                            f"Could not fetch image: HTTP {resp.status_code}. "
+                            "Check the URL and ensure the image is publicly accessible.",
+                            kind="unsupported_format",
+                        )
+                    content_type = (
+                        resp.headers.get("content-type", "").split(";")[0].strip()
+                        or None
+                    )
+                    if content_type and not content_type.startswith("image/"):
+                        raise BotaniQHFError(
+                            "The URL does not point to a valid image. "
+                            "Please provide a direct link to an image file.",
+                            kind="unsupported_format",
+                        )
+                    with os.fdopen(fd, "wb") as fh:
+                        fd_open = True
+                        async for chunk in resp.aiter_bytes(chunk_size):
+                            size_bytes += len(chunk)
+                            if size_bytes > max_bytes:
                                 raise BotaniQHFError(
-                                    "The image URL redirects too many times.",
+                                    f"Image from URL is too large. Maximum is "
+                                    f"{settings.BOTANIQ_MAX_UPLOAD_MB} MB.",
                                     kind="unsupported_format",
                                 )
-                            fetch_url = urljoin(fetch_url, location)
-                            continue
-                        if resp.status_code >= 400:
-                            raise BotaniQHFError(
-                                f"Could not fetch image: HTTP {resp.status_code}. "
-                                "Check the URL and ensure the image is publicly accessible.",
-                                kind="unsupported_format",
-                            )
-                        content_type = (
-                            resp.headers.get("content-type", "").split(";")[0].strip()
-                            or None
-                        )
-                        if content_type and not content_type.startswith("image/"):
-                            raise BotaniQHFError(
-                                "The URL does not point to a valid image. "
-                                "Please provide a direct link to an image file.",
-                                kind="unsupported_format",
-                            )
-                        with os.fdopen(fd, "wb") as fh:
-                            async for chunk in resp.aiter_bytes(chunk_size):
-                                size_bytes += len(chunk)
-                                if size_bytes > max_bytes:
-                                    raise BotaniQHFError(
-                                        f"Image from URL is too large. Maximum is "
-                                        f"{settings.BOTANIQ_MAX_UPLOAD_MB} MB.",
-                                        kind="unsupported_format",
-                                    )
-                                await asyncio.to_thread(fh.write, chunk)
-                    break
+                            await asyncio.to_thread(fh.write, chunk)
+                break
         except httpx.HTTPError as exc:
             raise BotaniQHFError(
                 "Could not fetch image from the provided URL. "
                 "Ensure the URL is publicly accessible and points to an image.",
                 kind="unsupported_format",
             ) from exc
+        finally:
+            if not fd_open:
+                os.close(fd)
 
         filename = url_stem or "image.jpg"
         if os.path.splitext(filename.lower())[1] not in (".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"):
