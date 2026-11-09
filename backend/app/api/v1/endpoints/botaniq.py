@@ -153,6 +153,16 @@ class _PinnedHTTPTransport(httpx.AsyncHTTPTransport):
         self._pool._network_backend = _PinnedNetworkBackend(addresses)
 
 
+def _pinned_request_url(url: str, address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str:
+    parsed = urlsplit(url)
+    host = f"[{address}]" if address.version == 6 else str(address)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += f"?{parsed.query}"
+    return f"{parsed.scheme}://{host}:{port}{path}"
+
+
 def _inference_slot() -> asyncio.Semaphore:
     global _inference_semaphore, _inference_semaphore_size
     want = max(1, int(settings.BOTANIQ_MAX_CONCURRENT_INFERENCES or 2))
@@ -263,6 +273,8 @@ async def run_inference_url(
             fetch_url = image_url
             for redirect_count in range(_MAX_URL_REDIRECTS + 1):
                 addresses = await _validate_public_url(fetch_url)
+                parsed_url = urlsplit(fetch_url)
+                address = next(iter(addresses))
                 transport = _PinnedHTTPTransport(addresses)
                 # The transport pins the socket to the validated DNS result.
                 async with (
@@ -271,7 +283,16 @@ async def run_inference_url(
                     ) as client,
                     # lgtm [py/full-ssrf]
                     client.stream(
-                        "GET", fetch_url, follow_redirects=False
+                        "GET",
+                        _pinned_request_url(fetch_url, address),
+                        headers={
+                            "host": (
+                                parsed_url.hostname
+                                + (f":{parsed_url.port}" if parsed_url.port else "")
+                            )
+                        },
+                        extensions={"sni_hostname": parsed_url.hostname},
+                        follow_redirects=False,
                     ) as resp,
                 ):
                     if resp.is_redirect:
