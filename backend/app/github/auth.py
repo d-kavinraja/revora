@@ -53,9 +53,12 @@ class GitHubAppAuth:
             )
 
         now = int(time.time())
+        # GitHub rejects App JWTs whose exp is more than 10 minutes in the
+        # future. Use 8 minutes so a small local/GitHub clock skew still
+        # leaves the token valid instead of triggering configuration_error.
         payload = {
             "iat": now - 60,
-            "exp": now + (10 * 60),
+            "exp": now + (8 * 60),
             "iss": str(app_id),
         }
         key = private_key
