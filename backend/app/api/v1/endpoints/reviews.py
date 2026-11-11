@@ -15,6 +15,7 @@ from app.models.review import Review
 from app.models.user import User
 from app.queue.models import JobStatus
 from app.services.github_service import github_service
+from app.services.review_selection import selection_api_fields
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,7 @@ async def list_reviews(
             {
                 "id": str(review.id),
                 "status": review.status,
+                **selection_api_fields(latest_exec),
                 "summary": latest_exec.summary if latest_exec else None,
                 "stats": stats,
                 "started_at": _fmt_dt(review.started_at),
@@ -329,6 +331,7 @@ async def get_review(
     return {
         "id": str(review.id),
         "status": review.status,
+        **selection_api_fields(current_execution),
         "summary": display_execution.summary if display_execution else None,
         "stats": stats,
         "started_at": _fmt_dt(review.started_at),
@@ -362,6 +365,7 @@ async def get_review(
                 "status": current_execution.status,
                 "provider": current_execution.provider,
                 "model": current_execution.model,
+                **selection_api_fields(current_execution),
                 "summary": current_execution.summary,
                 "stats": current_execution.stats or {},
                 "error_message": current_execution.error_message,
@@ -379,6 +383,7 @@ async def get_review(
                 "status": last_completed.status,
                 "provider": last_completed.provider,
                 "model": last_completed.model,
+                **selection_api_fields(last_completed),
                 "summary": last_completed.summary,
                 "stats": last_completed.stats or {},
                 "duration_ms": last_completed.duration_ms,

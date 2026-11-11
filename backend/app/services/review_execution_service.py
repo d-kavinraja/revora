@@ -151,8 +151,6 @@ async def mark_execution_final(
         execution.stats = stats
     if error_message is not None:
         execution.error_message = error_message
-    if execution.started_at is None:
-        execution.started_at = now
     db.add(execution)
     await db.flush()
     logger.info(

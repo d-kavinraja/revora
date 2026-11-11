@@ -126,6 +126,7 @@ export function DataSignalHero() {
                 alt=""
                 width={25}
                 height={25}
+                style={{ width: 25, height: 25 }}
                 className="ds-brand-logo"
                 priority
               />

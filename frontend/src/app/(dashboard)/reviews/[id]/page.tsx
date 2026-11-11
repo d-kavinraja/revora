@@ -18,6 +18,7 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { ReviewActions } from '@/components/shared/review-actions';
 import { useReviewStream, reviewStreamUrl } from '@/lib/events';
+import { modelSelectionView } from '@/lib/review-model-selection';
 
 // Code blocks in AI reviews always render in the light CodeView (white,
 // GitHub-style) regardless of the portal theme. Loaded on demand so the
@@ -173,6 +174,10 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         case 'restart': await restartMutation.mutateAsync(); break;
         case 'cancel': await cancelMutation.mutateAsync(); break;
       }
+    } catch (error) {
+      // Each mutation's onError already reports the failure; this prevents
+      // the async click handler from producing an unhandled rejection.
+      console.error('[review] lifecycle action failed', { action, error });
     } finally {
       setActioningReview(null);
     }
@@ -217,10 +222,16 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   if (!review) return null;
 
   const pr = review.pull_request;
-  const reviewProvider = ((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider || 'gemini').toLowerCase();
-  
-  const summaryProvider = (review.stats as Record<string, string>)?.provider || 'gemini';
-  const summaryProviderLower = summaryProvider.toLowerCase();
+  const selection = modelSelectionView(review.current_execution ?? review);
+  const completedSelection = review.last_completed_execution
+    ? modelSelectionView(review.last_completed_execution)
+    : null;
+  const summarySelection =
+    review.status === 'completed' ? selection : (completedSelection ?? selection);
+  const reviewProvider = (selection.providerSlug || 'ai').toLowerCase();
+  const summaryProviderLower = (
+    summarySelection.providerSlug || 'ai'
+  ).toLowerCase();
 
   const providerMeta: Record<string, { label: string; gradient: string }> = {
     gemini: { label: 'Gemini AI Review', gradient: 'from-blue-500 to-brand' },
@@ -231,8 +242,14 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     deepseek: { label: 'DeepSeek Review', gradient: 'from-sky-500 to-blue-600' },
     ollama_cloud: { label: 'Ollama Cloud Review', gradient: 'from-gray-400 to-gray-600' },
   };
-  const meta = providerMeta[reviewProvider] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
-  const summaryMeta = providerMeta[summaryProviderLower] ?? { label: 'AI Review', gradient: 'from-brand to-brand/80' };
+  const meta = providerMeta[reviewProvider] ?? {
+    label: `${selection.providerLabel} Review`,
+    gradient: 'from-brand to-brand/80',
+  };
+  const summaryMeta = providerMeta[summaryProviderLower] ?? {
+    label: `${summarySelection.providerLabel} Review`,
+    gradient: 'from-brand to-brand/80',
+  };
   const repo = review.repository;
   const duration =
     review.started_at && review.completed_at
@@ -323,6 +340,47 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
       <ReviewActions review={review} onAction={(_, action) => handleLifecycleAction(action)} isActioning={actioningReview !== null} actioningAction={actioningReview} />
 
+      {/* Model selection is the resolved snapshot for this execution; actual
+          execution is what the provider recorded. They are deliberately
+          separate so a queued/cancelled run never shows a fabricated model. */}
+      <div className="grid gap-4 md:grid-cols-2 mb-5">
+        <div className="rounded-xl border border-border bg-surface-1 p-4">
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-2">
+            Model selection
+          </p>
+          <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+            <span>Repository mapping: <span className="text-foreground/80">{selection.mappingLabel}</span></span>
+            <span>Source: <span className="text-foreground/80">{selection.sourceLabel}</span></span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 min-w-0">
+            <ProviderIcon slug={selection.providerSlug ?? undefined} size={18} />
+            {selection.hasSelection ? (
+              <span className="text-sm font-semibold text-foreground truncate">
+                {selection.providerLabel} &middot; {selection.model}
+              </span>
+            ) : (
+              <span className="text-sm font-semibold text-warning">No model resolved</span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-surface-1 p-4">
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-2">
+            Actual execution
+          </p>
+          <div className="text-xs text-muted-foreground">
+            Status: <span className="text-foreground/80">{review.execution_status ?? review.status}</span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 min-w-0">
+            {selection.executed && (
+              <ProviderIcon slug={selection.actualProvider ?? undefined} size={18} />
+            )}
+            <span className={`text-sm font-semibold truncate ${selection.executed ? 'text-foreground' : 'text-muted-foreground'}`}>
+              {selection.actualLabel}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Review Status States */}
       {(review.status === 'running' || review.status === 'pending') && (
         <div className={`rounded-xl border ${review.status === 'running' ? 'border-info/20 bg-info/5' : 'border-warning/25 bg-warning/5'} p-6 md:p-8 mb-5 text-center relative overflow-hidden`}>
@@ -373,9 +431,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               </span>
             </div>
             <p className="text-foreground font-bold text-lg mt-1 flex items-center gap-2">
-              <ProviderIcon slug={reviewProvider} size={16} />
-              {(review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider || 'AI'} 
-              <span className="text-muted-foreground font-normal text-sm ml-1">&middot; {(review as any).current_execution?.model || (review.stats as Record<string, string>)?.model || 'Unknown Model'}</span>
+              <ProviderIcon slug={selection.providerSlug ?? undefined} size={16} />
+              {selection.hasSelection ? selection.providerLabel : 'AI'}
+              <span className="text-muted-foreground font-normal text-sm ml-1">&middot; {selection.model || 'Model not resolved'}</span>
             </p>
             <p className="text-muted-foreground text-sm mt-2 max-w-lg mx-auto">
               {review.summary 
@@ -394,10 +452,10 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             </div>
             <div>
               <span className="text-sm font-semibold text-error">AI Review Failed</span>
-              {review.stats && (review.stats as Record<string, string>).provider && (
+              {selection.hasSelection && (
                 <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
-                  <ProviderIcon slug={reviewProvider} size={12} />
-                  {((review as any).current_execution?.provider || (review.stats as Record<string, string>)?.provider)} &middot; {((review as any).current_execution?.model || (review.stats as Record<string, string>)?.model)}
+                  <ProviderIcon slug={selection.providerSlug ?? undefined} size={12} />
+                  {selection.providerLabel} &middot; {selection.model}
                 </span>
               )}
             </div>
@@ -431,12 +489,12 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 py-3 border-b border-border">
             <div className="shrink-0 flex items-center justify-center">
-              <ProviderIcon slug={summaryProviderLower} size={24} />
+              <ProviderIcon slug={summarySelection.providerSlug ?? undefined} size={24} />
             </div>
             <div>
               <span className="text-sm font-semibold text-foreground">{summaryMeta.label}</span>
               <span className="flex items-center text-xs text-muted-foreground ml-2 gap-1.5">
-                {(review.stats as Record<string, string>)?.provider || 'gemini'} &middot; {(review.stats as Record<string, string>)?.model || 'unknown'}
+                {summarySelection.providerLabel} &middot; {summarySelection.model || 'Model not resolved'}
               </span>
             </div>
           </div>

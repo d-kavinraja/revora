@@ -287,6 +287,7 @@ export default function AdminConsoleLayout({
               alt="Revora"
               width={28}
               height={28}
+              style={{ width: 28, height: 28 }}
               className="shrink-0 rounded-lg object-contain"
             />
             <span className="font-heading truncate text-sm font-semibold tracking-tight text-foreground">
@@ -304,6 +305,7 @@ export default function AdminConsoleLayout({
                 alt="Revora"
                 width={26}
                 height={26}
+                style={{ width: 26, height: 26 }}
                 className="shrink-0 rounded-lg object-contain lg:hidden"
               />
               <div className="min-w-0">
@@ -371,6 +373,7 @@ export default function AdminConsoleLayout({
                   alt="Revora"
                   width={26}
                   height={26}
+                  style={{ width: 26, height: 26 }}
                   className="shrink-0 rounded-lg object-contain"
                 />
                 <span className="font-heading truncate text-sm font-semibold tracking-tight text-foreground">

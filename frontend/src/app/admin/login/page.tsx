@@ -58,6 +58,7 @@ export default function AdminLoginPage() {
             alt="Revora"
             width={44}
             height={44}
+            style={{ width: 44, height: 44 }}
             className="mb-4 rounded-xl object-contain"
           />
           <p className="admin-eyebrow">Restricted access</p>

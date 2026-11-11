@@ -154,6 +154,7 @@ export default function LoginPage() {
             alt="Revora Logo"
             width={48}
             height={48}
+            style={{ width: 48, height: 48 }}
             className="mx-auto rounded-xl object-contain mb-4"
           />
           <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { checkHealth } from '@/lib/api';
+import { claimWakeRedirect } from '@/lib/wake-guard';
 
 const POLL_INTERVAL_MS = 15000;     // Check every 15s during normal usage
 const RECOVERY_INTERVAL_MS = 3000;  // Check every 3s when server is down
@@ -64,8 +65,11 @@ export function ServerStatusOverlay() {
       } else {
         failureCount.current += 1;
         if (isInitialMount.current) {
-          // If the server is asleep on the very first page load of any route, redirect to splash page
-          router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+          // If the server is asleep on the very first page load of any route,
+          // redirect to the splash page — once, coordinated with DashboardLayout.
+          if (claimWakeRedirect(pathname)) {
+            router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+          }
         } else if (failureCount.current >= FAILURE_THRESHOLD) {
           // Only show the overlay after FAILURE_THRESHOLD consecutive failures
           // This prevents false positives when the backend is busy with a long LLM call
@@ -77,11 +81,16 @@ export function ServerStatusOverlay() {
     };
 
     // Run immediately on mount / pathname change
-    runCheck();
+    const safeRunCheck = () => {
+      void runCheck().catch((error) => {
+        console.error('[server-status] health check failed', error);
+      });
+    };
+    safeRunCheck();
 
     // Poll at faster rate when server is down, slower when alive
     const interval = serverState === 'down' ? RECOVERY_INTERVAL_MS : POLL_INTERVAL_MS;
-    intervalRef.current = setInterval(runCheck, interval);
+    intervalRef.current = setInterval(safeRunCheck, interval);
 
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps

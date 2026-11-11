@@ -3,7 +3,7 @@
 import { Microscope, XCircle } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import type { MouthMapInferenceResult } from '@/lib/api';
-import type { Phase, SelectedVideo } from './types';
+import type { Phase, PrepPhase, SelectedVideo } from './types';
 import { OriginalVideoCard } from './OriginalVideoCard';
 import { ModelInputRegionCard } from './ModelInputRegionCard';
 import { InferenceResultCard } from './InferenceResultCard';
@@ -13,9 +13,11 @@ import { InferenceJsonCard } from './InferenceJsonCard';
 interface AnalysisSectionProps {
   selected: SelectedVideo | null;
   phase: Phase;
+  prepPhase: PrepPhase;
   uploadPct: number;
   result: MouthMapInferenceResult | null;
   error: string | null;
+  prepError: string | null;
   statusLabel: string | null;
   canRun: boolean;
   running: boolean;
@@ -36,9 +38,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
   const {
     selected,
     phase,
+    prepPhase,
     uploadPct,
     result,
     error,
+    prepError,
     statusLabel,
     canRun,
     running,
@@ -83,7 +87,13 @@ export function AnalysisSection(props: AnalysisSectionProps) {
           className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {running ? <LoaderIcon size={15} /> : null}
-          {running ? 'Running Inference...' : failed ? 'Retry Inference' : 'Run Inference'}
+          {running
+            ? 'Running Inference...'
+            : prepPhase === 'loading'
+              ? 'Preparing Video...'
+              : failed
+                ? 'Retry Inference'
+                : 'Run Inference'}
         </button>
       </div>
 
@@ -123,6 +133,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
               key={`original-${selected.testVideoId ?? selected.objectUrl}`}
               selected={selected}
               phase={phase}
+              prepPhase={prepPhase}
               uploadPct={uploadPct}
               statusLabel={statusLabel}
               onRemove={onRemove}
@@ -145,6 +156,21 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             />
           </div>
         </>
+      )}
+
+      {prepError && (
+        <div
+          className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3 flex flex-col sm:flex-row sm:items-center gap-2.5"
+          role="alert"
+        >
+          <span className="w-8 h-8 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0">
+            <XCircle size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold tracking-tight">Video Preparation Failed</p>
+            <p className="text-sm text-foreground/70 mt-0.5 break-words leading-relaxed">{prepError}</p>
+          </div>
+        </div>
       )}
 
       {failed && error && selected && (

@@ -30,6 +30,7 @@ from app.models.provider import ProviderRegistry
 from app.models.review import Review
 from app.models.token_usage import LlmTokenUsage
 from app.models.user import User
+from app.services.review_selection import selection_api_fields_from_values
 
 MAX_PAGE = 100
 DEFAULT_PAGE = 50
@@ -1300,6 +1301,12 @@ async def list_reviews(
     latest_error_col = _latest_execution_column(
         lambda: ReviewExecution.error_message
     )
+    latest_snapshot_col = _latest_execution_column(
+        lambda: ReviewExecution.configuration_snapshot
+    )
+    latest_started_col = _latest_execution_column(
+        lambda: ReviewExecution.started_at
+    )
 
     if provider:
         filters.append(latest_provider_col == provider)
@@ -1334,6 +1341,8 @@ async def list_reviews(
             latest_status_col.label("execution_status"),
             latest_duration_col.label("duration_ms"),
             latest_error_col.label("error"),
+            latest_snapshot_col.label("configuration_snapshot"),
+            latest_started_col.label("execution_started_at"),
         )
         .join(PullRequest, Review.pr_id == PullRequest.id)
         .join(Repository, PullRequest.repo_id == Repository.id)
@@ -1367,6 +1376,25 @@ async def list_reviews(
         item = dict(row._mapping)
         item["error"] = (
             sanitize_error_message(item["error"]) if item["error"] else None
+        )
+        started = item.pop("execution_started_at", None)
+        snapshot = item.pop("configuration_snapshot", None)
+        # Actual execution columns are only trustworthy for completed runs;
+        # while queued/running they still hold the selected snapshot value.
+        actual_stats = (
+            {"provider": item.get("provider"), "model": item.get("model")}
+            if started is not None and item.get("execution_status") == "completed"
+            else None
+        )
+        item.update(
+            selection_api_fields_from_values(
+                snapshot,
+                item.get("provider"),
+                item.get("model"),
+                item.get("execution_status"),
+                started,
+                actual_stats,
+            )
         )
         items.append(item)
     return {"items": items, "total": total, "limit": limit, "offset": offset}

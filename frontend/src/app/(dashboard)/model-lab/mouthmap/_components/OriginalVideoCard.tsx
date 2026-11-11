@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, Clapperboard, Database, Proportions, Upload, Video, XCircle } from 'lucide-react';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import type { Phase, SelectedVideo } from './types';
+import type { Phase, PrepPhase, SelectedVideo } from './types';
 import { fmtBytes, fmtDuration, isSafeMediaUrl } from './types';
 
 function fileFormat(filename: string): string {
@@ -31,6 +31,7 @@ const SOURCE_META = {
 interface OriginalVideoCardProps {
   selected: SelectedVideo;
   phase: Phase;
+  prepPhase: PrepPhase;
   uploadPct: number;
   statusLabel: string | null;
   onRemove: () => void;
@@ -40,6 +41,7 @@ interface OriginalVideoCardProps {
 export function OriginalVideoCard({
   selected,
   phase,
+  prepPhase,
   uploadPct,
   statusLabel,
   onRemove,
@@ -182,6 +184,11 @@ export function OriginalVideoCard({
               <LoaderIcon size={13} />
             )}
             <span>{statusLabel}</span>
+          </div>
+        ) : prepPhase === 'loading' ? (
+          <div className="text-xs text-ai-purple flex items-center gap-1.5" role="status">
+            <LoaderIcon size={13} />
+            <span>Preparing video...</span>
           </div>
         ) : phase === 'failed' ? (
           <div className="text-xs text-error flex items-center gap-1.5" role="status">

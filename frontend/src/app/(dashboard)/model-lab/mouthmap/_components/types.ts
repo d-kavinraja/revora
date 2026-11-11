@@ -9,10 +9,10 @@ export type Phase =
   | 'idle'
   | 'warming'
   | 'uploading'
-  | 'preparing'
   | 'processing'
   | 'completed'
   | 'failed';
+export type PrepPhase = 'idle' | 'loading' | 'ready' | 'failed';
 export type SourceTab = 'dataset' | 'upload' | 'record';
 export type UploadMode = 'upload' | 'record';
 

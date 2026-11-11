@@ -174,7 +174,6 @@ async def process_job(job_row) -> bool:
         from app.github.errors import GitHubAuthError
         from app.github.shared import (
             get_or_create_review_records,
-            resolve_provider_config,
         )
         from app.github.webhooks import get_pr_diff
         from app.models.github import Installation
@@ -247,16 +246,75 @@ async def process_job(job_row) -> bool:
             )
             return False
 
-        # Resolve provider config — captures the config source for BYOK enforcement
-        async with AsyncSessionLocal() as db:
-            provider, model, api_key_id, config_source = await resolve_provider_config(
-                db, user_id, db_repo
-            )
+        # Resolve provider config — captures the config source for BYOK enforcement.
+        # A selection snapshot written at enqueue time is authoritative for this
+        # execution; only resolve again when no snapshot exists (legacy rows) or
+        # the snapshot could not resolve a model.
+        from app.services.review_execution_service import (
+            get_latest_execution,
+            mark_execution_running,
+        )
+        from app.services.review_selection import (
+            ResolvedSelection,
+            apply_selection_to_execution,
+            read_selection_snapshot,
+            resolve_selection,
+            selection_from_snapshot,
+        )
+        from app.services.provider_registry import (
+            ProviderUnavailableError,
+            provider_registry_service,
+        )
 
-        # MODE 3: Nothing configured — stop immediately with actionable error
-        if config_source == "none" or not provider:
+        async with AsyncSessionLocal() as db:
+            current_execution = await get_latest_execution(db, db_review.id)
+            snapshot = read_selection_snapshot(current_execution)
+            if snapshot and current_execution is not None:
+                selection = selection_from_snapshot(current_execution, snapshot)
+                if selection.is_resolved:
+                    try:
+                        await provider_registry_service.ensure_usable(
+                            db, selection.provider
+                        )
+                    except ProviderUnavailableError as exc:
+                        selection = ResolvedSelection(
+                            provider=None,
+                            provider_slug=None,
+                            provider_name=None,
+                            model=None,
+                            api_key_id=None,
+                            source=selection.source,
+                            repository_mapping_status=(
+                                selection.repository_mapping_status
+                            ),
+                            repository_provider=selection.repository_provider,
+                            repository_model=selection.repository_model,
+                            error=exc.message,
+                        )
+                        apply_selection_to_execution(current_execution, selection)
+                        db.add(current_execution)
+                if not selection.is_resolved:
+                    selection = await resolve_selection(db, user_id, db_repo)
+                    apply_selection_to_execution(current_execution, selection)
+                    db.add(current_execution)
+            else:
+                selection = await resolve_selection(db, user_id, db_repo)
+                if current_execution is not None:
+                    apply_selection_to_execution(current_execution, selection)
+                    db.add(current_execution)
+            await db.commit()
+
+        provider = selection.provider
+        model = selection.model
+        api_key_id = selection.api_key_id
+        config_source = selection.source
+
+        # MODE 3 / unresolved: Nothing configured — stop immediately with an
+        # actionable error. Never execute with a model that was not resolved.
+        if not selection.is_resolved:
             error_msg = (
-                "## AI Review could not start\n\n"
+                selection.error
+                or "## AI Review could not start\n\n"
                 "**Reason:** No AI configuration found for this repository.\n\n"
                 "---\n\n"
                 "### To fix this:\n\n"
@@ -319,6 +377,16 @@ async def process_job(job_row) -> bool:
 
         # Build clone URL
         clone_url = f"https://github.com/{owner}/{repo_name}.git"
+
+        # The selection is valid and the pipeline is about to start: transition
+        # the execution to running so the UI reports an honest status before
+        # completion. Only actual execution attempts reach this point.
+        try:
+            async with AsyncSessionLocal() as db:
+                await mark_execution_running(db, db_review.id)
+                await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to mark execution running for {db_review.id}: {e}")
 
         # Log the execution mode
         mode_label = {

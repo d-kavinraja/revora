@@ -9,11 +9,13 @@ import { ProviderIcon } from '@/components/ui/provider-icon';
 import BorderGlow from '@/components/ui/BorderGlow';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { formatDateTimeWithRelative } from '@/components/shared/time-ago';
+import { modelSelectionView } from '@/lib/review-model-selection';
 import { Review } from '@/lib/api';
 
 export function ReviewItem({ review, queuePosition }: { review: Review; queuePosition?: number }) {
-  const iconRef = useRef<any>(null);
-  const arrowRef = useRef<any>(null);
+  const iconRef = useRef<{ startAnimation: () => void; stopAnimation: () => void } | null>(null);
+  const arrowRef = useRef<{ startAnimation: () => void; stopAnimation: () => void } | null>(null);
+  const selection = modelSelectionView(review);
 
   const iconSlot = (
     <div className="shrink-0">
@@ -54,14 +56,24 @@ export function ReviewItem({ review, queuePosition }: { review: Review; queuePos
           <span className="text-muted-foreground">@{review.pull_request?.author}</span>
           <span className="text-border">&#183;</span>
           <span className="text-muted-foreground/70">{formatDateTimeWithRelative(review.created_at)}</span>
-          {review.stats && (review.stats as Record<string, string>).provider && (
+          {selection.hasSelection ? (
             <>
               <span className="hidden text-border md:inline">&#183;</span>
               <span className="flex w-full items-center gap-1.5 py-1 text-xs uppercase tracking-wider font-semibold text-foreground/80 md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
-                <ProviderIcon slug={(review.stats as Record<string, string>).provider} size={16} />
-                {(review.stats as Record<string, string>).provider} &middot; {(review.stats as Record<string, string>).model}
+                <ProviderIcon slug={selection.providerSlug ?? undefined} size={16} />
+                <span className="truncate">
+                  {selection.providerLabel} &middot; {selection.model}
+                </span>
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {selection.sourceLabel}
               </span>
             </>
+          ) : (
+            <span className="flex w-full items-center gap-1.5 py-1 text-xs text-warning md:w-auto">
+              <ProviderIcon size={16} />
+              Model not resolved
+            </span>
           )}
         </div>
         {review.status === 'pending' && (

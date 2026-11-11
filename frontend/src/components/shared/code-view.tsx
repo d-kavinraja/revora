@@ -1,13 +1,9 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import Editor, { loader, type OnMount } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import { Check, ChevronDown, Copy, FileCode2 } from 'lucide-react';
-
-// Use the locally installed monaco-editor instead of the CDN default so the
-// viewer works offline/self-hosted and with a pinned version.
-loader.config({ monaco });
+import '@/lib/monaco-setup';
 
 // Map common markdown fence tags to Monaco language ids.
 const LANGUAGE_ALIASES: Record<string, string> = {

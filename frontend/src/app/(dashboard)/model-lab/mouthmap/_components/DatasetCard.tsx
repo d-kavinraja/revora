@@ -6,12 +6,14 @@ import type { MouthMapTestVideo } from '@/lib/api';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { EmptyState } from '@/components/shared/empty-state';
 import { fmtBytes, fmtClock } from './types';
-import type { Phase } from './types';
+import type { Phase, PrepPhase } from './types';
 
 interface DatasetCardProps {
   dataset: MouthMapTestVideo[];
   selectedId?: string;
   phase: Phase;
+  /** Separate video-preparation lifecycle (never inference execution). */
+  prepPhase: PrepPhase;
   /** Real thumbnail blob URLs per video id (fetched with auth, same bytes). */
   thumbs: Record<string, string>;
   /** Real durations (seconds) per video id, when metadata loaded. */
@@ -46,6 +48,7 @@ export function DatasetCard({
   dataset,
   selectedId,
   phase,
+  prepPhase,
   thumbs,
   durations,
   onSelect,
@@ -95,13 +98,15 @@ export function DatasetCard({
             // Row status is derived from the live request phase — it can
             // never get stuck on "Running" after a failure.
             const rowStatus =
-              active && (phase === 'uploading' || phase === 'preparing' || phase === 'processing')
-                ? 'running'
-                : active && phase === 'failed'
-                  ? 'failed'
-                  : active && phase === 'completed'
-                    ? 'completed'
-                    : 'ready';
+              active && prepPhase === 'loading'
+                ? 'preparing'
+                : active && (phase === 'warming' || phase === 'uploading' || phase === 'processing')
+                  ? 'running'
+                  : active && phase === 'failed'
+                    ? 'failed'
+                    : active && phase === 'completed'
+                      ? 'completed'
+                      : 'ready';
             return (
               <div
                 key={v.id}
@@ -144,6 +149,11 @@ export function DatasetCard({
                       <span className="inline-flex items-center rounded-full font-medium border px-2.5 py-0.5 text-xs gap-1.5 bg-success/10 text-success border-success/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-success" />
                         Ready
+                      </span>
+                    ) : rowStatus === 'preparing' ? (
+                      <span className="inline-flex items-center rounded-full font-medium border px-2.5 py-0.5 text-xs gap-1.5 bg-warning/10 text-warning border-warning/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                        Preparing
                       </span>
                     ) : (
                       <StatusBadge status={rowStatus} />

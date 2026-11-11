@@ -8,6 +8,7 @@ import TargetCursor from '@/components/ui/TargetCursor';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { checkHealth } from '@/lib/api';
+import { claimWakeRedirect } from '@/lib/wake-guard';
 import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
 import { usePlatformFeatures } from '@/lib/use-platform-features';
 
@@ -25,12 +26,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // On mount, check if the backend is alive.
   // If it's sleeping (Render free tier), send user to the wake-up splash page.
   useEffect(() => {
-    checkHealth().then(alive => {
-      if (!alive) {
-        router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
-      }
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    checkHealth()
+      .then((alive) => {
+        if (!alive && claimWakeRedirect(pathname)) {
+          router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+        }
+      })
+      .catch((error) => {
+        // checkHealth is fail-closed and should not reject; keep an unexpected
+        // failure visible instead of creating an unhandled rejection.
+        console.error('[dashboard] health check failed', error);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   // Client-side auth guard. Waits for the session restore to settle
@@ -43,7 +50,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!sessionChecked || isAuthenticated) return;
     if (restoreReason === 'unreachable') {
-      router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+      if (claimWakeRedirect(pathname)) {
+        router.replace(`/waking-up?redirect=${encodeURIComponent(pathname)}`);
+      }
       return;
     }
     if (restoreReason === 'disabled') {

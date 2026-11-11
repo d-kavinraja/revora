@@ -13,6 +13,8 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Pill } from '@/components/shared/pill';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { ProviderIcon } from '@/components/ui/provider-icon';
+import { modelSelectionView } from '@/lib/review-model-selection';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
@@ -41,12 +43,7 @@ const PERIOD_OPTIONS = [
 ] as const;
 
 function isFallback(review: AdminReviewItem): boolean {
-  if (!review.provider) return false;
-  return (
-    (review.configured_provider !== null &&
-      review.configured_provider !== review.provider) ||
-    (review.configured_model !== null && review.configured_model !== review.model)
-  );
+  return review.selection_source === 'routing_fallback';
 }
 
 export default function AdminReviewsPage() {
@@ -121,63 +118,97 @@ export default function AdminReviewsPage() {
     },
     {
       key: 'configured',
-      header: 'Configured',
+      header: 'Repository mapping',
       render: (review) => (
         <span
           className="block max-w-[260px] truncate text-xs text-foreground/80"
           title={
-            review.configured_provider || review.configured_model
-              ? `${review.configured_provider ?? 'Unset'}${review.configured_model ? ` · ${review.configured_model}` : ''}`
-              : 'Not configured'
+            review.repository_provider || review.repository_model
+              ? `${review.repository_provider ?? 'Unset'}${review.repository_model ? ` · ${review.repository_model}` : ''}`
+              : 'Not mapped'
           }
         >
-          {review.configured_provider || review.configured_model ? (
+          <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
+            {review.repository_mapping_status === 'mapped'
+              ? 'Mapped'
+              : review.repository_mapping_status === 'not_mapped'
+                ? 'Not mapped'
+                : 'Unknown'}
+          </span>
+          {review.repository_provider || review.repository_model ? (
             <>
-              {review.configured_provider ?? 'Unset'}
-              {review.configured_model ? ` · ${review.configured_model}` : ''}
+              {review.repository_provider ?? 'Unset'}
+              {review.repository_model ? ` · ${review.repository_model}` : ''}
             </>
           ) : (
-            <span className="text-muted-foreground">Not configured</span>
+            <span className="text-muted-foreground">
+              {review.repository_mapping_status === 'not_mapped'
+                ? 'Not mapped'
+                : 'Not recorded'}
+            </span>
           )}
         </span>
       ),
     },
     {
+      key: 'selected',
+      header: 'Resolved selection',
+      render: (review) => {
+        const view = modelSelectionView(review);
+        return (
+          <div className="min-w-0 max-w-[240px] text-xs">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <ProviderIcon slug={view.providerSlug ?? undefined} size={14} className="shrink-0" />
+              <span
+                className="max-w-[200px] truncate text-foreground/80"
+                title={view.hasSelection ? `${view.providerLabel} · ${view.model}` : 'No model resolved'}
+              >
+                {view.hasSelection
+                  ? `${view.providerLabel} · ${view.model}`
+                  : 'No model resolved'}
+              </span>
+              {isFallback(review) && (
+                <Pill tone="warning" dot>
+                  routing
+                </Pill>
+              )}
+            </div>
+            <p className="text-muted-foreground">{view.sourceLabel}</p>
+          </div>
+        );
+      },
+    },
+    {
       key: 'actual',
       header: 'Actual execution',
-      render: (review) => (
-        <div className="min-w-0 max-w-[240px] text-xs">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="max-w-[200px] truncate text-foreground/80"
-              title={
-                review.provider || review.model
-                  ? [review.provider, review.model].filter(Boolean).join(' · ')
-                  : 'Not recorded'
-              }
-            >
-              {review.provider || review.model
-                ? [review.provider, review.model].filter(Boolean).join(' · ')
-                : 'Not recorded'}
-            </span>
-            {isFallback(review) && (
-              <Pill tone="warning" dot>
-                fallback
-              </Pill>
-            )}
+      render: (review) => {
+        const view = modelSelectionView(review);
+        return (
+          <div className="min-w-0 max-w-[240px] text-xs">
+            <div className="flex min-w-0 items-center gap-2">
+              {view.executed && (
+                <ProviderIcon slug={view.actualProvider ?? undefined} size={14} className="shrink-0" />
+              )}
+              <span
+                className="max-w-[200px] truncate text-foreground/80"
+                title={view.actualLabel}
+              >
+                {view.actualLabel}
+              </span>
+            </div>
+            <p className="text-muted-foreground">
+              {[
+                review.execution_status,
+                review.duration_ms !== null
+                  ? `${review.duration_ms.toLocaleString()} ms`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            {[
-              review.execution_status,
-              review.duration_ms !== null
-                ? `${review.duration_ms.toLocaleString()} ms`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(' · ') || '—'}
-          </p>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'error',

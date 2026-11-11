@@ -317,9 +317,6 @@ class ReviewLifecycleService:
         )
 
         settings = repo.settings or {}
-        provider = settings.get("assigned_provider", "")
-        model = settings.get("assigned_model", "")
-        key_id = settings.get("assigned_key_id", "")
 
         # Reuse the SAME review row — never insert another one.
         # (Summary/stats/error content lives on ReviewExecution rows; the last
@@ -332,17 +329,28 @@ class ReviewLifecycleService:
         await db.commit()
         await db.refresh(review)
 
-        # Record this run as a new execution on the reused review row
+        # Record this run as a new execution on the reused review row.
+        # Resolve through the same repository-mapping -> routing fallback
+        # resolver used everywhere else; never read only repo settings.
         from app.services.review_execution_service import create_execution
+        from app.services.review_selection import (
+            merge_configuration_snapshot,
+            resolve_selection,
+        )
+
+        selection = await resolve_selection(db, str(user_id), repo)
+        provider = selection.provider or ""
+        model = selection.model or ""
+        key_id = selection.api_key_id or ""
 
         execution = await create_execution(
             db,
             review.id,
             trigger=action,
             commit_sha=pr.head_sha,
-            provider=provider,
-            model=model,
-            configuration_snapshot=settings,
+            provider=selection.provider,
+            model=selection.model,
+            configuration_snapshot=merge_configuration_snapshot(settings, selection),
             api_key_id=self._safe_uuid(key_id),
             repository_full_name=repo.full_name,
             base_branch=pr.base_branch,
@@ -457,6 +465,8 @@ class ReviewLifecycleService:
         from sqlalchemy.orm import joinedload
 
         from app.models.execution import ReviewExecution
+        from app.services.review_selection import selection_api_fields
+
         reviews_result = await db.execute(
             select(Review)
             .options(joinedload(Review.pull_request))
@@ -504,6 +514,7 @@ class ReviewLifecycleService:
                     "duration_ms": e.duration_ms,
                     "model": e.model,
                     "provider": e.provider,
+                    **selection_api_fields(e),
                     "tokens": e.tokens or {},
                     "summary": e.summary,
                     "stats": e.stats or {},

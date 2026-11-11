@@ -152,7 +152,7 @@ export function Sidebar() {
     <>
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} className="rounded-lg" />
+          <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} style={{ width: 28, height: 28 }} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
         </div>
         <button
@@ -184,6 +184,7 @@ export function Sidebar() {
                 alt="Revora Logo"
                 width={32}
                 height={32}
+                style={{ width: 32, height: 32 }}
                 className="rounded-lg object-contain shrink-0"
               />
               <div className="min-w-0">

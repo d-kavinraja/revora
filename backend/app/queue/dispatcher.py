@@ -259,6 +259,11 @@ async def _reuse_latest_review_for_pr(
         create_execution,
         get_latest_execution,
     )
+    from app.services.review_selection import (
+        apply_selection_to_execution,
+        merge_configuration_snapshot,
+        resolve_selection,
+    )
 
     latest = await session.execute(
         select(Review)
@@ -286,6 +291,29 @@ async def _reuse_latest_review_for_pr(
         and latest_exec.commit_sha == head_sha
         and latest_exec.trigger == trigger
     ):
+        # A redelivered webhook must not duplicate the execution. Backfill the
+        # selection snapshot if this row predates selection persistence.
+        if not latest_exec.configuration_snapshot or not (
+            latest_exec.configuration_snapshot or {}
+        ).get("selection"):
+            from app.models.github import Installation, Repository
+
+            repo_result = await session.execute(
+                select(Repository).where(Repository.id == db_pr.repo_id)
+            )
+            db_repo = repo_result.scalars().first()
+            inst_result = await session.execute(
+                select(Installation).where(
+                    Installation.installation_id == installation_id
+                )
+            )
+            db_inst = inst_result.scalars().first()
+            if db_repo is not None and db_inst is not None:
+                selection = await resolve_selection(
+                    session, str(db_inst.user_id), db_repo
+                )
+                apply_selection_to_execution(latest_exec, selection)
+                session.add(latest_exec)
         logger.info(
             f"Review {db_review.id} already has a queued '{trigger}' execution "
             f"for sha={head_sha[:12]} — not creating another one"
@@ -298,8 +326,44 @@ async def _reuse_latest_review_for_pr(
     session.add(db_review)
     await session.flush()
 
+    # Snapshot the selection for THIS execution. Reopened/synchronize and
+    # sync-discovered PRs take this path, so omitting it left every subsequent
+    # PR with a NULL provider/model until inference finished.
+    from app.models.github import Installation, Repository
+
+    repo_result = await session.execute(
+        select(Repository).where(Repository.id == db_pr.repo_id)
+    )
+    db_repo = repo_result.scalars().first()
+    inst_result = await session.execute(
+        select(Installation).where(Installation.installation_id == installation_id)
+    )
+    db_inst = inst_result.scalars().first()
+    selection = None
+    if db_repo is not None and db_inst is not None:
+        selection = await resolve_selection(session, str(db_inst.user_id), db_repo)
+
     await create_execution(
-        session, db_review.id, trigger=trigger, commit_sha=head_sha
+        session,
+        db_review.id,
+        trigger=trigger,
+        commit_sha=head_sha,
+        provider=selection.provider if selection else None,
+        model=selection.model if selection else None,
+        api_key_id=(
+            UUID(selection.api_key_id)
+            if selection and selection.api_key_id
+            else None
+        ),
+        configuration_snapshot=(
+            merge_configuration_snapshot(db_repo.settings or {}, selection)
+            if selection and db_repo is not None
+            else (db_repo.settings if db_repo else None)
+        ),
+        repository_full_name=db_repo.full_name if db_repo else None,
+        base_branch=db_pr.base_branch,
+        head_branch=db_pr.head_branch,
+        pr_number=db_pr.pr_number,
     )
     if commit:
         await session.commit()

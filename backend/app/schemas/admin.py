@@ -332,9 +332,20 @@ class AdminReviewItem(BaseModel):
     owner_email: str
     configured_provider: str | None
     configured_model: str | None
+    repository_mapping_status: str | None = None
+    repository_provider: str | None = None
+    repository_model: str | None = None
+    selection_source: str | None = None
+    selected_provider: str | None = None
+    selected_provider_slug: str | None = None
+    selected_provider_name: str | None = None
+    selected_model: str | None = None
     provider: str | None
     model: str | None
+    actual_execution_provider: str | None = None
+    actual_execution_model: str | None = None
     execution_status: str | None
+    execution_started: bool = False
     duration_ms: int | None
     error: str | None
 

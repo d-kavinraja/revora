@@ -98,7 +98,13 @@ async def resolve_provider_config(
 
     # 2. User routing preferences (MODE 2)
     try:
-        user_result = await db_session.execute(select(User).where(User.id == user_id))
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (ValueError, TypeError):
+            user_uuid = user_id
+        user_result = await db_session.execute(
+            select(User).where(User.id == user_uuid)
+        )
         db_user = user_result.scalars().first()
         if db_user and db_user.settings:
             routing_prefs = db_user.settings.get("model_routing", {})
@@ -109,7 +115,7 @@ async def resolve_provider_config(
                 provider = pref_provider
                 model = pref_model
                 user_keys = await api_key_service.get_all_usable_keys(
-                    db_session, user_id
+                    db_session, user_uuid
                 )
                 if provider in user_keys:
                     # Availability gate (phase 4): a blocked provider never
@@ -331,34 +337,51 @@ async def get_or_create_review_records(
 
         # Track this run as a ReviewExecution (queued → running).
         try:
-            from app.models.execution import ReviewExecution as ExecModel
             from app.services.review_execution_service import (
                 create_execution,
+                get_latest_execution,
                 mark_execution_running,
             )
+            from app.services.review_selection import (
+                apply_selection_to_execution,
+                merge_configuration_snapshot,
+                read_selection_snapshot,
+                resolve_selection,
+            )
 
-            provider, model, api_key_id, _source = await resolve_provider_config(
+            selection = await resolve_selection(
                 db, user_id=str(db_inst.user_id), db_repo=db_repo
             )
 
-            existing_exec_id = await db.scalar(
-                select(ExecModel.id).where(ExecModel.review_id == db_review.id).limit(1)
-            )
-            if not existing_exec_id:
+            latest_exec = await get_latest_execution(db, db_review.id)
+            if latest_exec is None or latest_exec.commit_sha != head_sha:
                 await create_execution(
                     db,
                     db_review.id,
                     trigger="webhook",
                     commit_sha=head_sha,
-                    provider=provider,
-                    model=model,
-                    api_key_id=uuid.UUID(api_key_id) if api_key_id else None,
+                    provider=selection.provider,
+                    model=selection.model,
+                    api_key_id=(
+                        uuid.UUID(selection.api_key_id)
+                        if selection.api_key_id
+                        else None
+                    ),
                     repository_full_name=db_repo.full_name,
                     base_branch=pull_request["base"]["ref"],
                     head_branch=pull_request["head"]["ref"],
                     pr_number=pr_number,
-                    configuration_snapshot=db_repo.settings or {},
+                    configuration_snapshot=merge_configuration_snapshot(
+                        db_repo.settings or {}, selection
+                    ),
                 )
+            elif not read_selection_snapshot(latest_exec) or (
+                selection.is_resolved and not latest_exec.provider
+            ):
+                # Backfill executions created before selection snapshots
+                # existed (or by a path that did not persist them).
+                apply_selection_to_execution(latest_exec, selection)
+                db.add(latest_exec)
             if status == "running" and review_transitioned:
                 await mark_execution_running(db, db_review.id)
             await db.commit()

@@ -35,13 +35,25 @@ export const apiClient = axios.create({
 });
 
 /** Ping the backend health endpoint. Returns true if server is alive, false if sleeping/unreachable. */
-export async function checkHealth(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(12000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
+let healthCheckInFlight: Promise<boolean> | null = null;
+export function checkHealth(): Promise<boolean> {
+  // The dashboard layout, global server overlay and waking-up page all probe
+  // health. Share the in-flight request so one navigation cannot fan out into
+  // several simultaneous health calls (and several wake-up redirects).
+  if (healthCheckInFlight) return healthCheckInFlight;
+  healthCheckInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/health`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      healthCheckInFlight = null;
+    }
+  })();
+  return healthCheckInFlight;
 }
 
 // Attach JWT token on every request (in-memory only; HttpOnly cookie is
@@ -207,7 +219,27 @@ export interface PullRequestInfo {
   changed_files: number;
 }
 
-export interface Review {
+export interface ReviewSelection {
+  repository_mapping_status: 'mapped' | 'not_mapped' | 'unknown' | string;
+  repository_provider: string | null;
+  repository_model: string | null;
+  selection_source:
+    | 'repository_mapping'
+    | 'routing_fallback'
+    | 'unresolved'
+    | 'unknown'
+    | string;
+  selected_provider: string | null;
+  selected_provider_slug: string | null;
+  selected_provider_name: string | null;
+  selected_model: string | null;
+  actual_execution_provider: string | null;
+  actual_execution_model: string | null;
+  execution_status: string | null;
+  execution_started: boolean;
+}
+
+export interface Review extends ReviewSelection {
   id: string;
   status: ReviewStatus;
   summary: string | null;
@@ -221,9 +253,25 @@ export interface Review {
   latest_review_id?: string | null;
   pull_request: PullRequestInfo;
   repository: { id?: string; name: string; full_name: string };
+  current_execution?: ReviewExecutionDetail | null;
+  last_completed_execution?: ReviewExecutionDetail | null;
 }
 
-export interface ReviewExecution {
+export interface ReviewExecutionDetail extends ReviewSelection {
+  id: string;
+  execution_number: number;
+  status: string;
+  provider: string | null;
+  model: string | null;
+  summary: string | null;
+  stats: Record<string, unknown>;
+  duration_ms: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message?: string | null;
+}
+
+export interface ReviewExecution extends ReviewSelection {
   id: string;
   execution_number: number;
   trigger: string;
@@ -234,6 +282,9 @@ export interface ReviewExecution {
   model: string | null;
   provider: string | null;
   tokens: Record<string, unknown>;
+  summary?: string | null;
+  stats?: Record<string, unknown>;
+  error_message?: string | null;
 }
 
 export interface Repository {
@@ -1213,9 +1264,20 @@ export interface AdminReviewItem {
   owner_email: string;
   configured_provider: string | null;
   configured_model: string | null;
+  repository_mapping_status: string | null;
+  repository_provider: string | null;
+  repository_model: string | null;
+  selection_source: string | null;
+  selected_provider: string | null;
+  selected_provider_slug: string | null;
+  selected_provider_name: string | null;
+  selected_model: string | null;
   provider: string | null;
   model: string | null;
+  actual_execution_provider: string | null;
+  actual_execution_model: string | null;
   execution_status: string | null;
+  execution_started: boolean;
   duration_ms: number | null;
   error: string | null;
 }

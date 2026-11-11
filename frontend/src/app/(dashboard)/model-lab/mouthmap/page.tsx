@@ -17,7 +17,7 @@ import { UploadCard } from './_components/UploadCard';
 import { DatasetCard } from './_components/DatasetCard';
 import { AnalysisSection } from './_components/AnalysisSection';
 import { HistoryTable } from './_components/HistoryTable';
-import type { Phase, SelectedVideo, UploadMode } from './_components/types';
+import type { Phase, PrepPhase, SelectedVideo, UploadMode } from './_components/types';
 import { friendlyError } from './_components/types';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
@@ -49,6 +49,10 @@ function MouthMapLab() {
   const [uploadMode, setUploadMode] = useState<UploadMode>('upload');
   const [selected, setSelected] = useState<SelectedVideo | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
+  // Video preparation is a separate lifecycle from inference execution:
+  // selecting/loading a video must never open the inference loader.
+  const [prepPhase, setPrepPhase] = useState<PrepPhase>('idle');
+  const [prepError, setPrepError] = useState<string | null>(null);
   const [uploadPct, setUploadPct] = useState(0);
   // Set ONLY when an XHR progress event reports loaded >= total — never
   // inferred from elapsed time. Distinguishes "bytes in flight" from
@@ -58,6 +62,10 @@ function MouthMapLab() {
   const [error, setError] = useState<string | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  // Synchronous duplicate-submission gate: React state is not updated until
+  // the next render, so two clicks in one batch could both pass a `phase`
+  // check. This ref is set before any await and always cleared in `finally`.
+  const inFlightRef = useRef(false);
   // Monotonic id for dataset picks: a late response from an earlier click
   // must never overwrite (or revoke the URL of) a newer selection.
   const pickSeqRef = useRef(0);
@@ -177,8 +185,7 @@ function MouthMapLab() {
     if (
       phase !== 'warming' &&
       phase !== 'uploading' &&
-      phase !== 'processing' &&
-      phase !== 'preparing'
+      phase !== 'processing'
     )
       return;
     const t = window.setInterval(() => setElapsedS((s) => s + 1), 1000);
@@ -206,9 +213,10 @@ function MouthMapLab() {
   };
 
   const pickDatasetVideo = async (v: MouthMapTestVideo): Promise<SelectedVideo | null> => {
+    setPrepError(null);
     setError(null);
     setResult(null);
-    setPhase('preparing');
+    setPrepPhase('loading');
     const seq = (pickSeqRef.current += 1);
     try {
       const res = await apiClient.get(
@@ -231,6 +239,9 @@ function MouthMapLab() {
         expected: v.ground_truth,
       };
       setSelectedVideo(sel);
+      setPrepPhase('ready');
+      // Selection only resets any previous run's display state; it never
+      // starts (or cancels) an execution.
       setPhase('idle');
       document
         .getElementById('model-lab-analysis')
@@ -240,8 +251,8 @@ function MouthMapLab() {
       // A superseded pick's failure must not surface as the new
       // selection's error.
       if (seq !== pickSeqRef.current) return null;
-      setPhase('failed');
-      setError(friendlyError(e));
+      setPrepPhase('failed');
+      setPrepError(friendlyError(e));
       return null;
     }
   };
@@ -249,20 +260,23 @@ function MouthMapLab() {
   const acceptFile = (f: File | undefined | null) => {
     if (!f) return;
     setError(null);
+    setPrepError(null);
     setResult(null);
     const ext = `.${(f.name.split('.').pop() ?? '').toLowerCase()}`;
     const allowed = (config?.allowed_extensions ?? ['.mp4', '.webm', '.mpg']).map((a) =>
       a.toLowerCase(),
     );
     if (!allowed.includes(ext)) {
-      setError(
+      setPrepPhase('failed');
+      setPrepError(
         `Video format is not supported. Supported formats: ${allowed.join(', ').toUpperCase()}`,
       );
       return;
     }
     const maxBytes = (config?.max_upload_mb ?? 50) * 1024 * 1024;
     if (f.size > maxBytes) {
-      setError(`Video is too large. Maximum size is ${config?.max_upload_mb ?? 50} MB.`);
+      setPrepPhase('failed');
+      setPrepError(`Video is too large. Maximum size is ${config?.max_upload_mb ?? 50} MB.`);
       return;
     }
     const url = URL.createObjectURL(f);
@@ -273,11 +287,12 @@ function MouthMapLab() {
       objectUrl: url,
       sizeBytes: f.size,
     });
+    setPrepPhase('ready');
     setPhase('idle');
   };
 
   const startCamera = async () => {
-    setError(null);
+    setPrepError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setCamStream(stream);
@@ -285,7 +300,8 @@ function MouthMapLab() {
         if (liveRef.current) liveRef.current.srcObject = stream;
       });
     } catch {
-      setError('Camera/microphone permission was denied. Allow access to record video.');
+      setPrepPhase('failed');
+      setPrepError('Camera/microphone permission was denied. Allow access to record video.');
     }
   };
 
@@ -321,6 +337,8 @@ function MouthMapLab() {
         objectUrl: url,
         sizeBytes: blob.size,
       });
+      setPrepPhase('ready');
+      setPhase('idle');
       stopCamera();
     };
     recorderRef.current = rec;
@@ -339,41 +357,45 @@ function MouthMapLab() {
   const runInference = async (sel: SelectedVideo | null = selected) => {
     if (!sel?.blob) return;
     // Prevent duplicate jobs from double-clicks or overlapping triggers.
-    if (running || phase === 'preparing') return;
+    // The ref is checked and set synchronously, before any await, so two
+    // clicks dispatched in the same render batch cannot both submit.
+    if (prepPhase === 'loading' || inFlightRef.current || running) return;
+    inFlightRef.current = true;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setError(null);
+    setPrepError(null);
     setResult(null);
     setUploadPct(0);
     setUploadDone(false);
     setElapsedS(0);
 
-    // On-demand wake-up: ask the backend to bring the hosted HF Space up and
-    // confirm readiness BEFORE uploading the video. The backend holds this
-    // request while the Space boots (bounded by MOUTHMAP_WAKE_TIMEOUT_S), so
-    // an idle Space is never woken by page loads — only by starting a run.
-    setPhase('warming');
     try {
-      await mouthmapApi.warm({ signal: controller.signal });
-    } catch (e) {
+      // On-demand wake-up: ask the backend to bring the hosted HF Space up and
+      // confirm readiness BEFORE uploading the video. The backend holds this
+      // request while the Space boots (bounded by MOUTHMAP_WAKE_TIMEOUT_S), so
+      // an idle Space is never woken by page loads — only by starting a run.
+      setPhase('warming');
+      try {
+        await mouthmapApi.warm({ signal: controller.signal });
+      } catch (e) {
+        if (controller.signal.aborted) {
+          setPhase('idle');
+          toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
+          return;
+        }
+        setPhase('failed');
+        setError(friendlyError(e));
+        return;
+      }
       if (controller.signal.aborted) {
         setPhase('idle');
         toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
         return;
       }
-      setPhase('failed');
-      setError(friendlyError(e));
-      return;
-    }
-    if (controller.signal.aborted) {
-      setPhase('idle');
-      toast({ title: 'Inference cancelled', description: 'The request was cancelled. No result was produced.', type: 'info' });
-      return;
-    }
 
-    setPhase('uploading');
-    try {
+      setPhase('uploading');
       setPhase('processing');
       const out = await mouthmapApi.runInference(
         sel.blob,
@@ -405,6 +427,7 @@ function MouthMapLab() {
       setError(friendlyError(e));
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
+      inFlightRef.current = false;
     }
   };
 
@@ -413,7 +436,7 @@ function MouthMapLab() {
   };
 
   const selectAndRun = async (v: MouthMapTestVideo) => {
-    if (running || phase === 'preparing') return;
+    if (running || prepPhase === 'loading' || inFlightRef.current) return;
     const sel = await pickDatasetVideo(v);
     if (sel) {
       document
@@ -448,6 +471,8 @@ function MouthMapLab() {
     setSelectedVideo(null);
     setResult(null);
     setError(null);
+    setPrepError(null);
+    setPrepPhase('idle');
     setPhase('idle');
   };
 
@@ -469,17 +494,15 @@ function MouthMapLab() {
       ? 'Waking up model...'
       : phase === 'uploading' && !uploadDone
         ? `Uploading video... ${uploadPct}%`
-        : phase === 'preparing'
-          ? 'Preparing video...'
-          : phase === 'processing' || (phase === 'uploading' && uploadDone)
-            ? 'Running MouthMap inference...'
-            : phase === 'completed'
-              ? 'Inference completed.'
-              : null;
+        : phase === 'processing' || (phase === 'uploading' && uploadDone)
+          ? 'Running MouthMap inference...'
+          : phase === 'completed'
+            ? 'Inference completed.'
+            : null;
 
   const running =
     phase === 'warming' || phase === 'uploading' || phase === 'processing';
-  const canRun = !!selected?.blob && !running && phase !== 'preparing';
+  const canRun = !!selected?.blob && !running && prepPhase !== 'loading';
 
   // Honest live stages with exactly ONE active stage at a time:
   // - Wake-up is its own stage, shown only while the backend confirms it is
@@ -497,33 +520,27 @@ function MouthMapLab() {
           { id: 'upload', label: 'Uploading video', status: 'pending' },
           { id: 'inference', label: 'Running inference', status: 'pending' },
         ]
-      : phase === 'preparing'
-        ? [
-            { id: 'prepare', label: 'Preparing video', status: 'active', detail: 'Downloading test video…' },
-            { id: 'upload', label: 'Uploading video', status: 'pending' },
-            { id: 'inference', label: 'Running inference', status: 'pending' },
-          ]
-        : [
-            { id: 'prepare', label: 'Preparing video', status: 'done', detail: 'Video validated' },
-            uploadDone
-              ? { id: 'upload', label: 'Uploading video', status: 'done', detail: 'Upload complete' }
-              : {
-                  id: 'upload',
-                  label: 'Uploading video',
-                  status: 'active',
-                  detail: uploadPct > 0 ? `${uploadPct}% uploaded` : 'Sending video…',
-                },
-            uploadDone
-              ? {
-                  id: 'inference',
-                  label: 'Running inference',
-                  status: 'active',
-                  detail: 'Model is processing on the backend…',
-                }
-              : { id: 'inference', label: 'Running inference', status: 'pending' },
-          ];
+      : [
+          { id: 'prepare', label: 'Preparing video', status: 'done', detail: 'Video validated' },
+          uploadDone
+            ? { id: 'upload', label: 'Uploading video', status: 'done', detail: 'Upload complete' }
+            : {
+                id: 'upload',
+                label: 'Uploading video',
+                status: 'active',
+                detail: uploadPct > 0 ? `${uploadPct}% uploaded` : 'Sending video…',
+              },
+          uploadDone
+            ? {
+                id: 'inference',
+                label: 'Running inference',
+                status: 'active',
+                detail: 'Model is processing on the backend…',
+              }
+            : { id: 'inference', label: 'Running inference', status: 'pending' },
+        ];
 
-  const loaderOpen = running || phase === 'preparing';
+  const loaderOpen = running;
 
   return (
     <div className="w-full min-w-0 max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-5 md:space-y-6 overflow-x-clip">
@@ -542,7 +559,7 @@ function MouthMapLab() {
                 onFile={acceptFile}
                 selected={selected}
                 onRemove={clearSelection}
-                error={error}
+                error={prepError}
                 camActive={!!camStream}
                 recording={recording}
                 recSecs={recSecs}
@@ -558,12 +575,13 @@ function MouthMapLab() {
                 dataset={dataset}
                 selectedId={selected?.testVideoId}
                 phase={phase}
+                prepPhase={prepPhase}
                 thumbs={thumbs}
                 durations={durations}
                 onSelect={pickDatasetVideo}
                 onRun={selectAndRun}
                 onAddVideo={handleAddVideo}
-                busy={running || phase === 'preparing'}
+                busy={running || prepPhase === 'loading'}
               />
             </div>
           </div>
@@ -572,9 +590,11 @@ function MouthMapLab() {
             <AnalysisSection
               selected={selected}
               phase={phase}
+              prepPhase={prepPhase}
               uploadPct={uploadPct}
               result={result}
               error={error}
+              prepError={prepError}
               statusLabel={statusLabel}
               canRun={canRun}
               running={running}

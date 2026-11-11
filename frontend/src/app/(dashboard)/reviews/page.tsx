@@ -249,6 +249,10 @@ export default function ReviewsPage() {
         case 'restart': await restartMutation.mutateAsync(reviewId); break;
         case 'cancel': await cancelMutation.mutateAsync(reviewId); break;
       }
+    } catch (error) {
+      // Mutation onError already surfaces the message; this prevents the
+      // async click handler from becoming an unhandled rejection.
+      console.error('[reviews] lifecycle action failed', { action, error });
     } finally {
       setActioningReview(null);
     }
