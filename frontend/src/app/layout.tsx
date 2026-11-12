@@ -9,6 +9,7 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500", "600", "700"],
 });
 import { Providers } from "./providers";
+import { GlobalAnnouncementBanner } from "@/components/shared/global-announcement-banner";
 import { REVORA, getSiteUrl, isIndexableDeployment } from "@/lib/site";
 import { buildStructuredData } from "@/lib/structured-data";
 
@@ -124,6 +125,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${oxanium.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`} suppressHydrationWarning>
         <Providers>
+          <GlobalAnnouncementBanner />
           {children}
         </Providers>
         <script

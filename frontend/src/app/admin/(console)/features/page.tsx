@@ -27,6 +27,10 @@ const FLAG_META: Record<string, { label: string; description: string }> = {
     label: 'MouthMap',
     description: 'MouthMap video inference lab and all of its processing routes.',
   },
+  botaniq: {
+    label: 'BotaniQ',
+    description: 'BotaniQ plant-disease inference lab and all of its processing routes.',
+  },
   api_keys_add: {
     label: 'API Key Changes',
     description:
@@ -166,7 +170,7 @@ export default function AdminFeaturesPage() {
     <AdminPage
       eyebrow="System"
       title="Features"
-      description="Platform feature flags. Disabling a flag makes every non-admin request for that feature answer 503 with the message below, and hides it from navigation — no redeploy, nothing deleted. Admins always bypass flags; re-enabling restores the feature instantly with all stored data intact."
+      description="Platform feature flags. Disabling a flag makes every non-admin request for that feature answer 503 with the message below. The feature stays visible in user navigation so users see a clear unavailable state — no redeploy, nothing deleted. Usage and Analytics also require the USAGE_ANALYTICS_ENABLED environment master switch. Admins always bypass flags; re-enabling restores the feature instantly with all stored data intact."
     >
       {isError && !isPending && (
         <QueryError
@@ -278,7 +282,7 @@ export default function AdminFeaturesPage() {
               ? 'The feature becomes available to non-admin users immediately — no redeploy, no re-login needed.'
               : confirmingDraft.status === 'maintenance'
                 ? 'Non-admin users will receive 503 with a maintenance message. Nothing is deleted; re-enabling restores the feature instantly.'
-                : 'Non-admin users will receive 503 for this feature and it disappears from their navigation. Nothing is deleted; re-enabling restores it instantly.'
+                : 'Non-admin users will receive 503 for this feature and see a clear unavailable page while its navigation item stays visible. Nothing is deleted; re-enabling restores it instantly.'
             : undefined
         }
         confirmLabel="Apply"

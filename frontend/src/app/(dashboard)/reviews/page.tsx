@@ -9,6 +9,7 @@ import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ReviewItem } from '@/components/shared/review-item';
 import { ReviewActions } from '@/components/shared/review-actions';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 import { DateRangeFilter } from '@/components/shared/date-range-filter';
 import { useToast } from '@/components/ui/toaster';
 import { useReviewStream, reviewsStreamUrl } from '@/lib/events';
@@ -29,6 +30,9 @@ const filterOptions = [
 export default function ReviewsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: platformFeatures } = usePlatformFeatures();
+  const initiationState = featureState(platformFeatures, 'review_initiation');
+  const initiationEnabled = initiationState.status === 'enabled';
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRepo, setSelectedRepo] = useState<string>('all');
@@ -424,6 +428,12 @@ export default function ReviewsPage() {
           ))}
         </div>
       </div>
+
+      {!initiationEnabled && (
+        <div className="mb-6 rounded-lg border border-border bg-surface-1 p-4 text-sm text-muted-foreground">
+          {initiationState.message || 'New review initiation is paused. Existing reviews and details remain available.'}
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg flex items-center gap-3">

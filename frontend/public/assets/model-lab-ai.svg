@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-label="Model Lab AI illustration">
+  <defs>
+    <radialGradient id="ml-bg" cx="50%" cy="42%" r="78%">
+      <stop offset="0%" stop-color="#2a0f12" />
+      <stop offset="48%" stop-color="#120607" />
+      <stop offset="100%" stop-color="#050203" />
+    </radialGradient>
+    <linearGradient id="ml-chip" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7f1d1d" />
+      <stop offset="38%" stop-color="#9a3412" />
+      <stop offset="72%" stop-color="#c2410c" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <linearGradient id="ml-node" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdba74" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+    <filter id="ml-glow" x="-45%" y="-45%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="9" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="ml-soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="500" fill="url(#ml-bg)" />
+
+  <g opacity="0.16" stroke="#f97316" stroke-width="1">
+    <path d="M0 100 H800 M0 200 H800 M0 300 H800 M0 400 H800" />
+    <path d="M100 0 V500 M200 0 V500 M300 0 V500 M400 0 V500 M500 0 V500 M600 0 V500 M700 0 V500" />
+  </g>
+
+  <g opacity="0.9">
+    <rect x="150" y="95" width="500" height="310" rx="34" fill="rgba(90,28,18,0.24)" stroke="rgba(251,146,60,0.24)" stroke-width="2" />
+    <rect x="190" y="125" width="420" height="250" rx="28" fill="rgba(120,38,20,0.20)" stroke="rgba(249,115,22,0.24)" stroke-width="2" />
+    <rect x="230" y="155" width="340" height="190" rx="24" fill="rgba(150,45,22,0.16)" stroke="rgba(253,186,116,0.22)" stroke-width="2" />
+  </g>
+
+  <g fill="none" opacity="0.62" stroke="#f97316" stroke-width="2">
+    <ellipse cx="400" cy="250" rx="255" ry="118" />
+    <ellipse cx="400" cy="250" rx="190" ry="82" />
+    <ellipse cx="400" cy="250" rx="125" ry="52" />
+  </g>
+
+  <g filter="url(#ml-glow)" opacity="0.95">
+    <path d="M150 130 C250 130, 290 195, 325 225" fill="none" stroke="#b45309" stroke-width="3" />
+    <path d="M135 250 C245 250, 295 250, 325 250" fill="none" stroke="#c2410c" stroke-width="3" />
+    <path d="M170 370 C270 370, 300 305, 330 275" fill="none" stroke="#ea580c" stroke-width="3" />
+    <path d="M650 140 C550 140, 510 200, 475 228" fill="none" stroke="#b45309" stroke-width="3" />
+    <path d="M665 250 C555 250, 505 250, 475 250" fill="none" stroke="#c2410c" stroke-width="3" />
+    <path d="M630 360 C530 360, 500 300, 470 272" fill="none" stroke="#ea580c" stroke-width="3" />
+  </g>
+
+  <g filter="url(#ml-soft)">
+    <circle cx="150" cy="130" r="10" fill="url(#ml-node)" />
+    <circle cx="135" cy="250" r="10" fill="url(#ml-node)" />
+    <circle cx="170" cy="370" r="10" fill="url(#ml-node)" />
+    <circle cx="650" cy="140" r="10" fill="url(#ml-node)" />
+    <circle cx="665" cy="250" r="10" fill="url(#ml-node)" />
+    <circle cx="630" cy="360" r="10" fill="url(#ml-node)" />
+  </g>
+
+  <g filter="url(#ml-glow)">
+    <rect x="310" y="165" width="180" height="170" rx="30" fill="url(#ml-chip)" stroke="rgba(253,186,116,0.42)" stroke-width="2" />
+    <rect x="332" y="188" width="136" height="124" rx="20" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)" stroke-width="1.5" />
+    <path d="M348 220 H452 M348 250 H452 M348 280 H452" stroke="rgba(255,255,255,0.24)" stroke-width="2" />
+    <path d="M382 198 V302 M418 198 V302" stroke="rgba(255,255,255,0.18)" stroke-width="2" />
+    <text x="400" y="264" text-anchor="middle" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#fff7ed">AI</text>
+  </g>
+
+  <g opacity="0.92">
+    <text x="92" y="108" font-family="monospace" font-size="34" font-weight="700" fill="#fb923c">&lt;/&gt;</text>
+
+    <g transform="translate(648 78)">
+      <circle cx="26" cy="26" r="25" fill="rgba(127,29,29,0.28)" stroke="#fdba74" stroke-width="2" />
+      <path d="M14 26 C14 17, 21 12, 26 12 C31 12, 38 17, 38 26 C38 33, 33 39, 26 39 C19 39, 14 33, 14 26 Z" fill="none" stroke="#ffedd5" stroke-width="2" />
+      <path d="M26 12 V39 M14 26 H38" stroke="#ffedd5" stroke-width="2" opacity="0.72" />
+    </g>
+
+    <g transform="translate(82 330)">
+      <circle cx="20" cy="20" r="8" fill="#fb923c" />
+      <circle cx="55" cy="5" r="8" fill="#dc2626" />
+      <circle cx="55" cy="35" r="8" fill="#f97316" />
+      <path d="M20 20 L55 5 M20 20 L55 35 M55 5 L55 35" stroke="#fed7aa" stroke-width="2" opacity="0.72" />
+    </g>
+
+    <g transform="translate(662 330)">
+      <rect x="0" y="0" width="48" height="48" rx="11" fill="rgba(127,29,29,0.30)" stroke="#fb923c" stroke-width="2" />
+      <path d="M13 15 H35 M13 24 H35 M13 33 H25" stroke="#ffedd5" stroke-width="2" />
+    </g>
+
+    <g transform="translate(600 295)">
+      <rect x="0" y="24" width="8" height="20" rx="3" fill="#f97316" />
+      <rect x="12" y="14" width="8" height="30" rx="3" fill="#fb923c" />
+      <rect x="24" y="4" width="8" height="40" rx="3" fill="#fed7aa" />
+      <path d="M0 46 H36" stroke="#ffedd5" stroke-width="2" opacity="0.7" />
+    </g>
+  </g>
+
+  <g opacity="0.62">
+    <circle cx="285" cy="95" r="3" fill="#fb923c" />
+    <circle cx="515" cy="95" r="3" fill="#dc2626" />
+    <circle cx="265" cy="405" r="3" fill="#f97316" />
+    <circle cx="535" cy="405" r="3" fill="#fb923c" />
+    <circle cx="400" cy="72" r="3" fill="#fed7aa" />
+    <circle cx="400" cy="428" r="3" fill="#fed7aa" />
+  </g>
+</svg>

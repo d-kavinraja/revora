@@ -47,7 +47,7 @@ export default function MaintenancePage() {
     eta && !Number.isNaN(eta.getTime()) ? eta.toLocaleString() : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col bg-background text-foreground pt-[var(--revora-announcement-height,0px)]">
       <div className="flex flex-1 items-center justify-center px-4 py-16">
         <div
           role="status"

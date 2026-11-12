@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useThemeStore } from '@/store/useThemeStore';
 import { StickyBanner } from '@/components/ui/sticky-banner';
 import { SetupGuide } from '@/components/shared/setup-guide';
-import { AnnouncementBanner } from '@/components/landing/announcement-banner';
+
 import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
 import Waves from '@/components/ui/Waves';
 import { Footer } from '@/components/ui/footer';
@@ -50,9 +50,9 @@ export default function LandingPage() {
   const isLight = theme === 'light';
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden">
+    <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden pt-[var(--revora-announcement-height,0px)]">
       {/* Top Banner */}
-      <StickyBanner className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 font-mono text-xs md:text-sm">
+      <StickyBanner sticky={false} className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 font-mono text-xs md:text-sm">
         <p className="mx-0 max-w-[90%] flex items-center justify-center gap-2 flex-wrap text-center py-1">
           <span>🚀 <strong>Connect Revora in seconds:</strong> Sign in with GitHub, install <code className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-xs">Revora-PR</code> app & select repositories!</span>
           <a
@@ -69,8 +69,7 @@ export default function LandingPage() {
       {/* Maintenance fallback banner (≤5s stale-cache window, C5) */}
       <MaintenanceBanner />
 
-      {/* Phase 7 — landing announcements (graceful degradation: absent if backend down) */}
-      <AnnouncementBanner />
+
 
       {/* Waves Background */}
       <div className="fixed inset-0 pointer-events-none z-0">

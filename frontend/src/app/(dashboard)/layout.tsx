@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isModelLab = pathname.startsWith('/model-lab');
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex w-full relative">
+    <div className="min-h-dvh bg-background text-foreground flex w-full relative pt-[var(--revora-announcement-height,0px)]">
       {!isModelLab && (
         <TargetCursor
           spinDuration={2}

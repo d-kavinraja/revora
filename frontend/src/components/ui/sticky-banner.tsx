@@ -7,10 +7,12 @@ export const StickyBanner = ({
   className,
   children,
   hideOnScroll = false,
+  sticky = true,
 }: {
   className?: string;
   children: React.ReactNode;
   hideOnScroll?: boolean;
+  sticky?: boolean;
 }) => {
   const [open, setOpen] = useState(true);
   const { scrollY } = useScroll();
@@ -27,8 +29,10 @@ export const StickyBanner = ({
 
   return (
     <motion.div
+      style={sticky ? { top: 'var(--revora-announcement-height, 0px)' } : undefined}
       className={cn(
-        "sticky inset-x-0 top-0 z-40 flex min-h-14 w-full items-center justify-center bg-transparent px-4 py-1",
+        "flex min-h-14 w-full items-center justify-center bg-transparent px-4 py-1",
+        sticky && "sticky inset-x-0 z-40",
         className,
       )}
       initial={{

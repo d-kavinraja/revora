@@ -12,7 +12,7 @@ export default function SetupGuidePage() {
   if (status !== 'enabled') {
     return (
       <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-        <FeatureUnavailable status={status} message={message} title="Setup Guide is unavailable" />
+        <FeatureUnavailable status={status} message={message} title="Setup Guide is unavailable" variant="page" />
       </div>
     );
   }
@@ -22,7 +22,7 @@ export default function SetupGuidePage() {
   // the shared DotGrid), exactly like the review/repositories/profile
   // pages. Do not add an opaque background here or it will cover it.
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-[calc(100dvh-var(--revora-announcement-height,0px))]">
       <StackedCards />
     </div>
   );

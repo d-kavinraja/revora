@@ -361,14 +361,13 @@
   display: flex;
   flex-direction: column;
   transform-origin: 82% 50%;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(185, 75, 45, 0.32);
   border-radius: clamp(12px, 1.52vh, 18px);
-  background: linear-gradient(145deg, rgba(24, 22, 20, 0.8), rgba(5, 12, 14, 0.86));
+  background: linear-gradient(145deg, #16080a, #240f12);
   box-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.44),
-    0 0 0 3px rgba(255, 255, 255, 0.035) inset,
-    0 0 0 1px rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(14px) saturate(108%);
+    0 8px 22px rgba(70, 18, 8, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(10px) saturate(105%);
   overflow: hidden;
 }
 

@@ -23,7 +23,7 @@ export default function BotaniQPage() {
   if (status !== 'enabled') {
     return (
       <div className="w-full min-w-0 max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-        <FeatureUnavailable status={status} message={message} title="BotaniQ is unavailable" />
+        <FeatureUnavailable status={status} message={message} title="BotaniQ is unavailable" variant="page" />
       </div>
     );
   }

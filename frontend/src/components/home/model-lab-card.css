@@ -11,18 +11,18 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  padding: 14px;
-  gap: 10px;
+  padding: 16px;
+  gap: 12px;
 }
 
 .ml-media {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #101a1e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, #120506, #2a1012);
+  border: 1px solid rgba(220, 95, 55, 0.24);
 }
 
 .ml-media img {
@@ -31,27 +31,27 @@
 
 .ml-badge {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 10px;
+  left: 10px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #fff;
-  background: linear-gradient(105deg, oklch(0.62 0.2 270), oklch(0.65 0.16 245));
-  border: 1px solid oklch(0.98 0 0 / 45%);
+  background: #2563eb;
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 9999px;
   padding: 3px 9px;
 }
 
 .ml-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
 .ml-copy {
@@ -60,7 +60,7 @@
   line-height: 1.5;
   font-weight: 400;
   letter-spacing: 0.1px;
-  color: rgba(226, 229, 228, 0.88);
+  color: rgba(245, 225, 210, 0.86);
 }
 
 .ml-cta {
@@ -72,10 +72,21 @@
   width: 100%;
   padding: 11px 12px;
   border-radius: 9px;
-  background: #fff;
-  color: #111;
+  background: linear-gradient(135deg, #f6c7a8, #f3a97a);
+  color: #1a0808;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.ml-cta:hover {
+  background: linear-gradient(135deg, #f8d4b8, #f6c094);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.ml-cta:focus-visible {
+  outline: 2px solid #f6c7a8;
+  outline-offset: 3px;
 }

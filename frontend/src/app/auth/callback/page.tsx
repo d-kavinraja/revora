@@ -244,7 +244,7 @@ export default function AuthCallbackPage() {
   const isLight = theme === 'light';
 
   return (
-    <main className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+    <main className="min-h-screen relative flex items-center justify-center p-4 pt-[var(--revora-announcement-height,0px)] overflow-hidden">
       {/* Background gradients and SoftAurora */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <SoftAurora

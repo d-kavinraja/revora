@@ -19,7 +19,7 @@ export default function ModelLabPage() {
   if (status !== 'enabled') {
     return (
       <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-        <FeatureUnavailable status={status} message={message} title="Model Lab is unavailable" />
+        <FeatureUnavailable status={status} message={message} title="Model Lab is unavailable" variant="page" />
       </div>
     );
   }

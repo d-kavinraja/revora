@@ -71,7 +71,7 @@ function WakingUpContent() {
   const progressPct = Math.min((attempt / MAX_ATTEMPTS) * 100, 100);
 
   return (
-    <div className="dark min-h-screen flex flex-col bg-background relative overflow-hidden">
+    <div className="dark min-h-screen flex flex-col bg-background relative overflow-hidden pt-[var(--revora-announcement-height,0px)]">
       <Header hideThemeToggle={true} />
 
       <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
@@ -192,7 +192,7 @@ function WakingUpContent() {
 export default function WakingUpPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background pt-[var(--revora-announcement-height,0px)]">
         <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
       </div>
     }>

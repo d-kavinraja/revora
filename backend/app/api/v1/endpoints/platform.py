@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.platform import FeatureFlag
 from app.models.provider import ProviderRegistry
@@ -59,10 +60,19 @@ async def get_platform_features(db: AsyncSession = Depends(get_db)):
     SQLite `create_all` path matches a fresh seeded deploy.
     """
     flags = await platform_settings_service.get_flags(db)
-    return {
-        key: PublicFeatureState(status=item["status"], message=item.get("message"))
-        for key, item in flags.items()
-    }
+    result: dict[str, PublicFeatureState] = {}
+    for key, item in flags.items():
+        status = item["status"]
+        message = item.get("message")
+        if key in ("usage", "analytics") and not settings.USAGE_ANALYTICS_ENABLED:
+            status = "disabled"
+            message = (
+                "Usage analytics are temporarily disabled while we redesign "
+                "model-level pricing. No data has been lost; this feature will "
+                "be re-enabled in a future release."
+            )
+        result[key] = PublicFeatureState(status=status, message=message)
+    return result
 
 
 @router.get("/status", response_model=PublicPlatformStatus)

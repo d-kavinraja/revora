@@ -77,6 +77,16 @@
 }
 
 :root {
+  --revora-announcement-height: 0px;
+
+  /* Global announcement banner — warm maintenance-alert palette */
+  --announcement-bg: #F8E9E5;
+  --announcement-border: #E8C8BE;
+  --announcement-icon: #A83F32;
+  --announcement-title: #71352D;
+  --announcement-text: #654B45;
+  --announcement-control: #71352D;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
 
@@ -198,6 +208,14 @@
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: oklch(0.62 0.2 265);
+
+  /* Global announcement banner — warm maintenance-alert palette */
+  --announcement-bg: #2A1715;
+  --announcement-border: #57302A;
+  --announcement-icon: #E07863;
+  --announcement-title: #FFF1ED;
+  --announcement-text: #E4C9C2;
+  --announcement-control: #FFF1ED;
 }
 
 /* Admin-scoped themes: independent of the global `.dark` class so the admin

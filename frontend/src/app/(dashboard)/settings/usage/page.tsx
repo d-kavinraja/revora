@@ -1,8 +1,21 @@
 'use client';
 
 import { ChartBarIcon } from 'lucide-react';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 export default function UsagePage() {
+  const { data: features } = usePlatformFeatures();
+  const { status, message } = featureState(features, 'usage');
+
+  if (status !== 'enabled') {
+    return (
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+        <FeatureUnavailable status={status} message={message} title="Usage is unavailable" variant="page" />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
@@ -16,5 +29,3 @@ export default function UsagePage() {
     </div>
   );
 }
-
-

@@ -61,6 +61,7 @@ export default function AdminAnnouncementsPage() {
     mutationFn: (body: AdminAnnouncementCreate) => adminApi.createAnnouncement(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-announcements'] });
       setCreating(false);
     },
   });
@@ -70,6 +71,7 @@ export default function AdminAnnouncementsPage() {
       adminApi.updateAnnouncement(id, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-announcements'] });
       setEditing(null);
     },
   });
@@ -78,6 +80,7 @@ export default function AdminAnnouncementsPage() {
     mutationFn: (id: string) => adminApi.deleteAnnouncement(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-announcements'] });
       setDeleting(null);
     },
   });
@@ -183,7 +186,7 @@ export default function AdminAnnouncementsPage() {
           <EmptyState
             icon={<Megaphone size={22} />}
             title="No announcements"
-            description="Create one to surface a landing-page banner."
+            description="Create one to surface a site-wide banner on all user-facing pages (never in the Admin Portal)."
           />
         }
         ariaLabel="Announcements"

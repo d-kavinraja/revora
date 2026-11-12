@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Construction, Hourglass, Rocket, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -37,6 +38,8 @@ interface FeatureUnavailableProps {
   /** Optional title override. */
   title?: string;
   className?: string;
+  /** `page` renders a full-page state inside the dashboard shell. */
+  variant?: 'card' | 'page';
 }
 
 /**
@@ -48,9 +51,36 @@ export function FeatureUnavailable({
   message,
   title,
   className = '',
+  variant = 'card',
 }: FeatureUnavailableProps) {
   const meta = STATUS_META[status ?? 'disabled'] ?? STATUS_META.disabled;
   const Icon = meta.Icon;
+
+  if (variant === 'page') {
+    return (
+      <div
+        role="status"
+        className={`mx-auto flex min-h-[50vh] w-full max-w-[720px] flex-col items-center justify-center gap-4 px-4 py-16 text-center ${className}`}
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-surface-2 text-muted-foreground">
+          <Icon size={28} aria-hidden="true" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-lg font-semibold text-foreground">{title ?? meta.label}</p>
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
+            {message || meta.description}
+          </p>
+        </div>
+        <Link
+          href="/dashboard"
+          className="text-sm font-medium text-brand hover:text-brand-hover"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div
       role="status"

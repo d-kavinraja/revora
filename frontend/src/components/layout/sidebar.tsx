@@ -37,21 +37,31 @@ const bottomLinks: NavLink[] = [
   { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon, feature: 'analytics' },
 ];
 
-function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isNew?: boolean }) {
+function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew, isDisabled }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isNew?: boolean; isDisabled?: boolean }) {
   const iconRef = useRef<any>(null);
   return (
     <Link
       href={href}
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
-      title={collapsed ? (isNew ? `${label} — New` : label) : undefined}
-      aria-label={isNew ? `${label} — New` : undefined}
+      title={
+        isDisabled
+          ? `${label} — unavailable`
+          : collapsed
+            ? isNew
+              ? `${label} — New`
+              : label
+            : undefined
+      }
+      aria-label={isNew ? `${label} — New` : isDisabled ? `${label} — unavailable` : undefined}
       className={`cursor-target${isNew ? ' relative group/modellab model-lab-card' : ''} flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
-        isActive
-          ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
-          : 'text-foreground/70 hover:text-foreground hover:bg-white/[0.04]'
+        isDisabled && !isActive
+          ? 'text-foreground/45 hover:text-foreground/70 hover:bg-white/[0.03]'
+          : isActive
+            ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
+            : 'text-foreground/70 hover:text-foreground hover:bg-white/[0.04]'
       }`}
     >
       <span className={isActive ? 'text-brand' : 'text-foreground/70'}>
@@ -74,7 +84,7 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew }: { 
   );
 }
 
-function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean }) {
+function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabled }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isDisabled?: boolean }) {
   const iconRef = useRef<any>(null);
   return (
     <Link
@@ -85,9 +95,11 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed }: { href
       className={`cursor-target flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
-        isActive
-          ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
-          : 'text-foreground/70 hover:text-foreground hover:bg-white/[0.04]'
+        isDisabled && !isActive
+          ? 'text-foreground/45 hover:text-foreground/70 hover:bg-white/[0.03]'
+          : isActive
+            ? 'bg-brand/15 text-brand shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]'
+            : 'text-foreground/70 hover:text-foreground hover:bg-white/[0.04]'
       }`}
     >
       <span className={isActive ? 'text-brand' : 'text-foreground/70'}>
@@ -136,21 +148,21 @@ export function Sidebar() {
     router.replace('/login');
   };
 
-  const isActive = (href: string) => pathname === href;
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + '/');
 
   const { data: features } = usePlatformFeatures();
-  const visibleNavLinks = navLinks.filter(
-    (link) => !link.feature || isFeatureEnabled(features, link.feature)
-  );
-  const visibleBottomLinks = bottomLinks.filter(
-    (link) => !link.feature || isFeatureEnabled(features, link.feature)
-  );
+  const isDisabled = (feature?: string) =>
+    !!feature && !isFeatureEnabled(features, feature);
+  // All links stay visible; feature availability only affects styling/state.
+  const visibleNavLinks = navLinks;
+  const visibleBottomLinks = bottomLinks;
 
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[240px]';
 
   return (
     <>
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm">
+      <div className="md:hidden fixed left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
         <div className="flex items-center gap-3">
           <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} style={{ width: 28, height: 28 }} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
@@ -172,9 +184,10 @@ export function Sidebar() {
       )}
 
       <aside
-        className={`fixed md:sticky top-0 h-[100dvh] ${sidebarWidth} border-r border-sidebar-border bg-sidebar flex flex-col shrink-0 transition-all duration-200 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${
+        className={`fixed md:sticky ${sidebarWidth} border-r border-sidebar-border bg-sidebar flex flex-col shrink-0 transition-all duration-200 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)] ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
+        style={{ top: 'var(--revora-announcement-height, 0px)', height: 'calc(100dvh - var(--revora-announcement-height, 0px))' }}
       >
         <div className={`p-4 border-b border-sidebar-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
@@ -230,6 +243,7 @@ export function Sidebar() {
               icon={link.icon}
               isActive={isActive(link.href)}
               collapsed={collapsed}
+              isDisabled={isDisabled(link.feature)}
             />
           ))}
 
@@ -247,6 +261,7 @@ export function Sidebar() {
               icon={link.icon}
               isActive={isActive(link.href)}
               collapsed={collapsed}
+              isDisabled={isDisabled(link.feature)}
             />
           ))}
         </nav>

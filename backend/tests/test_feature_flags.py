@@ -355,8 +355,12 @@ def test_public_features_default_shape(anon_client):
     body = response.json()
     assert set(body.keys()) == set(FEATURE_FLAG_KEYS)
     for key in FEATURE_FLAG_KEYS:
-        assert body[key]["status"] == "enabled"
-        assert body[key]["message"] is None
+        if key in ("usage", "analytics"):
+            assert body[key]["status"] == "disabled"
+            assert body[key]["message"] is not None
+        else:
+            assert body[key]["status"] == "enabled"
+            assert body[key]["message"] is None
 
 
 async def test_public_features_reflect_admin_changes(admin_client, anon_client):

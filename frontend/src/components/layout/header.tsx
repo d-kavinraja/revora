@@ -20,7 +20,7 @@ interface HeaderProps {
 
 export function Header({ className, hideThemeToggle = false }: HeaderProps) {
   return (
-    <header className={cn("flex items-center justify-between p-6 z-50 border-b border-border bg-background/50 backdrop-blur-md sticky top-0 w-full", className)}>
+    <header className={cn("flex items-center justify-between p-6 z-50 border-b border-border bg-background/50 backdrop-blur-md sticky w-full", className)} style={{ top: 'var(--revora-announcement-height, 0px)' }}>
       <div className="flex items-center gap-2.5">
         <Image
           src="/revora-logo.png"

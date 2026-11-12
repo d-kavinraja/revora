@@ -14,31 +14,31 @@ export function ModelLabCard() {
       borderRadius="clamp(12px, 1.52vh, 18px)"
       mode="hover"
       variant="streak"
-      glareColor="#ffffff"
-      glareOpacity={0.45}
-      glareSize={30}
-      softness={0.6}
+      glareColor="#fed7aa"
+      glareOpacity={0.16}
+      glareSize={22}
+      softness={0.45}
       glareAngle={-45}
       blendMode="screen"
-      rimGlint
-      transitionDuration={650}
+      rimGlint={false}
+      transitionDuration={380}
       className="ml-glare"
     >
       <div className="ml-card-inner">
         <div className="ml-media">
           <Image
-            src="/assets/model-lab-demo.gif"
-            alt="MouthMap model demo"
+            src="/assets/model-lab-ai.svg"
+            alt="Model Lab AI illustration"
             fill
             unoptimized
             priority={false}
             sizes="(max-width: 619px) 44vw, 215px"
           />
-          <span className="ml-badge">New</span>
+          <span className="ml-badge">NEW</span>
         </div>
         <p className="ml-title">Model Lab is live</p>
-        <p className="ml-copy">Try our own trained MouthMap model — free.</p>
-        <Link href="/register" className="ml-cta">
+        <p className="ml-copy">Build, test, and manage custom AI &amp; deep learning models — free.</p>
+        <Link href="/model-lab" className="ml-cta">
           Try it free
           <ArrowRight size={13} strokeWidth={2.4} aria-hidden="true" />
         </Link>

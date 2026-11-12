@@ -38,6 +38,7 @@ FLAG_STATUSES = (
 FEATURE_FLAG_KEYS = (
     "model_lab",
     "mouthmap",
+    "botaniq",
     "api_keys_add",
     "routing_mapping",
     "review_initiation",
