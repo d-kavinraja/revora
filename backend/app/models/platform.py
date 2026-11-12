@@ -113,7 +113,7 @@ class Announcement(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(
-        String(20), default="info", server_default="info", nullable=False
+        String(50), default="general", server_default="general", nullable=False
     )
     state: Mapped[str] = mapped_column(
         String(20), default="draft", server_default="draft", nullable=False
