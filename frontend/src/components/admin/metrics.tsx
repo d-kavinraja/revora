@@ -116,22 +116,27 @@ export function MeterRow({
   value,
   max,
   tone = 'brand',
+  leading,
 }: {
   label: string;
   secondary?: string | null;
   value: number;
   max: number;
   tone?: MeterTone;
+  leading?: ReactNode;
 }) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="min-w-0 truncate text-foreground/85" title={label}>
-          {label}
-          {secondary && (
-            <span className="text-muted-foreground"> · {secondary}</span>
-          )}
+        <span className="flex min-w-0 items-center gap-2 text-foreground/85" title={label}>
+          {leading}
+          <span className="min-w-0 truncate">
+            {label}
+            {secondary && (
+              <span className="text-muted-foreground"> · {secondary}</span>
+            )}
+          </span>
         </span>
         <span className="admin-figure shrink-0 font-semibold text-foreground">
           {value.toLocaleString()}
@@ -157,6 +162,7 @@ export interface RankedItem {
   secondary?: string | null;
   value: number;
   tone?: MeterTone;
+  leading?: ReactNode;
 }
 
 export function RankedList({
@@ -177,6 +183,7 @@ export function RankedList({
             value={item.value}
             max={max}
             tone={item.tone ?? tone}
+            leading={item.leading}
           />
         </li>
       ))}

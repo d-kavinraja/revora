@@ -23,6 +23,7 @@ import { Pill, toneForStatus } from '@/components/shared/pill';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { SkeletonList, SkeletonText } from '@/components/shared/skeleton';
+import { ProviderBadge } from '@/components/ui/provider-brand';
 import { useToast } from '@/components/ui/toaster';
 import {
   formatDateTime,
@@ -49,6 +50,14 @@ const rowButtonCls =
 
 const EMPTY_PANEL =
   'rounded-xl border border-dashed border-border bg-surface-1/50 p-8 text-center text-sm text-muted-foreground';
+
+function humanize(value: string): string {
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
 
 function errorDetail(error: unknown): string | undefined {
   if (axios.isAxiosError(error)) {
@@ -243,17 +252,26 @@ export default function AdminUserDetailPage({
       key: 'mapping',
       header: 'Configured mapping',
       render: (repo) => (
-        <div className="flex items-center gap-2">
-          {repo.mapping_provider || repo.mapping_model ? (
-            <span className="text-foreground/80">
-              {repo.mapping_provider ?? 'Unset'}
-              {repo.mapping_model ? ` · ${repo.mapping_model}` : ''}
-            </span>
+        <div className="flex min-w-0 items-center gap-2">
+          {repo.mapping_provider ? (
+            <div className="min-w-0">
+              <ProviderBadge
+                slug={repo.mapping_provider}
+                size="sm"
+                muted
+                className="max-w-44"
+              />
+              {repo.mapping_model && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {repo.mapping_model}
+                </p>
+              )}
+            </div>
           ) : (
             <span className="text-muted-foreground">Not configured</span>
           )}
           <Pill tone={toneForStatus(repo.mapping_health)} dot>
-            {repo.mapping_health}
+            {humanize(repo.mapping_health)}
           </Pill>
         </div>
       ),
@@ -284,8 +302,13 @@ export default function AdminUserDetailPage({
       header: 'Label',
       render: (cred) => (
         <div className="min-w-0">
-          <p className="font-medium text-foreground">{cred.label}</p>
-          <p className="text-xs text-muted-foreground">{cred.provider}</p>
+          <p className="truncate font-medium text-foreground">{cred.label}</p>
+          <ProviderBadge
+            slug={cred.provider}
+            size="sm"
+            muted
+            className="mt-1 max-w-40"
+          />
         </div>
       ),
     },
@@ -314,7 +337,7 @@ export default function AdminUserDetailPage({
         <div>
           {cred.last_health_status ? (
             <Pill tone={toneForStatus(cred.last_health_status)}>
-              {cred.last_health_status}
+              {humanize(cred.last_health_status)}
             </Pill>
           ) : (
             <span className="text-muted-foreground">—</span>
@@ -385,15 +408,25 @@ export default function AdminUserDetailPage({
       key: 'execution',
       header: 'Latest execution',
       render: (review) => (
-        <div className="text-xs">
-          <p className="text-foreground/80">
-            {[review.latest_provider, review.latest_model]
-              .filter(Boolean)
-              .join(' · ') || '—'}
-          </p>
-          <p className="text-muted-foreground">
+        <div className="min-w-0 text-xs">
+          {review.latest_provider ? (
+            <ProviderBadge
+              slug={review.latest_provider}
+              size="sm"
+              muted
+              className="max-w-40"
+            />
+          ) : (
+            <p className="text-muted-foreground">Not recorded</p>
+          )}
+          {review.latest_model && (
+            <p className="mt-0.5 truncate text-foreground/80">
+              {review.latest_model}
+            </p>
+          )}
+          <p className="mt-0.5 text-muted-foreground">
             {[
-              review.latest_status,
+              review.latest_status ? humanize(review.latest_status) : null,
               review.latest_duration_ms !== null
                 ? `${review.latest_duration_ms.toLocaleString()} ms`
                 : null,
@@ -449,15 +482,22 @@ export default function AdminUserDetailPage({
               <h1 className="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">
                 {profile.name || '—'}
               </h1>
-              <Pill tone={profile.status === 'disabled' ? 'muted' : toneForStatus(profile.status)} dot>
-                {profile.status}
+              <Pill
+                tone={
+                  profile.status === 'disabled'
+                    ? 'muted'
+                    : toneForStatus(profile.status)
+                }
+                dot
+              >
+                {humanize(profile.status)}
               </Pill>
               {profile.is_verified && (
                 <Pill tone="success" dot>
                   Verified
                 </Pill>
               )}
-              <Pill tone="brand">{profile.role}</Pill>
+              <Pill tone="brand">{humanize(profile.role)}</Pill>
             </div>
             <p className="truncate text-sm text-muted-foreground">{profile.email}</p>
             {profile.github_username && (
@@ -533,7 +573,20 @@ export default function AdminUserDetailPage({
           <section className="max-w-2xl rounded-xl border border-border bg-surface-1 p-5">
             <dl>
               <ProfileRow label="User ID" value={<span className="font-mono text-xs">{profile.id}</span>} />
-              <ProfileRow label="Default provider" value={profile.default_provider ?? '—'} />
+              <ProfileRow
+                label="Default provider"
+                value={
+                  profile.default_provider ? (
+                    <ProviderBadge
+                      slug={profile.default_provider}
+                      size="sm"
+                      muted
+                    />
+                  ) : (
+                    '—'
+                  )
+                }
+              />
               <ProfileRow label="Created" value={formatDateTimeWithRelative(profile.created_at)} />
               <ProfileRow
                 label="Last login"
@@ -570,14 +623,26 @@ export default function AdminUserDetailPage({
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-xs text-foreground/80">
-                    {repo.mapping_provider || repo.mapping_model
-                      ? `${repo.mapping_provider ?? 'Unset'}${repo.mapping_model ? ` · ${repo.mapping_model}` : ''}`
-                      : 'Not configured'}
-                  </span>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {repo.mapping_provider ? (
+                    <ProviderBadge
+                      slug={repo.mapping_provider}
+                      size="sm"
+                      muted
+                      className="max-w-40"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Not configured
+                    </span>
+                  )}
+                  {repo.mapping_model && (
+                    <span className="text-xs text-muted-foreground">
+                      {repo.mapping_model}
+                    </span>
+                  )}
                   <Pill tone={toneForStatus(repo.mapping_health)} dot>
-                    {repo.mapping_health}
+                    {humanize(repo.mapping_health)}
                   </Pill>
                 </div>
               </div>
@@ -596,6 +661,58 @@ export default function AdminUserDetailPage({
               keyOf={(cred) => cred.id}
               empty={<p className={EMPTY_PANEL}>No credentials stored.</p>}
               ariaLabel="User credentials"
+              renderMobileCard={(cred) => (
+                <div className="space-y-2 rounded-xl border border-border bg-surface-1 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {cred.label}
+                      </p>
+                      <ProviderBadge
+                        slug={cred.provider}
+                        size="sm"
+                        muted
+                        className="mt-1 max-w-40"
+                      />
+                    </div>
+                    <Pill tone={cred.is_enabled ? 'success' : 'muted'} dot>
+                      {cred.is_enabled ? 'Enabled' : 'Disabled'}
+                    </Pill>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Pill tone={cred.is_valid ? 'success' : 'error'} dot>
+                      {cred.is_valid ? 'Valid' : 'Invalid'}
+                    </Pill>
+                    {cred.last_health_status && (
+                      <Pill tone={toneForStatus(cred.last_health_status)}>
+                        {humanize(cred.last_health_status)}
+                      </Pill>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Last used{' '}
+                    {cred.last_used_at
+                      ? formatDateTime(cred.last_used_at)
+                      : 'never'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setKeyDialog({
+                        credential: cred,
+                        action: cred.is_enabled ? 'disable' : 'enable',
+                      })
+                    }
+                    className={`${rowButtonCls} ${
+                      cred.is_enabled
+                        ? 'border-error/40 text-error hover:bg-error/10'
+                        : 'border-success/40 text-success hover:bg-success/10'
+                    }`}
+                  >
+                    {cred.is_enabled ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
+              )}
             />
           </div>
         )}
@@ -623,6 +740,60 @@ export default function AdminUserDetailPage({
               keyOf={(review) => review.id}
               empty={<p className={EMPTY_PANEL}>No reviews created.</p>}
               ariaLabel="User reviews"
+              renderMobileCard={(review) => (
+                <div className="space-y-2 rounded-xl border border-border bg-surface-1 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {review.repository_full_name} #{review.pr_number}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {review.pr_title}
+                      </p>
+                    </div>
+                    <StatusBadge status={review.status} />
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {review.latest_provider ? (
+                      <ProviderBadge
+                        slug={review.latest_provider}
+                        size="sm"
+                        muted
+                        className="max-w-40"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        No execution recorded
+                      </span>
+                    )}
+                    {review.latest_model && (
+                      <span className="min-w-0 truncate text-xs text-muted-foreground">
+                        {review.latest_model}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {[
+                      review.latest_status
+                        ? humanize(review.latest_status)
+                        : null,
+                      review.latest_duration_ms !== null
+                        ? `${review.latest_duration_ms.toLocaleString()} ms`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Not recorded'}
+                  </p>
+                  {review.latest_error && (
+                    <p className="break-words text-xs text-error">
+                      {review.latest_error}
+                    </p>
+                  )}
+                  <p className="admin-figure text-xs text-muted-foreground">
+                    {formatDateTime(review.created_at)}
+                  </p>
+                </div>
+              )}
             />
             <Pagination
               total={data.reviews.total}
@@ -645,9 +816,17 @@ export default function AdminUserDetailPage({
                   className="rounded-xl border border-border bg-surface-1 p-4 text-sm"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="font-medium text-foreground">
-                      {error.provider ?? 'Unknown provider'}
-                    </span>
+                    {error.provider ? (
+                      <ProviderBadge
+                        slug={error.provider}
+                        size="sm"
+                        className="max-w-48"
+                      />
+                    ) : (
+                      <span className="font-medium text-muted-foreground">
+                        Unknown provider
+                      </span>
+                    )}
                     <span className="admin-figure text-xs text-muted-foreground">
                       {error.occurred_at
                         ? formatDateTimeWithRelative(error.occurred_at)
@@ -676,9 +855,13 @@ export default function AdminUserDetailPage({
                   <div className="flex min-w-0 items-center gap-3">
                     <GitPullRequest size={15} className="shrink-0 text-muted-foreground" />
                     <span className="font-medium text-foreground">{event.action}</span>
-                    <Pill tone="muted">{event.actor_type}</Pill>
+                    <Pill tone="muted">
+                      {humanize(event.actor_type)}
+                    </Pill>
                     {event.outcome && (
-                      <Pill tone={toneForStatus(event.outcome)}>{event.outcome}</Pill>
+                      <Pill tone={toneForStatus(event.outcome)}>
+                        {humanize(event.outcome)}
+                      </Pill>
                     )}
                   </div>
                   <span className="admin-figure text-xs text-muted-foreground">

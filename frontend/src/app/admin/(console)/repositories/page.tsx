@@ -12,6 +12,7 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Pill, toneForStatus } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
+import { ProviderBadge } from '@/components/ui/provider-brand';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
 import { FilterBar, SelectFilter } from '@/components/admin/controls';
@@ -21,21 +22,36 @@ const PAGE_SIZE = 25;
 
 type MappingFilter = '' | 'ok' | 'stale' | 'missing';
 
+function humanize(value: string): string {
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function MappingCell({ repo }: { repo: AdminRepositoryItem }) {
   return (
     <div className="flex min-w-0 max-w-[280px] items-center gap-2">
-      <span className="max-w-[220px] truncate text-foreground/80">
-        {repo.mapping_provider || repo.mapping_model ? (
-          <>
-            {repo.mapping_provider ?? 'Unset'}
-            {repo.mapping_model ? ` · ${repo.mapping_model}` : ''}
-          </>
-        ) : (
-          <span className="text-muted-foreground">Not configured</span>
-        )}
-      </span>
+      {repo.mapping_provider ? (
+        <div className="min-w-0">
+          <ProviderBadge
+            slug={repo.mapping_provider}
+            size="sm"
+            muted
+            className="max-w-40"
+          />
+          {repo.mapping_model && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {repo.mapping_model}
+            </p>
+          )}
+        </div>
+      ) : (
+        <span className="text-muted-foreground">Not configured</span>
+      )}
       <Pill tone={toneForStatus(repo.mapping_health)} dot>
-        {repo.mapping_health}
+        {humanize(repo.mapping_health)}
       </Pill>
     </div>
   );
@@ -244,18 +260,32 @@ export default function AdminRepositoriesPage() {
             <div className="flex items-start justify-between gap-3">
               <RepoIdentity repo={repo} />
               <Pill tone={toneForStatus(repo.mapping_health)} dot>
-                {repo.mapping_health}
+                {humanize(repo.mapping_health)}
               </Pill>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               {repo.owner_email}
               {repo.owner_github_username ? ` (@${repo.owner_github_username})` : ''}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {repo.mapping_provider
-                ? `${repo.mapping_provider}${repo.mapping_model ? ` · ${repo.mapping_model}` : ''}`
-                : 'No mapping configured'}
-            </p>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+              {repo.mapping_provider ? (
+                <ProviderBadge
+                  slug={repo.mapping_provider}
+                  size="sm"
+                  muted
+                  className="max-w-40"
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  No mapping configured
+                </span>
+              )}
+              {repo.mapping_model && (
+                <span className="text-xs text-muted-foreground">
+                  {repo.mapping_model}
+                </span>
+              )}
+            </div>
             <p className="admin-figure mt-1 text-xs text-muted-foreground">
               {repo.review_count} reviews ·{' '}
               <span className={repo.recent_failures_7d > 0 ? 'text-error' : ''}>

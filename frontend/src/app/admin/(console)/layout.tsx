@@ -12,6 +12,7 @@ import {
   FolderGit2,
   GitPullRequest,
   LayoutDashboard,
+  LogOut,
   Megaphone,
   Menu,
   Server,
@@ -266,7 +267,7 @@ export default function AdminConsoleLayout({
   return (
     <div className="admin-motion min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-[var(--admin-topbar)] backdrop-blur-xl">
-        <div className="flex h-16 items-center gap-3 px-4 md:px-6 lg:px-8">
+        <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-6 lg:px-8">
           <button
             ref={menuButtonRef}
             type="button"
@@ -316,7 +317,7 @@ export default function AdminConsoleLayout({
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <span
                 className="hidden max-w-[180px] truncate text-xs text-muted-foreground sm:block"
                 title={session.username}
@@ -332,9 +333,11 @@ export default function AdminConsoleLayout({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="h-9 cursor-pointer rounded-lg border border-border px-3 text-sm font-medium text-foreground/80 transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Sign out"
+                className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-border text-foreground/80 transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto sm:px-3"
               >
-                Sign out
+                <LogOut size={15} className="sm:hidden" aria-hidden="true" />
+                <span className="hidden sm:inline">Sign out</span>
               </button>
             </div>
           </div>
@@ -348,7 +351,15 @@ export default function AdminConsoleLayout({
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
+          <div
+            className={`mx-auto w-full ${
+              pathname === '/admin' ? 'max-w-[1680px]' : 'max-w-[1440px]'
+            }`}
+          >
+            {children}
+          </div>
+        </main>
       </div>
 
       {drawerOpen && (

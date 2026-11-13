@@ -10,15 +10,20 @@ import {
   type AdminMaintenanceUpdate,
 } from '@/lib/api';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { CopyButton } from '@/components/shared/copy-button';
 import { Pill } from '@/components/shared/pill';
 import { useToast } from '@/components/ui/toaster';
-import { formatDateTime } from '@/components/shared/time-ago';
+import {
+  formatDateTime,
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
 import {
   AdminButton,
+  AdminSwitch,
   ADMIN_INPUT_CLASS,
   ADMIN_TEXTAREA_CLASS,
-  CheckboxRow,
   Field,
 } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
@@ -31,22 +36,12 @@ interface MaintenanceForm {
   reason: string;
 }
 
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function fromForm(data: AdminMaintenanceFull): MaintenanceForm {
   return {
     enabled: data.enabled,
     title: data.title ?? '',
     message: data.message ?? '',
-    eta: toDatetimeLocal(data.expected_return_at),
+    eta: toDatetimeLocalValue(data.expected_return_at),
     reason: data.reason ?? '',
   };
 }
@@ -63,10 +58,8 @@ function buildPayload(
   if (form.message.trim() !== (data.message ?? '')) {
     payload.message = form.message.trim() || null;
   }
-  if (form.eta !== toDatetimeLocal(data.expected_return_at)) {
-    payload.expected_return_at = form.eta
-      ? new Date(form.eta).toISOString()
-      : null;
+  if (form.eta !== toDatetimeLocalValue(data.expected_return_at)) {
+    payload.expected_return_at = fromDatetimeLocalValue(form.eta);
   }
   if (form.reason.trim() !== (data.reason ?? '')) {
     payload.reason = form.reason.trim() || null;
@@ -104,6 +97,16 @@ export default function AdminMaintenancePage() {
   });
 
   const current = form ?? (data ? fromForm(data) : null);
+
+  const setFormPatch = (patch: Partial<MaintenanceForm>) => {
+    if (!data) return;
+    setForm((prev) => ({ ...(prev ?? fromForm(data)), ...patch }));
+  };
+
+  const setEtaInMinutes = (minutes: number) => {
+    const next = new Date(Date.now() + minutes * 60_000);
+    setFormPatch({ eta: toDatetimeLocalValue(next.toISOString()) });
+  };
 
   const updateMutation = useMutation({
     mutationFn: (payload: AdminMaintenanceUpdate) =>
@@ -180,16 +183,11 @@ export default function AdminMaintenancePage() {
             </div>
 
             <div className="mt-5 space-y-3">
-              <CheckboxRow
+              <AdminSwitch
                 checked={current.enabled}
-                onChange={(next) => {
-                  setForm((prev) => ({
-                    ...(prev ?? fromForm(data)),
-                    enabled: next,
-                  }));
-                }}
-                title="Maintenance mode enabled"
-                description="Blocks all user traffic (reads included). Healthchecks, webhooks, the public status page and the admin console stay available."
+                onChange={(next) => setFormPatch({ enabled: next })}
+                title="Maintenance mode"
+                description="Blocks all user traffic, including reads. Healthchecks, webhooks, the public status page and this console stay available."
               />
 
               <Field label="Public title (optional)" htmlFor="maintenance-title">
@@ -198,13 +196,7 @@ export default function AdminMaintenancePage() {
                   type="text"
                   value={current.title}
                   maxLength={200}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setForm((prev) => ({
-                      ...(prev ?? fromForm(data)),
-                      title: value,
-                    }));
-                  }}
+                  onChange={(event) => setFormPatch({ title: event.target.value })}
                   placeholder="Under maintenance"
                   className={ADMIN_INPUT_CLASS}
                 />
@@ -219,32 +211,51 @@ export default function AdminMaintenancePage() {
                   value={current.message}
                   maxLength={1000}
                   rows={3}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setForm((prev) => ({
-                      ...(prev ?? fromForm(data)),
-                      message: value,
-                    }));
-                  }}
+                  onChange={(event) => setFormPatch({ message: event.target.value })}
                   placeholder="Revora is receiving an upgrade. We will be back shortly."
                   className={ADMIN_TEXTAREA_CLASS}
                 />
               </div>
 
-              <Field label="Expected return (optional)" htmlFor="maintenance-eta">
-                <input
-                  id="maintenance-eta"
-                  type="datetime-local"
-                  value={current.eta}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setForm((prev) => ({
-                      ...(prev ?? fromForm(data)),
-                      eta: value,
-                    }));
-                  }}
-                  className={ADMIN_INPUT_CLASS}
-                />
+              <Field
+                label="Expected return (optional)"
+                htmlFor="maintenance-eta"
+                hint="Shown in your local timezone."
+              >
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      [30, '30 min'],
+                      [60, '1 hour'],
+                      [120, '2 hours'],
+                      [240, '4 hours'],
+                    ].map(([minutes, label]) => (
+                      <button
+                        key={String(minutes)}
+                        type="button"
+                        onClick={() => setEtaInMinutes(Number(minutes))}
+                        className="h-9 cursor-pointer rounded-md border border-border bg-surface-2 px-2.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                      >
+                        +{label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormPatch({ eta: '' })}
+                      disabled={!current.eta}
+                      className="h-9 cursor-pointer rounded-md border border-transparent px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <input
+                    id="maintenance-eta"
+                    type="datetime-local"
+                    value={current.eta}
+                    onChange={(event) => setFormPatch({ eta: event.target.value })}
+                    className={ADMIN_INPUT_CLASS}
+                  />
+                </div>
               </Field>
 
               <Field
@@ -256,13 +267,7 @@ export default function AdminMaintenancePage() {
                   type="text"
                   value={current.reason}
                   maxLength={500}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setForm((prev) => ({
-                      ...(prev ?? fromForm(data)),
-                      reason: value,
-                    }));
-                  }}
+                  onChange={(event) => setFormPatch({ reason: event.target.value })}
                   placeholder="e.g. DB migration, incident #42"
                   className={ADMIN_INPUT_CLASS}
                 />
@@ -287,40 +292,52 @@ export default function AdminMaintenancePage() {
               banner (internal reason never leaves this console).
             </p>
 
-            <div
-              role="status"
-              className="mt-4 rounded-xl border border-border bg-surface-2 p-5 text-center"
-            >
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-warning/15 text-warning">
-                <Wrench size={22} aria-hidden="true" />
+            <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface-2">
+              <div className="flex items-center gap-2 border-b border-border bg-surface-3/70 px-3 py-2">
+                <span className="flex gap-1.5" aria-hidden="true">
+                  <span className="h-2 w-2 rounded-full bg-error/70" />
+                  <span className="h-2 w-2 rounded-full bg-warning/70" />
+                  <span className="h-2 w-2 rounded-full bg-success/70" />
+                </span>
+                <span className="min-w-0 flex-1 truncate rounded-md border border-border bg-surface-1 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  revora.app/maintenance
+                </span>
               </div>
-              <p className="mt-3 text-lg font-semibold text-foreground">
-                {current.title.trim() || 'Under maintenance'}
-              </p>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                {current.message.trim() ||
-                  'Revora is receiving an upgrade. We will be back shortly — no action is needed on your side.'}
-              </p>
-              {current.eta && (
-                <p className="mt-3 font-mono text-[11px] opacity-80">
-                  Expected back:{' '}
-                  {(() => {
-                    const eta = new Date(current.eta);
-                    return Number.isNaN(eta.getTime())
-                      ? current.eta
-                      : eta.toLocaleString();
-                  })()}
+              <div role="status" className="p-6 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-warning/15 text-warning">
+                  <Wrench size={22} aria-hidden="true" />
+                </div>
+                <p className="mt-3 text-lg font-semibold text-foreground">
+                  {current.title.trim() || 'Under maintenance'}
                 </p>
-              )}
+                <p className="mx-auto mt-1.5 max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
+                  {current.message.trim() ||
+                    'Revora is receiving an upgrade. We will be back shortly. No action is needed on your side.'}
+                </p>
+                {current.eta && (
+                  <p className="admin-figure mt-3 text-xs text-muted-foreground">
+                    Expected back: {formatDateTime(current.eta)}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              Recovery paths while enabled: this console, or headless{' '}
-              <code className="font-mono">
-                python -m scripts.admin_cli maintenance off
-              </code>{' '}
-              on the server.
-            </p>
+            <div className="mt-4 rounded-lg border border-border bg-surface-2/50 p-3">
+              <p className="text-xs font-medium text-foreground">
+                Headless recovery
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <code className="min-w-0 flex-1 break-all rounded-md border border-border bg-surface-1 px-3 py-2 font-mono text-[11px] text-foreground/80">
+                  python -m scripts.admin_cli maintenance off
+                </code>
+                <CopyButton
+                  value="python -m scripts.admin_cli maintenance off"
+                  label="Copy command"
+                  copiedLabel="Copied"
+                  className="h-9 shrink-0"
+                />
+              </div>
+            </div>
           </section>
         </div>
       )}

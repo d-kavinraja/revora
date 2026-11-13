@@ -13,7 +13,7 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Pill } from '@/components/shared/pill';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { ProviderIcon } from '@/components/ui/provider-icon';
+import { ProviderBadge } from '@/components/ui/provider-brand';
 import { modelSelectionView } from '@/lib/review-model-selection';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
@@ -44,6 +44,14 @@ const PERIOD_OPTIONS = [
 
 function isFallback(review: AdminReviewItem): boolean {
   return review.selection_source === 'routing_fallback';
+}
+
+function humanize(value: string): string {
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export default function AdminReviewsPage() {
@@ -120,14 +128,7 @@ export default function AdminReviewsPage() {
       key: 'configured',
       header: 'Repository mapping',
       render: (review) => (
-        <span
-          className="block max-w-[260px] truncate text-xs text-foreground/80"
-          title={
-            review.repository_provider || review.repository_model
-              ? `${review.repository_provider ?? 'Unset'}${review.repository_model ? ` · ${review.repository_model}` : ''}`
-              : 'Not mapped'
-          }
-        >
+        <div className="min-w-0 max-w-[240px] text-xs">
           <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
             {review.repository_mapping_status === 'mapped'
               ? 'Mapped'
@@ -135,19 +136,28 @@ export default function AdminReviewsPage() {
                 ? 'Not mapped'
                 : 'Unknown'}
           </span>
-          {review.repository_provider || review.repository_model ? (
-            <>
-              {review.repository_provider ?? 'Unset'}
-              {review.repository_model ? ` · ${review.repository_model}` : ''}
-            </>
+          {review.repository_provider ? (
+            <div className="mt-0.5 min-w-0">
+              <ProviderBadge
+                slug={review.repository_provider}
+                size="sm"
+                muted
+                className="max-w-40"
+              />
+              {review.repository_model && (
+                <p className="truncate text-muted-foreground">
+                  {review.repository_model}
+                </p>
+              )}
+            </div>
           ) : (
-            <span className="text-muted-foreground">
+            <span className="mt-0.5 block text-muted-foreground">
               {review.repository_mapping_status === 'not_mapped'
                 ? 'Not mapped'
                 : 'Not recorded'}
             </span>
           )}
-        </span>
+        </div>
       ),
     },
     {
@@ -158,21 +168,29 @@ export default function AdminReviewsPage() {
         return (
           <div className="min-w-0 max-w-[240px] text-xs">
             <div className="flex min-w-0 items-center gap-1.5">
-              <ProviderIcon slug={view.providerSlug ?? undefined} size={14} className="shrink-0" />
-              <span
-                className="max-w-[200px] truncate text-foreground/80"
-                title={view.hasSelection ? `${view.providerLabel} · ${view.model}` : 'No model resolved'}
-              >
-                {view.hasSelection
-                  ? `${view.providerLabel} · ${view.model}`
-                  : 'No model resolved'}
-              </span>
+              {view.hasSelection ? (
+                <ProviderBadge
+                  slug={view.providerSlug}
+                  label={view.providerLabel}
+                  size="sm"
+                  className="max-w-40"
+                />
+              ) : (
+                <span className="truncate text-muted-foreground">
+                  No model resolved
+                </span>
+              )}
               {isFallback(review) && (
                 <Pill tone="warning" dot>
                   routing
                 </Pill>
               )}
             </div>
+            {view.model && (
+              <p className="mt-0.5 truncate text-muted-foreground">
+                {view.model}
+              </p>
+            )}
             <p className="text-muted-foreground">{view.sourceLabel}</p>
           </div>
         );
@@ -185,20 +203,29 @@ export default function AdminReviewsPage() {
         const view = modelSelectionView(review);
         return (
           <div className="min-w-0 max-w-[240px] text-xs">
-            <div className="flex min-w-0 items-center gap-2">
-              {view.executed && (
-                <ProviderIcon slug={view.actualProvider ?? undefined} size={14} className="shrink-0" />
-              )}
-              <span
-                className="max-w-[200px] truncate text-foreground/80"
-                title={view.actualLabel}
-              >
-                {view.actualLabel}
-              </span>
-            </div>
-            <p className="text-muted-foreground">
+            {view.executed && view.actualProvider ? (
+              <div className="min-w-0">
+                <ProviderBadge
+                  slug={view.actualProvider}
+                  label={view.actualProvider}
+                  size="sm"
+                  muted
+                  className="max-w-40"
+                />
+                {view.actualModel && (
+                  <p className="mt-0.5 truncate text-muted-foreground">
+                    {view.actualModel}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <span className="text-muted-foreground">{view.actualLabel}</span>
+            )}
+            <p className="mt-0.5 text-muted-foreground">
               {[
-                review.execution_status,
+                review.execution_status
+                  ? humanize(review.execution_status)
+                  : null,
                 review.duration_ms !== null
                   ? `${review.duration_ms.toLocaleString()} ms`
                   : null,
@@ -297,7 +324,7 @@ export default function AdminReviewsPage() {
           <option value="">All statuses</option>
           {STATUS_OPTIONS.filter(Boolean).map((option) => (
             <option key={option} value={option}>
-              {option.charAt(0).toUpperCase() + option.slice(1).replace('_', ' ')}
+              {humanize(option)}
             </option>
           ))}
         </SelectFilter>
@@ -361,29 +388,57 @@ export default function AdminReviewsPage() {
               </div>
               <StatusBadge status={review.status} />
             </div>
-            <div className="mt-3 space-y-1 text-xs">
-              <p className="text-muted-foreground">
-                Configured:{' '}
-                <span className="text-foreground/80">
-                  {review.configured_provider
-                    ? `${review.configured_provider}${review.configured_model ? ` · ${review.configured_model}` : ''}`
-                    : 'Not configured'}
-                </span>
-              </p>
-              <p className="text-muted-foreground">
-                Executed:{' '}
-                <span className="text-foreground/80">
-                  {review.provider
-                    ? `${review.provider}${review.model ? ` · ${review.model}` : ''}`
-                    : 'Not recorded'}
-                </span>{' '}
-                {isFallback(review) && (
-                  <Pill tone="warning" dot>
-                    fallback
-                  </Pill>
+            <div className="mt-3 space-y-2 text-xs">
+              <div>
+                <p className="text-muted-foreground">Configured</p>
+                {review.configured_provider ? (
+                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
+                    <ProviderBadge
+                      slug={review.configured_provider}
+                      size="sm"
+                      muted
+                      className="max-w-40"
+                    />
+                    {review.configured_model && (
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {review.configured_model}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-0.5 text-foreground/80">Not configured</p>
                 )}
-              </p>
-              {review.error && <p className="text-error">{review.error}</p>}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-muted-foreground">Executed</p>
+                  {isFallback(review) && (
+                    <Pill tone="warning" dot>
+                      fallback
+                    </Pill>
+                  )}
+                </div>
+                {review.provider ? (
+                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
+                    <ProviderBadge
+                      slug={review.provider}
+                      size="sm"
+                      muted
+                      className="max-w-40"
+                    />
+                    {review.model && (
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {review.model}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-0.5 text-foreground/80">Not recorded</p>
+                )}
+              </div>
+              {review.error && (
+                <p className="break-words text-error">{review.error}</p>
+              )}
               <p className="admin-figure text-muted-foreground">
                 {formatDateTime(review.created_at)}
               </p>

@@ -12,17 +12,37 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { CodeView } from '@/components/shared/code-view';
 import { Pill } from '@/components/shared/pill';
-import { formatDateTime } from '@/components/shared/time-ago';
+import { TextFilter } from '@/components/shared/text-filter';
+import {
+  formatDateTime,
+  fromDatetimeLocalValue,
+} from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
-import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import {
+  ADMIN_INPUT_CLASS,
+  FilterBar,
+  SelectFilter,
+} from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
 
-const PERIODS = ['24h', '7d', '30d', 'custom'] as const;
+const PERIODS = [
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'custom', label: 'Custom range' },
+] as const;
 
-const inputCls =
-  'h-11 w-full min-w-0 rounded-lg border border-border bg-surface-1 px-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:max-w-[220px]';
+const dateCls = `${ADMIN_INPUT_CLASS} sm:max-w-[220px]`;
+
+function humanize(value: string): string {
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
 
 export default function AdminAuditPage() {
   const [action, setAction] = useState('');
@@ -42,8 +62,14 @@ export default function AdminAuditPage() {
         actor: actor || undefined,
         entity_type: entityType || undefined,
         period: period || undefined,
-        start: period === 'custom' ? start || undefined : undefined,
-        end: period === 'custom' ? end || undefined : undefined,
+        start:
+          period === 'custom'
+            ? fromDatetimeLocalValue(start) ?? undefined
+            : undefined,
+        end:
+          period === 'custom'
+            ? fromDatetimeLocalValue(end) ?? undefined
+            : undefined,
         limit: PAGE_SIZE,
         offset,
       }),
@@ -69,7 +95,9 @@ export default function AdminAuditPage() {
       render: (row) => (
         <div className="min-w-0">
           <p className="text-sm text-foreground">{row.actor_id ?? '—'}</p>
-          <p className="text-xs text-muted-foreground">{row.actor_type ?? ''}</p>
+          <p className="text-xs text-muted-foreground">
+            {row.actor_type ? humanize(row.actor_type) : ''}
+          </p>
         </div>
       ),
     },
@@ -105,7 +133,7 @@ export default function AdminAuditPage() {
             }
             dot
           >
-            {row.outcome}
+            {humanize(row.outcome)}
           </Pill>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -134,67 +162,74 @@ export default function AdminAuditPage() {
       description={`${total} event${total === 1 ? '' : 's'}`}
     >
       <FilterBar label="Audit filters">
-        <input
-          className={inputCls}
-          placeholder="Action"
-          aria-label="Action"
+        <TextFilter
           value={action}
-          onChange={(e) => {
-            setAction(e.target.value);
+          onChange={(value) => {
+            setAction(value);
             setOffset(0);
           }}
+          placeholder="Action…"
+          ariaLabel="Filter by action"
+          className="w-full sm:w-44"
         />
-        <input
-          className={inputCls}
-          placeholder="Actor"
-          aria-label="Actor"
+        <TextFilter
           value={actor}
-          onChange={(e) => {
-            setActor(e.target.value);
+          onChange={(value) => {
+            setActor(value);
             setOffset(0);
           }}
+          placeholder="Actor…"
+          ariaLabel="Filter by actor"
+          className="w-full sm:w-44"
         />
-        <input
-          className={inputCls}
-          placeholder="Entity type"
-          aria-label="Entity type"
+        <TextFilter
           value={entityType}
-          onChange={(e) => {
-            setEntityType(e.target.value);
+          onChange={(value) => {
+            setEntityType(value);
             setOffset(0);
           }}
+          placeholder="Entity type…"
+          ariaLabel="Filter by entity type"
+          className="w-full sm:w-44"
         />
         <SelectFilter
           value={period}
-          onChange={(e) => {
-            setPeriod(e.target.value);
+          onChange={(event) => {
+            setPeriod(event.target.value);
             setOffset(0);
+            setExpanded(null);
           }}
-          aria-label="Period"
-          className="w-full sm:w-[220px]"
+          aria-label="Filter by period"
+          className="w-full sm:w-44"
         >
           <option value="">All time</option>
-          {PERIODS.map((p) => (
-            <option key={p} value={p}>
-              {p}
+          {PERIODS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </SelectFilter>
         {period === 'custom' && (
           <>
             <input
-              className={inputCls}
-              aria-label="Custom start (ISO)"
-              placeholder="Start (ISO)"
+              type="datetime-local"
+              className={dateCls}
+              aria-label="Custom start"
               value={start}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(event) => {
+                setStart(event.target.value);
+                setOffset(0);
+              }}
             />
             <input
-              className={inputCls}
-              aria-label="Custom end (ISO)"
-              placeholder="End (ISO)"
+              type="datetime-local"
+              className={dateCls}
+              aria-label="Custom end"
               value={end}
-              onChange={(e) => setEnd(e.target.value)}
+              onChange={(event) => {
+                setEnd(event.target.value);
+                setOffset(0);
+              }}
             />
           </>
         )}
@@ -212,8 +247,16 @@ export default function AdminAuditPage() {
         empty={
           <EmptyState
             icon={<FileText size={22} />}
-            title="No audit events"
-            description="No events match the current filters."
+            title={
+              action || actor || entityType || period
+                ? 'No matching audit events'
+                : 'No audit events'
+            }
+            description={
+              action || actor || entityType || period
+                ? 'Try a different search or widen the time range.'
+                : 'Admin actions will appear here as they happen.'
+            }
           />
         }
         ariaLabel="Audit log"
@@ -228,13 +271,28 @@ export default function AdminAuditPage() {
                   {row.entity_type}/{row.entity_id}
                 </p>
               </div>
-              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                {row.outcome ?? '—'}
-              </span>
+              {row.outcome ? (
+                <Pill
+                  tone={
+                    row.outcome === 'success'
+                      ? 'success'
+                      : row.outcome === 'failure' || row.outcome === 'error'
+                        ? 'error'
+                        : 'muted'
+                  }
+                  dot
+                >
+                  {humanize(row.outcome)}
+                </Pill>
+              ) : (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  —
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {row.actor_id ?? '—'}
-              {row.actor_type ? ` · ${row.actor_type}` : ''}
+              {row.actor_type ? ` · ${humanize(row.actor_type)}` : ''}
               {' · '}
               {formatDateTime(row.created_at)}
             </p>

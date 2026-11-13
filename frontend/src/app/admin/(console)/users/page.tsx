@@ -41,6 +41,14 @@ function statusTone(status: string) {
   return status === 'disabled' ? 'muted' : toneForStatus(status);
 }
 
+function humanize(value: string): string {
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function AdminUsersPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<AdminUserStatusFilter | ''>('');
@@ -80,7 +88,7 @@ export default function AdminUsersPage() {
       header: 'Status',
       render: (user) => (
         <Pill tone={statusTone(user.status)} dot>
-          {user.status}
+          {humanize(user.status)}
         </Pill>
       ),
     },
@@ -189,10 +197,10 @@ export default function AdminUsersPage() {
         empty={
           <EmptyState
             icon={<UsersIcon size={22} />}
-            title="No users found"
+            title={q || status ? 'No matching users' : 'No users yet'}
             description={
               q || status
-                ? 'No accounts match the current filters.'
+                ? 'Try a different search or clear the status filter.'
                 : 'No users have registered yet.'
             }
           />
@@ -202,7 +210,7 @@ export default function AdminUsersPage() {
             <div className="flex items-start justify-between gap-3">
               <UserIdentity user={user} />
               <Pill tone={statusTone(user.status)} dot>
-                {user.status}
+                {humanize(user.status)}
               </Pill>
             </div>
             <dl className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">

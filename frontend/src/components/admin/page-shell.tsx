@@ -26,7 +26,7 @@ export function AdminPage({
             {title}
           </h1>
           {description && (
-            <div className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+            <div className="mt-1.5 max-w-[75ch] text-sm leading-relaxed text-muted-foreground">
               {description}
             </div>
           )}
@@ -68,7 +68,7 @@ export function AdminSection({
         className ?? ''
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pb-3 pt-4">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           {subtitle && (
@@ -79,7 +79,7 @@ export function AdminSection({
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
-      <div className={`min-w-0 flex-1 px-5 pb-5 pt-4 ${bodyClassName ?? ''}`}>
+      <div className={`min-w-0 flex-1 px-5 pb-5 pt-3 ${bodyClassName ?? ''}`}>
         {children}
       </div>
     </section>

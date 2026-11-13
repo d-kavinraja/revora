@@ -1,20 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, RotateCcw } from 'lucide-react';
-import { adminApi, type AdminModelOverrideUpdate } from '@/lib/api';
+import {
+  adminApi,
+  type AdminModelOverride,
+  type AdminModelOverrideUpdate,
+  type AdminProviderRead,
+} from '@/lib/api';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill } from '@/components/shared/pill';
+import { TextFilter } from '@/components/shared/text-filter';
+import { ProviderBadge } from '@/components/ui/provider-brand';
 import { useToast } from '@/components/ui/toaster';
-import { AdminPage } from '@/components/admin/page-shell';
+import { AdminPage, AdminSection } from '@/components/admin/page-shell';
 import {
   AdminButton,
   ADMIN_INPUT_CLASS,
   Field,
 } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
+
+const EMPTY_OVERRIDES: AdminModelOverride[] = [];
+const EMPTY_PROVIDERS: AdminProviderRead[] = [];
 
 function errorDetail(error: unknown): string | null {
   if (axios.isAxiosError(error)) {
@@ -32,6 +42,7 @@ export default function AdminModelsPage() {
   const [message, setMessage] = useState('');
   const [confirmingDisable, setConfirmingDisable] = useState(false);
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
+  const [overrideSearch, setOverrideSearch] = useState('');
 
   const overridesQuery = useQuery({
     queryKey: ['admin', 'model-overrides'],
@@ -45,7 +56,7 @@ export default function AdminModelsPage() {
     retry: 1,
   });
 
-  const providers = providersQuery.data?.items ?? [];
+  const providers = providersQuery.data?.items ?? EMPTY_PROVIDERS;
   const providerName = (slug: string) =>
     providers.find((provider) => provider.slug === slug)?.display_name ?? slug;
 
@@ -93,13 +104,28 @@ export default function AdminModelsPage() {
   });
 
   const loadError = overridesQuery.isError || providersQuery.isError;
-  const overrides = overridesQuery.data ?? [];
+  const overrides = overridesQuery.data ?? EMPTY_OVERRIDES;
+  const filteredOverrides = useMemo(() => {
+    const query = overrideSearch.trim().toLowerCase();
+    if (!query) return overrides;
+    return overrides.filter((override) => {
+      const provider = (
+        providers.find((item) => item.slug === override.provider_slug)
+          ?.display_name ?? override.provider_slug
+      ).toLowerCase();
+      return (
+        override.model_id.toLowerCase().includes(query) ||
+        override.provider_slug.toLowerCase().includes(query) ||
+        provider.includes(query)
+      );
+    });
+  }, [overrides, overrideSearch, providers]);
 
   return (
     <AdminPage
       eyebrow="System"
       title="Models"
-      description="Per-model overrides. A disabled model disappears from user-facing model lists, is skipped by the router and is refused on explicit execution — the provider and its other models are untouched. Setting a model back to available clears the override immediately, with no user action needed. All changes are audited."
+      description="Per-model overrides. Disabling a model hides it from user lists, skips it in routing and refuses explicit execution. The provider and its other models stay untouched."
     >
       {loadError && (
         <QueryError
@@ -112,14 +138,11 @@ export default function AdminModelsPage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
-          <h2 className="text-sm font-semibold text-foreground">Disable a model</h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            Pick the provider and type the exact model identifier (as it
-            appears in user model lists, e.g. a registry model id).
-          </p>
-
-          <div className="mt-4 space-y-3">
+        <AdminSection
+          title="Disable a model"
+          subtitle="Pick the provider and enter the exact model identifier used in user model lists."
+        >
+          <div className="space-y-3">
             <Field label="Provider" htmlFor="override-provider">
               <select
                 id="override-provider"
@@ -165,30 +188,45 @@ export default function AdminModelsPage() {
               Disable model
             </AdminButton>
           </div>
-        </section>
+        </AdminSection>
 
-        <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
+        <AdminSection
+          title="Active overrides"
+          subtitle={
+            overrides.length === 0
+              ? 'No models are currently disabled.'
+              : `${filteredOverrides.length} of ${overrides.length} disabled model${
+                  overrides.length === 1 ? '' : 's'
+                }`
+          }
+          actions={
+            overrides.length > 1 ? (
+              <TextFilter
+                value={overrideSearch}
+                onChange={setOverrideSearch}
+                placeholder="Search overrides…"
+                ariaLabel="Search model overrides"
+                className="w-full sm:w-56"
+              />
+            ) : undefined
+          }
+        >
+          {overrides.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-surface-2/50 p-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-1">
                 <Boxes size={17} aria-hidden="true" />
               </span>
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-foreground">
-                  Active overrides
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {overrides.length === 0
-                    ? 'No models are currently disabled.'
-                    : `${overrides.length} disabled model${overrides.length === 1 ? '' : 's'}`}
-                </p>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                All registered models are available to users.
+              </p>
             </div>
-          </div>
-
-          {overrides.length > 0 && (
-            <div className="mt-4 space-y-3">
-              {overrides.map((override) => {
+          ) : filteredOverrides.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-surface-2/50 p-4 text-sm text-muted-foreground">
+              No overrides match “{overrideSearch.trim()}”.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {filteredOverrides.map((override) => {
                 const key = `${override.provider_slug}:${override.model_id}`;
                 const busy =
                   applyMutation.isPending && restoringKey === key;
@@ -202,12 +240,13 @@ export default function AdminModelsPage() {
                         <p className="truncate text-sm font-medium text-foreground">
                           {override.model_id}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {providerName(override.provider_slug)} ·{' '}
-                          <span className="font-mono">
-                            {override.provider_slug}
-                          </span>
-                        </p>
+                        <ProviderBadge
+                          slug={override.provider_slug}
+                          label={providerName(override.provider_slug)}
+                          size="sm"
+                          muted
+                          className="mt-1 max-w-56"
+                        />
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Pill tone="error" dot>
@@ -242,7 +281,7 @@ export default function AdminModelsPage() {
               })}
             </div>
           )}
-        </section>
+        </AdminSection>
       </div>
 
       <ConfirmDialog

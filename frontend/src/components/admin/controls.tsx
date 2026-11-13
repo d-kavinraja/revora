@@ -124,6 +124,53 @@ export function CheckboxRow({
   );
 }
 
+export function AdminSwitch({
+  checked,
+  onChange,
+  title,
+  description,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  title: string;
+  description?: ReactNode;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <label
+      className={`flex min-h-11 items-start gap-3 ${
+        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+      } ${className ?? ''}`}
+    >
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full border border-border bg-surface-3 transition-colors peer-checked:border-brand peer-checked:bg-brand peer-focus-visible:ring-2 peer-focus-visible:ring-brand peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background peer-checked:[&>span]:translate-x-[22px] motion-reduce:transition-none"
+      >
+        <span className="absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-foreground">{title}</span>
+        {description && (
+          <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </span>
+        )}
+      </span>
+    </label>
+  );
+}
+
 type ButtonVariant =
   | 'primary'
   | 'secondary'

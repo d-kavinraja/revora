@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  CalendarRange,
   Coins,
   FolderGit2,
   GitPullRequest,
@@ -11,26 +12,199 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { adminApi, type NumericMetric, type ScalarMetric } from '@/lib/api';
+import { adminApi, type AdminOverview, type NumericMetric, type ScalarMetric } from '@/lib/api';
 import { SkeletonCard, SkeletonList } from '@/components/shared/skeleton';
-import { formatDateTime } from '@/components/shared/time-ago';
+import { formatDateTime, formatDateTimeShort } from '@/components/shared/time-ago';
+import { Pill, toneForStatus } from '@/components/shared/pill';
 import { AdminPage, AdminSection } from '@/components/admin/page-shell';
 import {
   DistributionBar,
   KpiTile,
   RankedList,
   SegmentedControl,
-  StatGroup,
   type MeterTone,
 } from '@/components/admin/metrics';
 import { IconButton } from '@/components/admin/controls';
 import { InlineEmpty, QueryError } from '@/components/admin/states';
+import {
+  ProviderBadge,
+  ProviderMark,
+  providerDisplayName,
+} from '@/components/ui/provider-brand';
+import {
+  FEATURE_STATUS_LABELS,
+  FEATURE_STATUS_TONES,
+  featureLabel,
+} from '@/lib/admin-features';
 
 const PERIOD_OPTIONS = [
   { key: '24h', label: '24 hours' },
   { key: '7d', label: '7 days' },
   { key: '30d', label: '30 days' },
 ] as const;
+
+type ProviderHealthRow = AdminOverview['provider_health'][number];
+
+function ProviderHealthList({ rows }: { rows: ProviderHealthRow[] }) {
+  return (
+    <>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full table-fixed text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th
+                scope="col"
+                className="w-[22%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Provider
+              </th>
+              <th
+                scope="col"
+                className="w-[12%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Status
+              </th>
+              <th
+                scope="col"
+                className="w-[12%] pb-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Success
+              </th>
+              <th
+                scope="col"
+                className="w-[12%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Circuit
+              </th>
+              <th
+                scope="col"
+                className="w-[18%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Snapshot
+              </th>
+              <th
+                scope="col"
+                className="w-[24%] pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                Last error
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/70">
+            {rows.map((row) => (
+              <tr key={row.provider}>
+                <td className="py-3 pr-3 align-top">
+                  <ProviderBadge slug={row.provider} size="sm" />
+                </td>
+                <td className="py-3 pr-3 align-top">
+                  <Pill
+                    tone={toneForStatus(row.status)}
+                    dot
+                    className="whitespace-nowrap"
+                  >
+                    {row.status}
+                  </Pill>
+                </td>
+                <td className="admin-figure py-3 pr-3 text-right align-top">
+                  {row.success_rate !== null
+                    ? `${(row.success_rate * 100).toFixed(1)}%`
+                    : '—'}
+                </td>
+                <td className="py-3 pr-3 align-top text-muted-foreground">
+                  {row.circuit_state ?? '—'}
+                </td>
+                <td className="admin-figure py-3 pr-3 align-top text-muted-foreground">
+                  {row.snapshot_at ? formatDateTime(row.snapshot_at) : '—'}
+                </td>
+                <td className="py-3 align-top">
+                  {row.last_error ? (
+                    <details className="group text-xs">
+                      <summary className="cursor-pointer list-none rounded text-error/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                        <span className="underline underline-offset-2 group-open:no-underline">
+                          View error
+                        </span>
+                        {row.last_error_at && (
+                          <span className="ml-2 font-mono text-muted-foreground">
+                            {formatDateTimeShort(row.last_error_at)}
+                          </span>
+                        )}
+                      </summary>
+                      <p className="mt-1 break-words font-mono text-[11px] leading-relaxed text-error/90">
+                        {row.last_error}
+                      </p>
+                    </details>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">None</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid gap-3 md:hidden">
+        {rows.map((row) => (
+          <article
+            key={row.provider}
+            className="rounded-lg border border-border bg-surface-2/50 p-3"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <ProviderBadge slug={row.provider} size="sm" />
+              <Pill tone={toneForStatus(row.status)} dot>
+                {row.status}
+              </Pill>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Success rate</dt>
+                <dd className="admin-figure mt-0.5 font-medium text-foreground">
+                  {row.success_rate !== null
+                    ? `${(row.success_rate * 100).toFixed(1)}%`
+                    : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Circuit</dt>
+                <dd className="mt-0.5 font-medium text-foreground">
+                  {row.circuit_state ?? '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Snapshot</dt>
+                <dd className="admin-figure mt-0.5 font-medium text-foreground">
+                  {row.snapshot_at ? formatDateTime(row.snapshot_at) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Last error</dt>
+                <dd className="mt-0.5 font-medium text-foreground">
+                  {row.last_error ? 'Recorded' : 'None'}
+                </dd>
+              </div>
+            </dl>
+            {row.last_error && (
+              <details className="group mt-2 text-xs">
+                <summary className="cursor-pointer list-none rounded text-error/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                  <span className="underline underline-offset-2 group-open:no-underline">
+                    Last error
+                  </span>
+                  {row.last_error_at && (
+                    <span className="ml-2 font-mono text-muted-foreground">
+                      {formatDateTimeShort(row.last_error_at)}
+                    </span>
+                  )}
+                </summary>
+                <p className="mt-1 break-words font-mono text-[11px] leading-relaxed text-error/90">
+                  {row.last_error}
+                </p>
+              </details>
+            )}
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
 
 function formatCount(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -97,26 +271,9 @@ function statusTone(status: string): MeterTone {
   return 'muted';
 }
 
-function StatusDot({ status }: { status: string }) {
-  const tone = statusTone(status);
-  const cls =
-    tone === 'success'
-      ? 'bg-success'
-      : tone === 'warning'
-        ? 'bg-warning'
-        : tone === 'error'
-          ? 'bg-error'
-          : tone === 'info'
-            ? 'bg-info'
-            : 'bg-muted-foreground';
-  return (
-    <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${cls}`} />
-  );
-}
-
 export default function AdminOverviewPage() {
   const [period, setPeriod] = useState<string>('7d');
-  const { data, isPending, isError, isFetching, refetch } = useQuery({
+  const { data, isPending, isError, isFetching, dataUpdatedAt, refetch } = useQuery({
     queryKey: ['admin', 'overview', period],
     queryFn: () => adminApi.overview({ period }),
     retry: 1,
@@ -141,6 +298,28 @@ export default function AdminOverviewPage() {
       eyebrow="Monitor"
       title="Overview"
       description="Platform-wide metrics. Unrecorded sources are marked, never guessed."
+      meta={
+        dataUpdatedAt ? (
+          <>
+            <span>
+              Refreshed{' '}
+              {new Date(dataUpdatedAt).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              })}
+            </span>
+            <span className="hidden h-3 w-px bg-border sm:block" />
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarRange size={13} aria-hidden="true" />
+              Reporting window{' '}
+              {data?.period
+                ? `${formatDateTimeShort(data.period.start)} to ${formatDateTimeShort(data.period.end)}`
+                : 'All time'}
+            </span>
+          </>
+        ) : undefined
+      }
       actions={
         <>
           <SegmentedControl
@@ -165,8 +344,21 @@ export default function AdminOverviewPage() {
       {isPending ? (
         <div className="space-y-6">
           <SkeletonCard count={4} />
-          <SkeletonCard count={7} />
-          <SkeletonList count={3} height="h-40" />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <SkeletonCard count={6} />
+            <SkeletonCard count={6} />
+          </div>
+          <SkeletonList count={1} height="h-64" />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <SkeletonList count={4} height="h-48" />
+            <SkeletonList count={4} height="h-48" />
+          </div>
+          <SkeletonList count={1} height="h-40" />
+          <SkeletonList count={1} height="h-64" />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <SkeletonList count={1} height="h-48" />
+            <SkeletonList count={1} height="h-48" />
+          </div>
         </div>
       ) : data ? (
         <>
@@ -206,177 +398,111 @@ export default function AdminOverviewPage() {
             />
           </section>
 
-          <StatGroup
-            label="Platform"
-            description="Accounts and stored credentials"
-            columns={3}
-          >
-            <KpiTile
-              label="Sign-ins in period"
-              value={signIns?.value ?? '—'}
-              reason={signIns?.reason}
-              unavailable={signIns?.unavailable}
-              tone="info"
-            />
-            <KpiTile
-              label="Last login"
-              value={lastLogin?.value ?? '—'}
-              reason={lastLogin?.reason}
-              unavailable={lastLogin?.unavailable}
-              tone="info"
-            />
-            <KpiTile
-              label="Credentials total"
-              value={formatCount(data.credentials_total)}
-              sub={`${data.credentials_by_provider.length} provider${
-                data.credentials_by_provider.length === 1 ? '' : 's'
-              }`}
-              tone="info"
-            />
-          </StatGroup>
-
-          <StatGroup
-            label="Active users"
-            description="Distinct users with activity in each window"
-            columns={3}
-          >
-            {Object.entries(data.active_users).map(([key, metric]) => {
-              const reading = metricReading(metric);
-              return (
+          <div className="grid gap-4">
+            <AdminSection
+              title="Platform activity"
+              subtitle="Accounts, sign-ins and stored credentials"
+            >
+              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                 <KpiTile
-                  key={key}
-                  label={`Active users (${key})`}
-                  value={reading.value}
-                  reason={reading.reason}
-                  unavailable={reading.unavailable}
-                  tone="success"
+                  label="Sign-ins in period"
+                  value={signIns?.value ?? '—'}
+                  reason={signIns?.reason}
+                  unavailable={signIns?.unavailable}
+                  tone="info"
                 />
-              );
-            })}
-          </StatGroup>
+                <KpiTile
+                  label="Last login"
+                  value={lastLogin?.value ?? '—'}
+                  reason={lastLogin?.reason}
+                  unavailable={lastLogin?.unavailable}
+                  tone="info"
+                />
+                <KpiTile
+                  label="Credentials total"
+                  value={formatCount(data.credentials_total)}
+                  sub={`${data.credentials_by_provider.length} provider${
+                    data.credentials_by_provider.length === 1 ? '' : 's'
+                  }`}
+                  tone="info"
+                />
+                {Object.entries(data.active_users).map(([key, metric]) => {
+                  const reading = metricReading(metric);
+                  return (
+                    <KpiTile
+                      key={key}
+                      label={`Active users (${key})`}
+                      value={reading.value}
+                      reason={reading.reason}
+                      unavailable={reading.unavailable}
+                      tone="success"
+                    />
+                  );
+                })}
+              </div>
+            </AdminSection>
 
-          <StatGroup
-            label="Reviews & reliability"
-            description="Execution volume, retries and latency"
-            columns={4}
+            <AdminSection
+              title="Review reliability"
+              subtitle="Execution volume, retries, latency and recorded usage"
+            >
+              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                <KpiTile
+                  label="Reviews in period"
+                  value={data.reviews_in_period.toLocaleString()}
+                  tone="warning"
+                />
+                <KpiTile
+                  label="Retries in period"
+                  value={formatCount(data.retries_in_period)}
+                  tone="warning"
+                />
+                <KpiTile
+                  label="Duration p50"
+                  value={p50?.value ?? '—'}
+                  reason={p50?.reason}
+                  unavailable={p50?.unavailable}
+                  tone="warning"
+                />
+                <KpiTile
+                  label="Duration p95"
+                  value={p95?.value ?? '—'}
+                  reason={p95?.reason}
+                  unavailable={p95?.unavailable}
+                  tone="warning"
+                />
+                <KpiTile
+                  label="Tokens in period"
+                  value={tokens?.value ?? '—'}
+                  reason={tokens?.reason}
+                  unavailable={tokens?.unavailable}
+                  icon={<Hash size={15} />}
+                  tone="info"
+                />
+                <KpiTile
+                  label="Cost in period"
+                  value={cost?.value ?? '—'}
+                  reason={cost?.reason}
+                  unavailable={cost?.unavailable}
+                  icon={<Coins size={15} />}
+                  tone="info"
+                />
+              </div>
+            </AdminSection>
+          </div>
+
+          <AdminSection
+            title="Provider health"
+            subtitle="Latest recorded snapshot per provider"
           >
-            <KpiTile
-              label="Reviews in period"
-              value={data.reviews_in_period.toLocaleString()}
-              tone="warning"
-            />
-            <KpiTile
-              label="Retries in period"
-              value={formatCount(data.retries_in_period)}
-              tone="warning"
-            />
-            <KpiTile
-              label="Duration p50"
-              value={p50?.value ?? '—'}
-              reason={p50?.reason}
-              unavailable={p50?.unavailable}
-              tone="warning"
-            />
-            <KpiTile
-              label="Duration p95"
-              value={p95?.value ?? '—'}
-              reason={p95?.reason}
-              unavailable={p95?.unavailable}
-              tone="warning"
-            />
-          </StatGroup>
-
-          <StatGroup
-            label="Usage & cost"
-            description="Recorded usage analytics"
-            columns={2}
-          >
-            <KpiTile
-              label="Tokens in period"
-              value={tokens?.value ?? '—'}
-              reason={tokens?.reason}
-              unavailable={tokens?.unavailable}
-              icon={<Hash size={15} />}
-              tone="info"
-            />
-            <KpiTile
-              label="Cost in period"
-              value={cost?.value ?? '—'}
-              reason={cost?.reason}
-              unavailable={cost?.unavailable}
-              icon={<Coins size={15} />}
-              tone="info"
-            />
-          </StatGroup>
-
-          <AdminSection title="Reviews by status" subtitle="All time">
-            {Object.keys(data.reviews_by_status).length === 0 ? (
-              <InlineEmpty>No reviews yet.</InlineEmpty>
+            {data.provider_health.length === 0 ? (
+              <InlineEmpty>No health checks recorded.</InlineEmpty>
             ) : (
-              <DistributionBar
-                items={Object.entries(data.reviews_by_status).map(
-                  ([status, count]) => ({
-                    key: status,
-                    label: status,
-                    value: count,
-                    tone: statusTone(status),
-                  }),
-                )}
-              />
+              <ProviderHealthList rows={data.provider_health} />
             )}
           </AdminSection>
 
-          <div className="admin-masonry">
-            <AdminSection
-              title="Provider health"
-              subtitle="Latest recorded snapshot per provider"
-            >
-              {data.provider_health.length === 0 ? (
-                <InlineEmpty>No health checks recorded.</InlineEmpty>
-              ) : (
-                <ul className="space-y-2">
-                  {data.provider_health.map((row) => (
-                    <li
-                      key={row.provider}
-                      className="rounded-lg border border-border bg-surface-2/50 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-                          <StatusDot status={row.status} />
-                          <span className="truncate">{row.provider}</span>
-                        </span>
-                        <span className="shrink-0 text-xs capitalize text-muted-foreground">
-                          {row.status}
-                          {row.circuit_state
-                            ? ` · circuit ${row.circuit_state}`
-                            : ''}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span className="admin-figure">
-                          Success rate{' '}
-                          {row.success_rate !== null
-                            ? `${(row.success_rate * 100).toFixed(1)}%`
-                            : '—'}
-                        </span>
-                        <span className="admin-figure">
-                          {row.snapshot_at ? formatDateTime(row.snapshot_at) : '—'}
-                        </span>
-                      </div>
-                      {row.last_error && (
-                        <p
-                          className="mt-1 truncate text-xs text-error"
-                          title={row.last_error}
-                        >
-                          {row.last_error}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </AdminSection>
-
+          <div className="grid gap-4 xl:grid-cols-2">
             <AdminSection
               title="Provider & model usage"
               subtitle="Reviews in period"
@@ -387,9 +513,10 @@ export default function AdminOverviewPage() {
                 <RankedList
                   items={data.reviews_by_provider_model.map((row, i) => ({
                     key: `${row.provider ?? 'unset'}-${row.model ?? 'unset'}-${i}`,
-                    label: row.provider ?? 'Unset',
-                    secondary: row.model ?? 'Unset',
+                    label: providerDisplayName(row.provider),
+                    secondary: row.model ?? 'Model not recorded',
                     value: row.count,
+                    leading: <ProviderMark slug={row.provider} size="sm" />,
                   }))}
                 />
               )}
@@ -413,12 +540,34 @@ export default function AdminOverviewPage() {
                 />
               )}
             </AdminSection>
+          </div>
 
-            <AdminSection title="Credentials by provider">
-              {data.credentials_by_provider.length === 0 ? (
-                <InlineEmpty>No credentials stored.</InlineEmpty>
-              ) : (
-                <div className="overflow-x-auto">
+          <AdminSection title="Reviews by status" subtitle="All time">
+            {Object.keys(data.reviews_by_status).length === 0 ? (
+              <InlineEmpty>No reviews yet.</InlineEmpty>
+            ) : (
+              <DistributionBar
+                items={Object.entries(data.reviews_by_status).map(
+                  ([status, count]) => ({
+                    key: status,
+                    label: status,
+                    value: count,
+                    tone: statusTone(status),
+                  }),
+                )}
+              />
+            )}
+          </AdminSection>
+
+          <AdminSection
+            title="Credentials by provider"
+            subtitle="Stored credentials, validity and key state"
+          >
+            {data.credentials_by_provider.length === 0 ? (
+              <InlineEmpty>No credentials stored.</InlineEmpty>
+            ) : (
+              <>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-left">
@@ -444,22 +593,22 @@ export default function AdminOverviewPage() {
                     <tbody className="divide-y divide-border/70">
                       {data.credentials_by_provider.map((row) => (
                         <tr key={row.provider}>
-                          <td className="py-2 pr-3 text-foreground/90">
-                            {row.provider}
+                          <td className="py-2.5 pr-3">
+                            <ProviderBadge slug={row.provider} size="sm" />
                           </td>
-                          <td className="admin-figure py-2 pr-3 text-right">
+                          <td className="admin-figure py-2.5 pr-3 text-right">
                             {row.total}
                           </td>
-                          <td className="admin-figure py-2 pr-3 text-right text-success">
+                          <td className="admin-figure py-2.5 pr-3 text-right text-success">
                             {row.valid}
                           </td>
-                          <td className="admin-figure py-2 pr-3 text-right text-error">
+                          <td className="admin-figure py-2.5 pr-3 text-right text-error">
                             {row.invalid}
                           </td>
-                          <td className="admin-figure py-2 pr-3 text-right">
+                          <td className="admin-figure py-2.5 pr-3 text-right">
                             {row.enabled}
                           </td>
-                          <td className="admin-figure py-2 text-right">
+                          <td className="admin-figure py-2.5 text-right">
                             {row.disabled}
                           </td>
                         </tr>
@@ -467,13 +616,45 @@ export default function AdminOverviewPage() {
                     </tbody>
                   </table>
                 </div>
-              )}
-            </AdminSection>
+                <div className="grid gap-2 sm:grid-cols-2 md:hidden">
+                  {data.credentials_by_provider.map((row) => (
+                    <div
+                      key={row.provider}
+                      className="rounded-lg border border-border bg-surface-2/50 p-3"
+                    >
+                      <ProviderBadge slug={row.provider} size="sm" />
+                      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                        {[
+                          ['Total', row.total],
+                          ['Valid', row.valid],
+                          ['Invalid', row.invalid],
+                          ['Enabled', row.enabled],
+                          ['Disabled', row.disabled],
+                        ].map(([label, value]) => (
+                          <div key={String(label)}>
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd className="admin-figure mt-0.5 font-medium text-foreground">
+                              {value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </AdminSection>
 
+          <div className="grid gap-4 xl:grid-cols-2">
             <AdminSection title="Maintenance mode">
               {data.maintenance.enabled ? (
                 <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
-                  <Wrench size={18} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+                  <Wrench
+                    size={18}
+                    className="mt-0.5 shrink-0 text-warning"
+                    aria-hidden="true"
+                  />
                   <div className="min-w-0">
                     <p className="font-medium text-warning">
                       {data.maintenance.title ?? 'Maintenance enabled'}
@@ -485,14 +666,18 @@ export default function AdminOverviewPage() {
                     )}
                     {data.maintenance.expected_return_at && (
                       <p className="admin-figure mt-1 text-xs text-muted-foreground">
-                        Expected return: {data.maintenance.expected_return_at}
+                        Expected return:{' '}
+                        {formatDateTime(data.maintenance.expected_return_at)}
                       </p>
                     )}
                   </div>
                 </div>
               ) : (
                 <p className="inline-flex items-center gap-2 text-sm text-success">
-                  <StatusDot status="ok" />
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2 w-2 rounded-full bg-success"
+                  />
                   Operational — user traffic is flowing normally.
                 </p>
               )}
@@ -505,30 +690,38 @@ export default function AdminOverviewPage() {
               {Object.keys(data.features).length === 0 ? (
                 <InlineEmpty>No flags defined.</InlineEmpty>
               ) : (
-                <ul className="flex flex-wrap gap-2">
+                <ul className="grid gap-2 sm:grid-cols-2">
                   {Object.entries(data.features).map(([key, status]) => (
                     <li
                       key={key}
-                      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                        status === 'enabled'
-                          ? 'border-success/30 bg-success/10 text-success'
-                          : 'border-border bg-surface-2 text-muted-foreground'
-                      }`}
+                      title={featureLabel(key)}
+                      className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-surface-2/50 p-2.5"
                     >
-                      <Hash size={11} aria-hidden="true" />
-                      <span className="font-mono">{key}</span>
-                      <span className="uppercase tracking-[0.06em]">{status}</span>
+                      <div className="min-w-0">
+                        <p
+                          className="truncate text-sm font-medium text-foreground"
+                          title={featureLabel(key)}
+                        >
+                          {featureLabel(key)}
+                        </p>
+                        <p
+                          className="truncate font-mono text-[11px] text-muted-foreground"
+                          title={key}
+                        >
+                          {key}
+                        </p>
+                      </div>
+                      <Pill
+                        tone={FEATURE_STATUS_TONES[status] ?? 'muted'}
+                        dot
+                        className="shrink-0"
+                      >
+                        {FEATURE_STATUS_LABELS[status] ?? status}
+                      </Pill>
                     </li>
                   ))}
                 </ul>
               )}
-            </AdminSection>
-
-            <AdminSection title="Recorded period">
-              <p className="admin-figure inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <Coins size={15} aria-hidden="true" />
-                {formatDateTime(data.period.start)} → {formatDateTime(data.period.end)}
-              </p>
             </AdminSection>
           </div>
         </>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Server } from 'lucide-react';
@@ -12,18 +12,25 @@ import {
 import { DataTable, type DataTableColumn } from '@/components/shared/data-table';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { TextFilter } from '@/components/shared/text-filter';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
-import { ProviderIcon } from '@/components/ui/provider-icon';
+import { ProviderBadge } from '@/components/ui/provider-brand';
 import { useToast } from '@/components/ui/toaster';
-import { formatDateTime } from '@/components/shared/time-ago';
+import {
+  formatDateTime,
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
 import {
   AdminButton,
+  AdminSwitch,
   ADMIN_INPUT_CLASS,
   ADMIN_LABEL_CLASS,
   ADMIN_TEXTAREA_CLASS,
-  CheckboxRow,
   Field,
+  FilterBar,
+  SelectFilter,
 } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
@@ -43,6 +50,8 @@ const STATUS_OPTIONS = [
   'disabled',
 ] as const;
 
+const EMPTY_PROVIDERS: AdminProviderRead[] = [];
+
 interface EditForm {
   status: string;
   message: string;
@@ -55,16 +64,6 @@ function statusMeta(status: string) {
   return STATUS_META[status] ?? { label: status, tone: 'muted' as PillTone };
 }
 
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function buildPayload(
   provider: AdminProviderRead,
   form: EditForm
@@ -75,10 +74,8 @@ function buildPayload(
   if (form.message.trim() !== (provider.status_message ?? '')) {
     payload.status_message = form.message.trim() || null;
   }
-  if (form.eta !== toDatetimeLocal(provider.status_expires_at)) {
-    payload.status_expires_at = form.eta
-      ? new Date(form.eta).toISOString()
-      : null;
+  if (form.eta !== toDatetimeLocalValue(provider.status_expires_at)) {
+    payload.status_expires_at = fromDatetimeLocalValue(form.eta);
   }
   if (form.allowKey !== provider.allow_key_addition) {
     payload.allow_key_addition = form.allowKey;
@@ -108,6 +105,9 @@ function errorDetail(error: unknown): string | undefined {
 export default function AdminProvidersPage() {
   const [editing, setEditing] = useState<AdminProviderRead | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState('');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -144,7 +144,7 @@ export default function AdminProvidersPage() {
     setForm({
       status: provider.status,
       message: provider.status_message ?? '',
-      eta: toDatetimeLocal(provider.status_expires_at),
+      eta: toDatetimeLocalValue(provider.status_expires_at),
       isEnabled: provider.is_enabled,
       allowKey: provider.allow_key_addition,
     });
@@ -160,19 +160,33 @@ export default function AdminProvidersPage() {
     editing && form ? buildPayload(editing, form) : ({} as AdminProviderUpdate);
   const hasChanges = Object.keys(payload).length > 0;
 
+  const items = data?.items ?? EMPTY_PROVIDERS;
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return items.filter((provider) => {
+      const matchesQuery =
+        !query ||
+        provider.display_name.toLowerCase().includes(query) ||
+        provider.slug.toLowerCase().includes(query);
+      const matchesStatus = !statusFilter || provider.status === statusFilter;
+      const matchesEnabled =
+        !enabledFilter ||
+        (enabledFilter === 'enabled' ? provider.is_enabled : !provider.is_enabled);
+      return matchesQuery && matchesStatus && matchesEnabled;
+    });
+  }, [items, search, statusFilter, enabledFilter]);
+  const filtersActive = Boolean(search || statusFilter || enabledFilter);
+
   const columns: DataTableColumn<AdminProviderRead>[] = [
     {
       key: 'provider',
       header: 'Provider',
       render: (provider) => (
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
-            <ProviderIcon slug={provider.slug} size={16} />
-          </span>
-          <p className="truncate font-medium text-foreground" title={provider.slug}>
-            {provider.display_name}
-          </p>
-        </div>
+        <ProviderBadge
+          slug={provider.slug}
+          label={provider.display_name}
+          className="max-w-56"
+        />
       ),
     },
     {
@@ -273,22 +287,63 @@ export default function AdminProvidersPage() {
     <AdminPage
       eyebrow="System"
       title="Providers"
-      description="Availability, messages, master switches and key-addition policy. Every change is audited; credentials, mappings and history are never touched."
+      description={
+        filtersActive
+          ? `${filteredItems.length} of ${items.length} providers`
+          : 'Availability, messages, master switches and key-addition policy. Credentials, mappings and history are never touched.'
+      }
     >
       {isError && !isPending && (
         <QueryError message="Could not load providers." onRetry={() => refetch()} />
       )}
 
+      <FilterBar label="Provider filters">
+        <TextFilter
+          value={search}
+          onChange={setSearch}
+          placeholder="Search providers…"
+          ariaLabel="Search providers"
+          className="w-full sm:w-64"
+        />
+        <SelectFilter
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          aria-label="Filter by lifecycle status"
+          className="w-full sm:w-52"
+        >
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {statusMeta(option).label}
+            </option>
+          ))}
+        </SelectFilter>
+        <SelectFilter
+          value={enabledFilter}
+          onChange={(event) => setEnabledFilter(event.target.value)}
+          aria-label="Filter by master switch"
+          className="w-full sm:w-44"
+        >
+          <option value="">Enabled and disabled</option>
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </SelectFilter>
+      </FilterBar>
+
       <DataTable
         columns={columns}
-        rows={data?.items ?? []}
+        rows={filteredItems}
         keyOf={(provider) => provider.id}
         isLoading={isPending}
         empty={
           <EmptyState
             icon={<Server size={22} />}
-            title="No providers registered"
-            description="The provider registry is empty. Seed it via the platform migrations."
+            title={filtersActive ? 'No matching providers' : 'No providers registered'}
+            description={
+              filtersActive
+                ? 'Try a different search or clear the filters.'
+                : 'The provider registry is empty. Seed it via the platform migrations.'
+            }
           />
         }
         renderMobileCard={(provider) => {
@@ -296,12 +351,12 @@ export default function AdminProvidersPage() {
           return (
             <div className="rounded-xl border border-border bg-surface-1 p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <ProviderIcon slug={provider.slug} size={16} />
-                  <p className="truncate font-medium text-foreground" title={provider.slug}>
-                    {provider.display_name}
-                  </p>
-                </div>
+                <ProviderBadge
+                  slug={provider.slug}
+                  label={provider.display_name}
+                  size="sm"
+                  className="max-w-48"
+                />
                 <Pill tone={meta.tone} dot>
                   {meta.label}
                 </Pill>
@@ -429,37 +484,38 @@ export default function AdminProvidersPage() {
               />
             </Field>
 
-            <CheckboxRow
-              checked={form.isEnabled}
-              onChange={(next) => {
-                setForm((current) =>
-                  current
-                    ? {
-                        ...current,
-                        isEnabled: next,
-                        status: next
-                          ? current.status === 'disabled'
-                            ? 'available'
-                            : current.status
-                          : 'disabled',
-                      }
-                    : current
-                );
-              }}
-              title="Provider enabled (master switch)"
-              description="Turning it off sets the status to Disabled; turning it back on restores availability without any user reconfiguration."
-            />
-
-            <CheckboxRow
-              checked={form.allowKey}
-              onChange={(next) => {
-                setForm((current) =>
-                  current ? { ...current, allowKey: next } : current
-                );
-              }}
-              title="Allow users to add new API keys"
-              description="Existing keys remain stored and rotatable either way."
-            />
+            <div className="grid gap-3 rounded-lg border border-border bg-surface-2/50 p-3 sm:grid-cols-2">
+              <AdminSwitch
+                checked={form.isEnabled}
+                onChange={(next) => {
+                  setForm((current) =>
+                    current
+                      ? {
+                          ...current,
+                          isEnabled: next,
+                          status: next
+                            ? current.status === 'disabled'
+                              ? 'available'
+                              : current.status
+                            : 'disabled',
+                        }
+                      : current
+                  );
+                }}
+                title="Provider enabled"
+                description="Turning it off sets the status to Disabled. Turning it back on restores availability without user reconfiguration."
+              />
+              <AdminSwitch
+                checked={form.allowKey}
+                onChange={(next) => {
+                  setForm((current) =>
+                    current ? { ...current, allowKey: next } : current
+                  );
+                }}
+                title="Allow new API keys"
+                description="Existing keys remain stored and rotatable either way."
+              />
+            </div>
           </div>
         )}
       </ConfirmDialog>

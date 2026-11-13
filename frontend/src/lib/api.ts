@@ -28,7 +28,7 @@ export const apiClient = axios.create({
   // on every request (cross-origin). The Bearer header below is only the
   // in-memory token for the current tab — never persisted anywhere.
   withCredentials: true,
-  headers: { 
+  headers: {
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true'
   },
@@ -832,6 +832,8 @@ export const api = {
   // dashboard gating wrappers and sidebar hiding (§11.1).
   getPlatformFeatures: () =>
     apiClient.get<PlatformFeatures>('/platform/features').then((r) => r.data),
+  getUsageAnalyticsStatus: () =>
+    apiClient.get<{ enabled: boolean }>('/platform/usage-analytics').then((r) => r.data),
 
   // Phase 7 — public announcement feed (published + active only).
   getAnnouncements: () =>
@@ -910,12 +912,24 @@ export interface AdminMaintenanceFull extends AdminMaintenanceState {
 }
 
 export interface AdminMaintenanceUpdate {
-  enabled?: boolean;
+  enabled?: boolean | null;
   title?: string | null;
   message?: string | null;
   expected_return_at?: string | null;
   reason?: string | null;
-  version?: number;
+  version?: number | null;
+}
+
+export interface AdminUsageAnalytics {
+  enabled: boolean;
+  changed_by: string | null;
+  changed_at: string | null;
+  version: number;
+}
+
+export interface AdminUsageAnalyticsUpdate {
+  enabled: boolean;
+  version?: number | null;
 }
 
 export interface PublicMaintenanceState {
@@ -1431,6 +1445,14 @@ export const adminApi = {
   updateMaintenance: (data: AdminMaintenanceUpdate) =>
     apiClient
       .put<AdminMaintenanceFull>('/admin/maintenance', data)
+      .then((r) => r.data),
+
+  // Usage analytics master switch
+  usageAnalytics: () =>
+    apiClient.get<AdminUsageAnalytics>('/admin/usage-analytics').then((r) => r.data),
+  updateUsageAnalytics: (data: AdminUsageAnalyticsUpdate) =>
+    apiClient
+      .put<AdminUsageAnalytics>('/admin/usage-analytics', data)
       .then((r) => r.data),
 
   // Phase 6 — feature flags / model overrides

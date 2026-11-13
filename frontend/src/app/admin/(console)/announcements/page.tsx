@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Plus } from 'lucide-react';
 import {
@@ -12,31 +12,41 @@ import {
 import { DataTable, type DataTableColumn } from '@/components/shared/data-table';
 import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
+import { TextFilter } from '@/components/shared/text-filter';
 import { Pill, toneForStatus } from '@/components/shared/pill';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Modal } from '@/components/shared/modal';
-import { formatDateTime } from '@/components/shared/time-ago';
+import {
+  formatWindow,
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
 import {
   AdminButton,
+  AdminSwitch,
   ADMIN_INPUT_CLASS,
   ADMIN_TEXTAREA_CLASS,
-  CheckboxRow,
   Field,
+  FilterBar,
   SelectFilter,
 } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
 
-const KINDS = [
-  'scheduled_maintenance',
-  'upgrade',
-  'service_interruption',
-  'new_feature',
-  'provider_update',
-  'general',
-] as const;
+const KIND_LABELS: Record<string, string> = {
+  scheduled_maintenance: 'Scheduled maintenance',
+  upgrade: 'Upgrade',
+  service_interruption: 'Service interruption',
+  new_feature: 'New feature',
+  provider_update: 'Provider update',
+  general: 'General',
+};
+
+const KINDS = Object.keys(KIND_LABELS);
+
+const EMPTY_ANNOUNCEMENTS: AdminAnnouncementRead[] = [];
 
 const actionLinkCls =
   'cursor-pointer rounded text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
@@ -44,6 +54,10 @@ const actionLinkCls =
 export default function AdminAnnouncementsPage() {
   const queryClient = useQueryClient();
   const [offset, setOffset] = useState(0);
+  const [search, setSearch] = useState('');
+  const [kindFilter, setKindFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState('');
   const [editing, setEditing] = useState<AdminAnnouncementRead | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<AdminAnnouncementRead | null>(null);
@@ -54,8 +68,24 @@ export default function AdminAnnouncementsPage() {
     retry: 1,
   });
 
-  const items = data ?? [];
-  const paged = items.slice(offset, offset + PAGE_SIZE);
+  const items = data ?? EMPTY_ANNOUNCEMENTS;
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return items.filter((row) => {
+      const matchesQuery =
+        !query ||
+        row.title.toLowerCase().includes(query) ||
+        row.message.toLowerCase().includes(query);
+      const matchesKind = !kindFilter || row.kind === kindFilter;
+      const matchesState = !stateFilter || row.state === stateFilter;
+      const matchesEnabled =
+        !enabledFilter ||
+        (enabledFilter === 'enabled' ? row.is_enabled : !row.is_enabled);
+      return matchesQuery && matchesKind && matchesState && matchesEnabled;
+    });
+  }, [items, search, kindFilter, stateFilter, enabledFilter]);
+  const paged = filteredItems.slice(offset, offset + PAGE_SIZE);
+  const filtersActive = Boolean(search || kindFilter || stateFilter || enabledFilter);
 
   const createMut = useMutation({
     mutationFn: (body: AdminAnnouncementCreate) => adminApi.createAnnouncement(body),
@@ -103,14 +133,19 @@ export default function AdminAnnouncementsPage() {
     {
       key: 'kind',
       header: 'Kind',
-      render: (row) => <Pill tone="muted">{row.kind}</Pill>,
+      render: (row) => (
+        <Pill tone="muted">{KIND_LABELS[row.kind] ?? row.kind}</Pill>
+      ),
     },
     {
       key: 'state',
       header: 'State',
       render: (row) => (
-        <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')} dot>
-          {row.state}
+        <Pill
+          tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')}
+          dot
+        >
+          {row.state === 'published' ? 'Published' : 'Draft'}
         </Pill>
       ),
     },
@@ -118,9 +153,8 @@ export default function AdminAnnouncementsPage() {
       key: 'window',
       header: 'Window',
       render: (row) => (
-        <span className="admin-figure whitespace-nowrap text-xs text-muted-foreground">
-          {row.starts_at ? formatDateTime(row.starts_at) : '—'} →{' '}
-          {row.ends_at ? formatDateTime(row.ends_at) : '—'}
+        <span className="text-xs text-muted-foreground">
+          {formatWindow(row.starts_at, row.ends_at)}
         </span>
       ),
     },
@@ -128,9 +162,9 @@ export default function AdminAnnouncementsPage() {
       key: 'enabled',
       header: 'Enabled',
       render: (row) => (
-        <span className="admin-figure text-muted-foreground">
-          {row.is_enabled ? 'yes' : 'no'}
-        </span>
+        <Pill tone={row.is_enabled ? 'success' : 'muted'} dot>
+          {row.is_enabled ? 'Enabled' : 'Disabled'}
+        </Pill>
       ),
     },
     {
@@ -162,7 +196,11 @@ export default function AdminAnnouncementsPage() {
     <AdminPage
       eyebrow="System"
       title="Announcements"
-      description={`${items.length} announcement${items.length === 1 ? '' : 's'}`}
+      description={
+        filtersActive
+          ? `${filteredItems.length} of ${items.length} announcements`
+          : `${items.length} announcement${items.length === 1 ? '' : 's'}`
+      }
       actions={
         <AdminButton variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} />
@@ -177,6 +215,61 @@ export default function AdminAnnouncementsPage() {
         />
       )}
 
+      <FilterBar label="Announcement filters">
+        <TextFilter
+          value={search}
+          onChange={(value) => {
+            setSearch(value);
+            setOffset(0);
+          }}
+          placeholder="Search title or message…"
+          ariaLabel="Search announcements"
+          className="w-full sm:w-64"
+        />
+        <SelectFilter
+          value={kindFilter}
+          onChange={(event) => {
+            setKindFilter(event.target.value);
+            setOffset(0);
+          }}
+          aria-label="Filter by kind"
+          className="w-full sm:w-52"
+        >
+          <option value="">All kinds</option>
+          {KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {KIND_LABELS[kind]}
+            </option>
+          ))}
+        </SelectFilter>
+        <SelectFilter
+          value={stateFilter}
+          onChange={(event) => {
+            setStateFilter(event.target.value);
+            setOffset(0);
+          }}
+          aria-label="Filter by state"
+          className="w-full sm:w-40"
+        >
+          <option value="">All states</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+        </SelectFilter>
+        <SelectFilter
+          value={enabledFilter}
+          onChange={(event) => {
+            setEnabledFilter(event.target.value);
+            setOffset(0);
+          }}
+          aria-label="Filter by enabled state"
+          className="w-full sm:w-40"
+        >
+          <option value="">Enabled and disabled</option>
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </SelectFilter>
+      </FilterBar>
+
       <DataTable
         columns={columns}
         rows={paged}
@@ -185,8 +278,12 @@ export default function AdminAnnouncementsPage() {
         empty={
           <EmptyState
             icon={<Megaphone size={22} />}
-            title="No announcements"
-            description="Create one to surface a site-wide banner on all user-facing pages (never in the Admin Portal)."
+            title={filtersActive ? 'No matching announcements' : 'No announcements'}
+            description={
+              filtersActive
+                ? 'Try a different search or clear the filters.'
+                : 'Create one to surface a site-wide banner on all user-facing pages, never in the admin console.'
+            }
           />
         }
         ariaLabel="Announcements"
@@ -195,14 +292,22 @@ export default function AdminAnnouncementsPage() {
             <p className="break-words font-medium text-foreground">{row.title}</p>
             <p className="break-words text-xs text-muted-foreground">{row.message}</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Pill tone="muted">{row.kind}</Pill>
-              <Pill tone={toneForStatus(row.state === 'published' ? 'active' : 'disabled')} dot>
-                {row.state}
+              <Pill tone="muted">{KIND_LABELS[row.kind] ?? row.kind}</Pill>
+              <Pill
+                tone={toneForStatus(
+                  row.state === 'published' ? 'active' : 'disabled',
+                )}
+                dot
+              >
+                {row.state === 'published' ? 'Published' : 'Draft'}
               </Pill>
-              <span className="text-xs text-muted-foreground">
+              <Pill tone={row.is_enabled ? 'success' : 'muted'} dot>
                 {row.is_enabled ? 'Enabled' : 'Disabled'}
-              </span>
+              </Pill>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {formatWindow(row.starts_at, row.ends_at)}
+            </p>
             <div className="flex items-center gap-3 pt-1">
               <button
                 type="button"
@@ -223,9 +328,9 @@ export default function AdminAnnouncementsPage() {
         )}
       />
 
-      {items.length > PAGE_SIZE && (
+      {filteredItems.length > PAGE_SIZE && (
         <Pagination
-          total={items.length}
+          total={filteredItems.length}
           limit={PAGE_SIZE}
           offset={offset}
           onChange={setOffset}
@@ -283,22 +388,34 @@ function AnnouncementEditor({
   const [message, setMessage] = useState(initial?.message ?? '');
   const [kind, setKind] = useState(initial?.kind ?? 'general');
   const [state, setState] = useState(initial?.state ?? 'draft');
-  const [startsAt, setStartsAt] = useState(initial?.starts_at ?? '');
-  const [endsAt, setEndsAt] = useState(initial?.ends_at ?? '');
+  const [startsAt, setStartsAt] = useState(
+    toDatetimeLocalValue(initial?.starts_at ?? null),
+  );
+  const [endsAt, setEndsAt] = useState(
+    toDatetimeLocalValue(initial?.ends_at ?? null),
+  );
   const [linkUrl, setLinkUrl] = useState(initial?.link_url ?? '');
   const [linkLabel, setLinkLabel] = useState(initial?.link_label ?? '');
   const [isEnabled, setIsEnabled] = useState(initial?.is_enabled ?? true);
   const [isDismissible, setIsDismissible] = useState(initial?.is_dismissible ?? true);
 
+  const startsMs = startsAt ? new Date(startsAt).getTime() : null;
+  const endsMs = endsAt ? new Date(endsAt).getTime() : null;
+  const windowError =
+    startsMs !== null && endsMs !== null && endsMs <= startsMs
+      ? 'End time must be after the start time.'
+      : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (windowError) return;
     const body: AdminAnnouncementUpdate = {
       title,
       message,
       kind,
       state: initial ? state : undefined,
-      starts_at: startsAt || null,
-      ends_at: endsAt || null,
+      starts_at: fromDatetimeLocalValue(startsAt),
+      ends_at: fromDatetimeLocalValue(endsAt),
       link_url: linkUrl || null,
       link_label: linkLabel || null,
       is_enabled: isEnabled,
@@ -323,7 +440,12 @@ function AnnouncementEditor({
             type="submit"
             form="announcement-form"
             variant="primary"
-            disabled={pending}
+            disabled={
+              pending ||
+              !title.trim() ||
+              !message.trim() ||
+              Boolean(windowError)
+            }
           >
             {pending ? 'Saving…' : initial ? 'Save' : 'Create (draft)'}
           </AdminButton>
@@ -351,7 +473,7 @@ function AnnouncementEditor({
             >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {KIND_LABELS[k]}
                 </option>
               ))}
             </SelectFilter>
@@ -377,22 +499,30 @@ function AnnouncementEditor({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Starts at (ISO)" htmlFor="announcement-starts">
+          <Field
+            label="Starts at (optional)"
+            htmlFor="announcement-starts"
+            hint="Local time. Leave blank to start immediately."
+          >
             <input
               id="announcement-starts"
+              type="datetime-local"
               className={ADMIN_INPUT_CLASS}
               value={startsAt}
               onChange={(e) => setStartsAt(e.target.value)}
-              placeholder="2026-01-01T00:00:00Z"
             />
           </Field>
-          <Field label="Ends at (ISO)" htmlFor="announcement-ends">
+          <Field
+            label="Ends at (optional)"
+            htmlFor="announcement-ends"
+            hint="Local time. Leave blank to run until disabled."
+          >
             <input
               id="announcement-ends"
+              type="datetime-local"
               className={ADMIN_INPUT_CLASS}
               value={endsAt}
               onChange={(e) => setEndsAt(e.target.value)}
-              placeholder="2026-01-02T00:00:00Z"
             />
           </Field>
           <Field label="Link URL" htmlFor="announcement-link-url">
@@ -413,36 +543,61 @@ function AnnouncementEditor({
           </Field>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-          <CheckboxRow
+        <div className="grid gap-3 rounded-lg border border-border bg-surface-2/50 p-3 sm:grid-cols-2">
+          <AdminSwitch
             checked={isEnabled}
             onChange={setIsEnabled}
             title="Enabled"
+            description="Show the banner when the window is active."
           />
-          <CheckboxRow
+          <AdminSwitch
             checked={isDismissible}
             onChange={setIsDismissible}
             title="Dismissible"
+            description="Let visitors close the banner."
           />
-          {initial && (
-            <Field
-              label="State"
-              htmlFor="announcement-state"
-              className="min-w-[160px]"
-            >
-              <SelectFilter
-                id="announcement-state"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                className="w-full"
-              >
-                <option value="draft">draft</option>
-                <option value="published">published</option>
-              </SelectFilter>
-            </Field>
-          )}
         </div>
 
+        {initial && (
+          <Field
+            label="State"
+            htmlFor="announcement-state"
+            hint="Published announcements can appear on the public site."
+          >
+            <SelectFilter
+              id="announcement-state"
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              className="w-full"
+            >
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </SelectFilter>
+          </Field>
+        )}
+
+        <div className="rounded-lg border border-border bg-surface-2/50 p-3">
+          <p className="text-xs font-medium text-muted-foreground">Preview</p>
+          <div className="mt-2 rounded-md border border-brand/25 bg-brand/5 px-3 py-2.5">
+            <p className="break-words text-sm font-medium text-foreground">
+              {title.trim() || 'Announcement title'}
+            </p>
+            <p className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
+              {message.trim() || 'Announcement message'}
+            </p>
+            {linkLabel.trim() && (
+              <p className="mt-1 text-xs font-medium text-brand">
+                {linkLabel.trim()}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {windowError && (
+          <p role="alert" className="text-sm text-error">
+            {windowError}
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-sm text-error">
             {error}

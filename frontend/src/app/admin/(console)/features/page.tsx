@@ -1,88 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Flag } from 'lucide-react';
-import { adminApi, type AdminFeatureFlag } from '@/lib/api';
+import { BarChart3, Flag } from 'lucide-react';
+import { adminApi, type AdminFeatureFlag, type AdminUsageAnalytics } from '@/lib/api';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
-import { Pill, type PillTone } from '@/components/shared/pill';
+import { Pill } from '@/components/shared/pill';
+import { TextFilter } from '@/components/shared/text-filter';
+import { formatDateTime } from '@/components/shared/time-ago';
 import { useToast } from '@/components/ui/toaster';
 import { AdminPage } from '@/components/admin/page-shell';
 import {
   AdminButton,
+  AdminSwitch,
   ADMIN_INPUT_CLASS,
   Field,
+  FilterBar,
   SelectFilter,
 } from '@/components/admin/controls';
-import { AdminLoading, QueryError } from '@/components/admin/states';
-
-const FLAG_META: Record<string, { label: string; description: string }> = {
-  model_lab: {
-    label: 'Model Lab',
-    description:
-      'Model Lab page and the free-model execution route (GET /models, POST /llm/execute).',
-  },
-  mouthmap: {
-    label: 'MouthMap',
-    description: 'MouthMap video inference lab and all of its processing routes.',
-  },
-  botaniq: {
-    label: 'BotaniQ',
-    description: 'BotaniQ plant-disease inference lab and all of its processing routes.',
-  },
-  api_keys_add: {
-    label: 'API Key Changes',
-    description:
-      'Creating, updating and rotating API keys. Viewing, testing and deleting keys stays available.',
-  },
-  routing_mapping: {
-    label: 'Routing Mapping',
-    description:
-      'Saving feature → provider/model routing preferences (current mapping stays visible).',
-  },
-  review_initiation: {
-    label: 'Review Initiation',
-    description:
-      'Rerun / retry / restart of reviews. Cancelling an in-flight review stays allowed.',
-  },
-  usage: {
-    label: 'Usage',
-    description: 'Usage dashboards and their data endpoints.',
-  },
-  analytics: {
-    label: 'Analytics',
-    description: 'Analytics dashboards and their data endpoints.',
-  },
-  guide: {
-    label: 'Setup Guide',
-    description: 'The onboarding setup guide page.',
-  },
-};
-
-const STATUS_OPTIONS = [
-  'enabled',
-  'disabled',
-  'maintenance',
-  'coming_soon',
-  'under_testing',
-];
-
-const STATUS_LABELS: Record<string, string> = {
-  enabled: 'Enabled',
-  disabled: 'Disabled',
-  maintenance: 'Maintenance',
-  coming_soon: 'Coming soon',
-  under_testing: 'Under testing',
-};
-
-const STATUS_TONES: Record<string, PillTone> = {
-  enabled: 'success',
-  disabled: 'muted',
-  maintenance: 'warning',
-  coming_soon: 'info',
-  under_testing: 'warning',
-};
+import { AdminLoading, InlineEmpty, QueryError } from '@/components/admin/states';
+import {
+  FEATURE_META,
+  FEATURE_STATUS_LABELS,
+  FEATURE_STATUS_OPTIONS,
+  FEATURE_STATUS_TONES,
+  featureLabel,
+} from '@/lib/admin-features';
 
 interface Draft {
   status: string;
@@ -102,6 +46,10 @@ export default function AdminFeaturesPage() {
   const { toast } = useToast();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
+  const [analyticsDraft, setAnalyticsDraft] = useState<boolean | null>(null);
+  const [confirmingAnalytics, setConfirmingAnalytics] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'features'],
@@ -109,7 +57,60 @@ export default function AdminFeaturesPage() {
     retry: 1,
   });
 
+  const {
+    data: analyticsState,
+    isPending: analyticsPending,
+    isError: analyticsError,
+    refetch: refetchAnalytics,
+  } = useQuery({
+    queryKey: ['admin', 'usage-analytics'],
+    queryFn: adminApi.usageAnalytics,
+    retry: 1,
+  });
+
+  const analyticsMutation = useMutation({
+    mutationFn: (input: { enabled: boolean; version: number }) =>
+      adminApi.updateUsageAnalytics({
+        enabled: input.enabled,
+        version: input.version,
+      }),
+    onSuccess: (state: AdminUsageAnalytics) => {
+      toast({
+        title: state.enabled ? 'Usage analytics enabled' : 'Usage analytics disabled',
+        description: 'The change is live and has been audited.',
+        type: 'success',
+      });
+      setAnalyticsDraft(null);
+      setConfirmingAnalytics(false);
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'usage-analytics'] });
+      void queryClient.invalidateQueries({ queryKey: ['platform-features'] });
+      void queryClient.invalidateQueries({ queryKey: ['platform-status'] });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Could not update usage analytics',
+        description: errorDetail(error) ?? undefined,
+        type: 'error',
+      });
+      setConfirmingAnalytics(false);
+    },
+  });
+
   const flagByKey = new Map((data ?? []).map((flag) => [flag.key, flag]));
+
+  const filteredFlags = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (data ?? []).filter((flag) => {
+      const meta = FEATURE_META[flag.key];
+      const matchesQuery =
+        !query ||
+        featureLabel(flag.key).toLowerCase().includes(query) ||
+        flag.key.toLowerCase().includes(query) ||
+        (meta?.description ?? '').toLowerCase().includes(query);
+      const matchesStatus = !statusFilter || flag.status === statusFilter;
+      return matchesQuery && matchesStatus;
+    });
+  }, [data, search, statusFilter]);
 
   const updateMutation = useMutation({
     mutationFn: (input: { key: string; status: string; message: string | null }) =>
@@ -119,7 +120,7 @@ export default function AdminFeaturesPage() {
       }),
     onSuccess: (flag) => {
       toast({
-        title: `${FLAG_META[flag.key]?.label ?? flag.key} is now ${STATUS_LABELS[flag.status] ?? flag.status}`,
+        title: `${featureLabel(flag.key)} is now ${FEATURE_STATUS_LABELS[flag.status] ?? flag.status}`,
         description: 'The change is live and has been audited.',
         type: 'success',
       });
@@ -170,7 +171,7 @@ export default function AdminFeaturesPage() {
     <AdminPage
       eyebrow="System"
       title="Features"
-      description="Platform feature flags. Disabling a flag makes every non-admin request for that feature answer 503 with the message below. The feature stays visible in user navigation so users see a clear unavailable state — no redeploy, nothing deleted. Usage and Analytics also require the USAGE_ANALYTICS_ENABLED environment master switch. Admins always bypass flags; re-enabling restores the feature instantly with all stored data intact."
+      description="Turn user-facing features on or off without a redeploy. Admins always bypass flags; changes apply immediately and are written to the audit log."
     >
       {isError && !isPending && (
         <QueryError
@@ -181,9 +182,123 @@ export default function AdminFeaturesPage() {
 
       {isPending && !isError && <AdminLoading label="Loading feature flags…" />}
 
+      {analyticsError && !analyticsPending && (
+        <QueryError message="Could not load usage analytics state." onRetry={() => refetchAnalytics()} />
+      )}
+
+      {analyticsPending && !analyticsError && <AdminLoading label="Loading usage analytics…" />}
+
+      {analyticsState && (
+        <section className="rounded-xl border border-border bg-surface-1 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
+                <BarChart3 size={16} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-foreground">Usage & Analytics</h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Master switch for optional usage tracking and analytics collection across Revora. Disabling pauses new
+                  optional analytics events while preserving historical data; the Usage and Analytics page-access flags below
+                  remain independent.
+                </p>
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  usage_analytics
+                </p>
+              </div>
+            </div>
+            <Pill tone={analyticsState.enabled ? 'success' : 'muted'} dot>
+              {analyticsState.enabled ? 'Enabled' : 'Disabled'}
+            </Pill>
+          </div>
+
+          <div className="mt-3 text-xs text-muted-foreground">
+            {analyticsState.changed_at
+              ? `Changed ${formatDateTime(analyticsState.changed_at)}`
+              : 'Never changed'}
+            {' · v'}
+            {analyticsState.version}
+            {analyticsState.changed_at && (
+              <span className="ml-2 font-mono text-[11px]">by {analyticsState.changed_by ?? 'system'}</span>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <AdminSwitch
+              checked={analyticsDraft ?? analyticsState.enabled}
+              onChange={(next) => setAnalyticsDraft(next)}
+              title="Collect usage analytics"
+              description="Disabling pauses new optional analytics events while keeping historical data. The Usage and Analytics page-access flags below remain independent."
+            />
+          </div>
+
+          <div className="mt-4">
+            <AdminButton
+              variant="secondary"
+              disabled={
+                analyticsDraft === null ||
+                analyticsDraft === analyticsState.enabled ||
+                analyticsMutation.isPending
+              }
+              onClick={() => setConfirmingAnalytics(true)}
+            >
+              {analyticsMutation.isPending ? 'Saving…' : 'Save'}
+            </AdminButton>
+          </div>
+        </section>
+      )}
+
+      <details className="group rounded-xl border border-border bg-surface-1 p-5 open:pb-5">
+        <summary className="cursor-pointer list-none text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+          How feature flags affect users
+          <span className="ml-2 text-xs font-normal text-muted-foreground group-open:hidden">
+            Show
+          </span>
+        </summary>
+        <p className="mt-3 max-w-[75ch] text-sm leading-relaxed text-muted-foreground">
+          Disabling a flag returns 503 for non-admin requests with the message
+          below. The feature stays in navigation so users see a clear
+          unavailable state. Nothing is deleted, and re-enabling restores it
+          instantly. Maintenance, coming soon and under testing are separate
+          availability states for planned work.
+        </p>
+      </details>
+
+      <FilterBar
+        label="Feature flag filters"
+        actions={
+          <span className="text-xs text-muted-foreground">
+            {filteredFlags.length} of {data?.length ?? 0} flags
+          </span>
+        }
+      >
+        <TextFilter
+          value={search}
+          onChange={setSearch}
+          placeholder="Search flags…"
+          ariaLabel="Search feature flags"
+          className="w-full sm:w-64"
+        />
+        <SelectFilter
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          aria-label="Filter by status"
+          className="w-full sm:w-48"
+        >
+          <option value="">All statuses</option>
+          {FEATURE_STATUS_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {FEATURE_STATUS_LABELS[status]}
+            </option>
+          ))}
+        </SelectFilter>
+      </FilterBar>
+
       <div className="space-y-4">
-        {(data ?? []).map((flag) => {
-          const meta = FLAG_META[flag.key] ?? {
+        {filteredFlags.length === 0 ? (
+          <InlineEmpty>No feature flags match the current filters.</InlineEmpty>
+        ) : filteredFlags.map((flag) => {
+          const meta = FEATURE_META[flag.key] ?? {
             label: flag.key,
             description: 'Platform feature flag.',
           };
@@ -213,12 +328,36 @@ export default function AdminFeaturesPage() {
                     </p>
                   </div>
                 </div>
-                <Pill tone={STATUS_TONES[flag.status] ?? 'muted'} dot>
-                  {STATUS_LABELS[flag.status] ?? flag.status}
-                </Pill>
+                <div className="flex shrink-0 items-center gap-2">
+                  {dirty && (
+                    <Pill tone="warning" dot>
+                      Unsaved
+                    </Pill>
+                  )}
+                  <Pill
+                    tone={FEATURE_STATUS_TONES[flag.status] ?? 'muted'}
+                    dot
+                  >
+                    {FEATURE_STATUS_LABELS[flag.status] ?? flag.status}
+                  </Pill>
+                </div>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)_auto] lg:items-end">
+              <div className="mt-4 rounded-lg border border-border bg-surface-2/40 p-3">
+                <AdminSwitch
+                  checked={draft.status === 'enabled'}
+                  onChange={(next) =>
+                    setDraft(flag, {
+                      status: next ? 'enabled' : 'disabled',
+                    })
+                  }
+                  disabled={updateMutation.isPending}
+                  title="Enabled for users"
+                  description="On sets Enabled; off sets Disabled. Use Status below for maintenance, coming soon or under testing."
+                />
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)_auto] lg:items-end">
                 <Field label="Status" htmlFor={`status-${flag.key}`}>
                   <SelectFilter
                     id={`status-${flag.key}`}
@@ -228,15 +367,15 @@ export default function AdminFeaturesPage() {
                     }
                     className="w-full"
                   >
-                    {STATUS_OPTIONS.map((status) => (
+                    {FEATURE_STATUS_OPTIONS.map((status) => (
                       <option key={status} value={status}>
-                        {STATUS_LABELS[status]}
+                        {FEATURE_STATUS_LABELS[status]}
                       </option>
                     ))}
                   </SelectFilter>
                 </Field>
                 <Field
-                  label="User-facing message (optional — shown with the 503)"
+                  label="User-facing message (optional, shown with the 503)"
                   htmlFor={`message-${flag.key}`}
                 >
                   <input
@@ -256,7 +395,7 @@ export default function AdminFeaturesPage() {
                   />
                 </Field>
                 <AdminButton
-                  variant="secondary"
+                  variant={dirty ? 'primary' : 'secondary'}
                   disabled={!dirty || updateMutation.isPending}
                   onClick={() => setConfirmingKey(flag.key)}
                   className="w-full lg:w-auto"
@@ -273,7 +412,7 @@ export default function AdminFeaturesPage() {
         open={confirmingFlag !== null}
         title={
           confirmingFlag && confirmingDraft
-            ? `Update ${FLAG_META[confirmingFlag.key]?.label ?? confirmingFlag.key}`
+            ? `Update ${featureLabel(confirmingFlag.key)}`
             : 'Update feature flag'
         }
         description={
@@ -302,6 +441,36 @@ export default function AdminFeaturesPage() {
         <p className="text-sm text-muted-foreground">
           Effective immediately for all users and written to the audit log.
           Admins always bypass flags.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmingAnalytics}
+        title={
+          (analyticsDraft ?? analyticsState?.enabled)
+            ? 'Enable usage analytics'
+            : 'Disable usage analytics'
+        }
+        description={
+          analyticsDraft
+            ? 'Optional analytics collection and dashboards resume immediately.'
+            : 'New optional analytics collection pauses. Historical data is preserved and core functionality continues.'
+        }
+        confirmLabel={analyticsDraft ? 'Enable' : 'Disable'}
+        busy={analyticsMutation.isPending}
+        onConfirm={() => {
+          if (!analyticsState || analyticsDraft === null) return;
+          analyticsMutation.mutate({
+            enabled: analyticsDraft,
+            version: analyticsState.version,
+          });
+        }}
+        onCancel={() => {
+          if (!analyticsMutation.isPending) setConfirmingAnalytics(false);
+        }}
+      >
+        <p className="text-sm text-muted-foreground">
+          The change is applied immediately and written to the audit log.
         </p>
       </ConfirmDialog>
     </AdminPage>
