@@ -11,10 +11,10 @@ from sqlalchemy import select, text
 from app.ai.model_registry import canonical_registry
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, dispose_engine
 from app.models.sync_run import SYNC_STATUS_QUEUED, SYNC_STATUS_RUNNING, SyncRun
-from app.queue.worker import run_worker
 from app.queue.operation_worker import run_operation_worker
+from app.queue.worker import run_worker
 from app.services.admin_audit import admin_audit
 from app.services.admin_auth import get_admin_by_username, provision_admin
 from app.services.recovery import recover_stale_reviews_on_startup
@@ -170,6 +170,10 @@ async def lifespan(app: FastAPI):
                     await operation_worker_task
             except asyncio.CancelledError:
                 pass
+        try:
+            await dispose_engine()
+        except Exception:
+            logger.exception("Engine disposal during shutdown failed")
 
 
 app = FastAPI(

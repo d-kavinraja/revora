@@ -52,6 +52,20 @@ _sessionmaker = None
 _init_lock = asyncio.Lock()
 
 
+def _sanitize_db_error(exc: BaseException) -> str:
+    """Return a sanitized, bounded description of a DB error.
+
+    Never include connection URLs, credentials, or query parameters.
+    """
+    import re
+
+    text = f"{type(exc).__name__}: {exc}"
+    # Redact anything that looks like a connection string or secret.
+    text = re.sub(r"[A-Za-z]+://[^\s'\"]+", "[redacted-url]", text)
+    text = re.sub(r"password\s*=\s*\S+", "password=[redacted]", text, flags=re.IGNORECASE)
+    return text[:500]
+
+
 async def get_engine_and_sessionmaker():
     global _engine, _sessionmaker
     if _engine is not None:
@@ -63,22 +77,34 @@ async def get_engine_and_sessionmaker():
 
         db_url = getattr(settings, "DATABASE_URL", None)
         is_sqlite = False
+        is_production = getattr(settings, "APP_ENV", "development") not in (
+            "development",
+            "testing",
+        )
 
         if not db_url:
+            if is_production:
+                raise RuntimeError(
+                    "DATABASE_URL is required in production; refusing SQLite fallback."
+                )
             is_sqlite = True
             db_url = "sqlite+aiosqlite:///revora.db"
             logger.warning(
                 "DATABASE_URL is missing. Falling back to local SQLite database."
             )
         else:
-            # Check connectable in executor to prevent blocking
             loop = asyncio.get_running_loop()
             connectable = await loop.run_in_executor(None, is_db_connectable, db_url)
             if not connectable:
+                if is_production:
+                    raise RuntimeError(
+                        "Configured database is unreachable in production; "
+                        "refusing SQLite fallback."
+                    )
                 is_sqlite = True
                 db_url = "sqlite+aiosqlite:///revora.db"
                 logger.warning(
-                    f"Database at {settings.DATABASE_URL} is unreachable. Falling back to local SQLite database."
+                    "Configured database is unreachable. Falling back to local SQLite database."
                 )
 
         if is_sqlite:
@@ -89,7 +115,6 @@ async def get_engine_and_sessionmaker():
                 connect_args={"check_same_thread": False, "timeout": 30.0},
             )
 
-            # Register SQLite specific functions and WAL/busy_timeout settings
             @event.listens_for(engine.sync_engine, "connect")
             def configure_sqlite_connection(dbapi_connection, connection_record):
                 cursor = dbapi_connection.cursor()
@@ -101,17 +126,44 @@ async def get_engine_and_sessionmaker():
                     "now", 0, lambda: datetime.datetime.now(datetime.UTC).isoformat()
                 )
 
-            # Automatically perform Base.metadata.create_all for SQLite fallback
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Successfully created/verified SQLite database schema.")
         else:
-            engine = create_async_engine(
-                db_url,
-                echo=settings.APP_ENV == "development",
-                future=True,
-                pool_pre_ping=True,
-            )
+            engine_kwargs = {
+                "echo": settings.APP_ENV == "development",
+                "future": True,
+                "pool_pre_ping": True,
+            }
+            # Apply pool settings only when explicitly configured.
+            pool_size = getattr(settings, "DATABASE_POOL_SIZE", None)
+            max_overflow = getattr(settings, "DATABASE_MAX_OVERFLOW", None)
+            pool_timeout = getattr(settings, "DATABASE_POOL_TIMEOUT", None)
+            pool_recycle = getattr(settings, "DATABASE_POOL_RECYCLE", None)
+            if pool_size is not None:
+                engine_kwargs["pool_size"] = pool_size
+            if max_overflow is not None:
+                engine_kwargs["max_overflow"] = max_overflow
+            if pool_timeout is not None:
+                engine_kwargs["pool_timeout"] = pool_timeout
+            if pool_recycle is not None:
+                engine_kwargs["pool_recycle"] = pool_recycle
+
+            engine = create_async_engine(db_url, **engine_kwargs)
+
+            # Log topology without exposing credentials.
+            try:
+                parsed = urlparse(db_url.split("://", 1)[-1])
+                host = (parsed.hostname or "").lower()
+                if "pooler" in host or "pgbouncer" in host:
+                    topology = "pooled"
+                elif host:
+                    topology = "direct"
+                else:
+                    topology = "unknown"
+                logger.info("Database topology: %s", topology)
+            except Exception:
+                logger.info("Database topology: unknown")
 
         sessionmaker_local = async_sessionmaker(
             bind=engine,
@@ -125,14 +177,16 @@ async def get_engine_and_sessionmaker():
         return _engine, _sessionmaker
 
 
-class LazyAsyncSession:
-    """
-    Transparent session wrapper that performs lazy engine initialization
-    when the context manager is entered or when attributes are accessed.
+class DatabaseSession:
+    """Lazy, single-owner async database session context manager.
+
+    ``__aenter__`` returns a real ``AsyncSession``. ``__aexit__`` performs the
+    single cleanup (commit/rollback/close as decided by SQLAlchemy). Cleanup
+    errors are logged and never mask an in-flight application exception.
     """
 
     def __init__(self):
-        self._session = None
+        self._session: AsyncSession | None = None
 
     async def _get_session(self) -> AsyncSession:
         if self._session is None:
@@ -140,34 +194,51 @@ class LazyAsyncSession:
             self._session = sessionmaker_local()
         return self._session
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> AsyncSession:
         session = await self._get_session()
         await session.__aenter__()
-        return self
+        return session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._session is not None:
-            await self._session.__aexit__(exc_type, exc_val, exc_tb)
-
-    def __getattr__(self, name):
         if self._session is None:
-            raise RuntimeError(
-                f"Session not initialized. Cannot access attribute '{name}' before initialization."
+            return False
+        session = self._session
+        self._session = None
+        try:
+            await session.__aexit__(exc_type, exc_val, exc_tb)
+        except Exception as cleanup_exc:
+            logger.warning(
+                "Database session cleanup failed: %s",
+                _sanitize_db_error(cleanup_exc),
+                exc_info=True,
             )
-        return getattr(self._session, name)
+        return False
 
 
-def AsyncSessionLocal() -> LazyAsyncSession:
-    return LazyAsyncSession()
+def AsyncSessionLocal() -> DatabaseSession:
+    return DatabaseSession()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    FastAPI dependency that provides an async database session per request.
-    Closes the session when the request completes.
+    """FastAPI dependency that provides one AsyncSession per request.
+
+    Cleanup is owned exclusively by ``DatabaseSession`` (via ``async with``).
     """
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
+
+
+async def dispose_engine() -> None:
+    """Dispose the global engine (idempotent)."""
+    global _engine, _sessionmaker
+    async with _init_lock:
+        if _engine is not None:
+            try:
+                await _engine.dispose()
+            except Exception as exc:
+                logger.warning(
+                    "Engine disposal failed: %s", _sanitize_db_error(exc), exc_info=True
+                )
+            finally:
+                _engine = None
+                _sessionmaker = None

@@ -44,10 +44,11 @@ class ReviewLifecycleService:
     """Manages review lifecycle actions."""
 
     async def _validate_and_get_pr_data(
-        self, db: AsyncSession, review: Review, action: str
+        self, db: AsyncSession, review: Review, action: str, skip_github: bool = False
     ) -> tuple[PullRequest, Repository, Installation]:
         """Validate action against the matrix, fetch PR/repo/installation,
-        check real-time PR state from GitHub, and return (pr, repo, installation).
+        optionally check real-time PR state from GitHub, and return
+        (pr, repo, installation).
 
         Raises ValueError on any validation failure.
         """
@@ -103,7 +104,7 @@ class ReviewLifecycleService:
             raise ValueError("GitHub App installation not found.")
 
         # Real-time PR state check from GitHub
-        if action != "cancel":
+        if action != "cancel" and not skip_github:
             gh_pr = await github_service.get_pull_request(
                 repo.full_name, pr.pr_number, installation.installation_id
             )
@@ -306,6 +307,38 @@ class ReviewLifecycleService:
         if not review:
             raise ValueError("Review not found.")
 
+        # Pre-check PR state via GitHub BEFORE taking the DB row lock, so the
+        # external HTTP call never holds a PostgreSQL transaction/lock open.
+        if action != "cancel":
+            pr_pre_result = await db.execute(
+                select(PullRequest).where(PullRequest.id == review.pr_id)
+            )
+            pr_pre = pr_pre_result.scalars().first()
+            repo_pre = None
+            inst_pre = None
+            if pr_pre is not None:
+                repo_pre_result = await db.execute(
+                    select(Repository).where(Repository.id == pr_pre.repo_id)
+                )
+                repo_pre = repo_pre_result.scalars().first()
+                if repo_pre is not None:
+                    inst_pre_result = await db.execute(
+                        select(Installation).where(
+                            Installation.id == repo_pre.installation_id
+                        )
+                    )
+                    inst_pre = inst_pre_result.scalars().first()
+            if pr_pre is not None and repo_pre is not None and inst_pre is not None:
+                gh_pr = await github_service.get_pull_request(
+                    repo_pre.full_name, pr_pre.pr_number, inst_pre.installation_id
+                )
+                gh_state = gh_pr.get("state", "unknown")
+                if gh_state not in ("unknown", "open"):
+                    raise ValueError(
+                        f"Cannot {action} review on a {gh_state} pull request. "
+                        "Lifecycle actions are only allowed on open pull requests."
+                    )
+
         # Lock the PR row to serialize concurrent lifecycle actions for the same PR
         pr_lock = await db.execute(
             select(PullRequest).where(PullRequest.id == review.pr_id).with_for_update()
@@ -313,7 +346,7 @@ class ReviewLifecycleService:
         pr_lock.fetchone()
 
         pr, repo, installation = await self._validate_and_get_pr_data(
-            db, review, action
+            db, review, action, skip_github=True
         )
 
         settings = repo.settings or {}

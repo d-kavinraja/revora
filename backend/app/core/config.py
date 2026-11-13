@@ -42,6 +42,21 @@ class Settings(BaseSettings):
     # Database - REQUIRED
     DATABASE_URL: str = Field(..., description="PostgreSQL async connection string")
 
+    # Database pool (optional; only applied when set)
+    DATABASE_POOL_SIZE: int | None = Field(
+        default=None, description="SQLAlchemy pool size (None = driver default)"
+    )
+    DATABASE_MAX_OVERFLOW: int | None = Field(
+        default=None, description="SQLAlchemy max overflow (None = driver default)"
+    )
+    DATABASE_POOL_TIMEOUT: float | None = Field(
+        default=None, description="SQLAlchemy pool checkout timeout seconds (None = default)"
+    )
+    DATABASE_POOL_RECYCLE: int | None = Field(
+        default=None,
+        description="SQLAlchemy pool recycle seconds (None = default; set e.g. 300 for Neon)",
+    )
+
     # Security
     ALLOW_HTTP_SELF_HOSTED: bool = Field(
         default=False,

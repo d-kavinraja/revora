@@ -303,3 +303,62 @@ async def test_invalidate_pr_cache():
 
     await github_service.invalidate_pr_cache("test-org/repo", 42)
     assert await memory_cache.get(cache_key) is None
+
+
+@pytest.mark.asyncio
+async def test_validate_skip_github_does_not_call_github(test_db, mock_user, monkeypatch):
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("GitHub should not be called when skip_github=True")
+
+    monkeypatch.setattr("app.services.review_lifecycle.github_service.get_pull_request", fail_if_called)
+
+    from app.models.github import Installation, PullRequest, Repository
+    from app.models.review import Review
+
+    inst = Installation(
+        installation_id=777001,
+        account_id=997,
+        account_login="test-org",
+        account_type="Organization",
+        user_id=mock_user.id,
+        repository_selection="all",
+        permissions={},
+        events={},
+    )
+    test_db.add(inst)
+    await test_db.flush()
+
+    repo = Repository(
+        github_id=777,
+        name="repo",
+        full_name="test-org/repo",
+        is_private=True,
+        installation_id=inst.id,
+    )
+    test_db.add(repo)
+    await test_db.flush()
+
+    pr = PullRequest(
+        repo_id=repo.id,
+        pr_number=7,
+        title="Test PR",
+        author="test-org",
+        head_sha="b" * 40,
+        base_branch="main",
+        head_branch="feature",
+        status="open",
+    )
+    test_db.add(pr)
+    await test_db.flush()
+
+    review = Review(pr_id=pr.id, status="failed")
+    test_db.add(review)
+    await test_db.commit()
+    await test_db.refresh(review)
+
+    pr_out, repo_out, inst_out = await review_lifecycle_service._validate_and_get_pr_data(
+        test_db, review, "retry", skip_github=True
+    )
+    assert pr_out.id == pr.id
+    assert repo_out.id == repo.id
+    assert inst_out.id == inst.id
