@@ -5,6 +5,7 @@ import { api, Review } from '@/lib/api';
 import { GitBranchIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
 import { CalendarIcon, ChevronDown, FolderGit2, GitPullRequest, RotateCcw, LockIcon } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ReviewItem } from '@/components/shared/review-item';
@@ -273,6 +274,20 @@ export default function ReviewsPage() {
       </span>
     );
   };
+
+  const reviewsFeatureState = featureState(platformFeatures, 'reviews');
+  if (reviewsFeatureState.status !== 'enabled') {
+    return (
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+        <FeatureUnavailable
+          status={reviewsFeatureState.status}
+          message={reviewsFeatureState.message}
+          title="Reviews is unavailable"
+          variant="page"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
