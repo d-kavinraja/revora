@@ -21,6 +21,7 @@ from app.api.v1.endpoints.admin import (
     repositories,
     reviews,
     users,
+    usage_analytics,
 )
 
 router = APIRouter()
@@ -35,5 +36,6 @@ router.include_router(models.router, tags=["admin"])
 router.include_router(features.router, tags=["admin"])
 router.include_router(installations.router, tags=["admin"])
 router.include_router(maintenance.router, tags=["admin"])
+router.include_router(usage_analytics.router, tags=["admin"])
 router.include_router(announcements.router, tags=["admin"])
 router.include_router(audit.router, tags=["admin"])

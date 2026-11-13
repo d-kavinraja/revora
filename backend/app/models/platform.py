@@ -42,6 +42,7 @@ FEATURE_FLAG_KEYS = (
     "api_keys_add",
     "routing_mapping",
     "review_initiation",
+    "reviews",
     "usage",
     "analytics",
     "guide",

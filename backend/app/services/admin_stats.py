@@ -19,7 +19,7 @@ from sqlalchemy import String, and_, case, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.api_keys import sanitize_error_message
-from app.core.config import settings as app_config
+from app.services.platform_settings import platform_settings_service
 from app.models.api_key import ApiKey
 from app.models.audit import AuditLog
 from app.models.execution import ReviewExecution
@@ -446,6 +446,8 @@ async def overview(
             order_by=ProviderHealth.created_at.desc(),
         )
         .label("rn"),
+    ).where(
+        ProviderHealth.provider.in_(select(ProviderRegistry.slug))
     ).subquery()
     health_rows = (
         await db.execute(
@@ -497,7 +499,7 @@ async def overview(
     ).all()
     features = {key: status for key, status in feature_rows}
 
-    if app_config.USAGE_ANALYTICS_ENABLED:
+    if await platform_settings_service.is_usage_analytics_enabled(db):
         tokens_total, cost_total = (
             await db.execute(
                 select(

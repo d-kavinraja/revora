@@ -18,9 +18,8 @@ Covers:
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from app.api.v1.endpoints import usage as usage_module
 from app.core.config import settings
 from app.core.security import encryption_service
 from app.middleware.rate_limit import limiter
@@ -311,11 +310,10 @@ async def test_usage_flag_honored_while_env_enabled(
 
 
 async def test_usage_env_gate_contract_unchanged(client, test_db, monkeypatch):
-    """Env off ⇒ the pre-phase-6 detail payload/message, even with flag on."""
+    """Master off no longer blocks page access; only the usage flag does."""
     monkeypatch.setattr(settings, "USAGE_ANALYTICS_ENABLED", False)
     response = client.get("/api/v1/platform-usage/summary")
-    assert response.status_code == 503
-    assert response.json()["detail"]["status"] == "disabled"
+    assert response.status_code == 200
 
 
 async def test_analytics_flag_honored_while_env_enabled(
@@ -338,10 +336,7 @@ async def test_usage_env_disabled_is_master_over_enabled_flag(
     monkeypatch.setattr(settings, "USAGE_ANALYTICS_ENABLED", False)
     await _set_flag(test_db, "usage", "enabled", None)
     response = client.get("/api/v1/platform-usage/summary")
-    assert response.status_code == 503
-    assert response.json()["detail"]["status"] == "disabled"
-    # Sanity: the module used by the route is the patched settings object.
-    assert usage_module.settings.USAGE_ANALYTICS_ENABLED is False
+    assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -356,8 +351,8 @@ def test_public_features_default_shape(anon_client):
     assert set(body.keys()) == set(FEATURE_FLAG_KEYS)
     for key in FEATURE_FLAG_KEYS:
         if key in ("usage", "analytics"):
-            assert body[key]["status"] == "disabled"
-            assert body[key]["message"] is not None
+            assert body[key]["status"] == "enabled"
+            assert body[key]["message"] is None
         else:
             assert body[key]["status"] == "enabled"
             assert body[key]["message"] is None
@@ -600,3 +595,53 @@ async def test_model_override_filters_listing_routing_and_execution(
         "gpt-4o",
     ]
     assert len(await model_router.route(test_db, mock_user.id, "code_review")) == 1
+
+# ---------------------------------------------------------------------------
+# `reviews` flag initialization / persistence (zero-state parity)
+# ---------------------------------------------------------------------------
+
+
+async def test_reviews_flag_defaults_enabled_without_row(admin_client, test_db):
+    """A missing `reviews` row must behave exactly like an enabled seed row."""
+    await test_db.execute(delete(FeatureFlag).where(FeatureFlag.key == "reviews"))
+    await test_db.commit()
+    platform_settings_service.clear_cache()
+
+    rows = admin_client.get("/api/v1/admin/features").json()
+    reviews = next(row for row in rows if row["key"] == "reviews")
+    assert reviews == {"key": "reviews", "status": "enabled", "message": None}
+
+
+async def test_reviews_flag_admin_change_persists_across_cache_restart(
+    admin_client, test_db
+):
+    """Admin changes persist in the DB and survive an in-process cache reset."""
+    update = admin_client.put(
+        "/api/v1/admin/features/reviews",
+        json={"status": "disabled", "message": "Reviews hidden"},
+    )
+    assert update.status_code == 200, update.text
+    assert update.json() == {
+        "key": "reviews",
+        "status": "disabled",
+        "message": "Reviews hidden",
+    }
+
+    persisted = (
+        await test_db.execute(
+            select(FeatureFlag).where(FeatureFlag.key == "reviews")
+        )
+    ).scalars().first()
+    assert persisted is not None
+    assert persisted.status == "disabled"
+    assert persisted.message == "Reviews hidden"
+
+    # Simulate a backend restart: the TTL cache is empty, the DB row remains.
+    platform_settings_service.clear_cache()
+    rows = admin_client.get("/api/v1/admin/features").json()
+    reviews = next(row for row in rows if row["key"] == "reviews")
+    assert reviews == {
+        "key": "reviews",
+        "status": "disabled",
+        "message": "Reviews hidden",
+    }

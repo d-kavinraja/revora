@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.services.platform_settings import platform_settings_service
 from app.core.deps import get_current_user
 from app.core.deps_flags import require_feature
 from app.db.session import get_db
@@ -140,7 +140,7 @@ async def execute_llm(
             api_key_id=api_key_id,
         )
 
-        if settings.USAGE_ANALYTICS_ENABLED:
+        if await platform_settings_service.is_usage_analytics_enabled(db):
             # Record token usage
             if result.input_tokens > 0 or result.output_tokens > 0:
                 await token_manager.record_usage(
@@ -201,7 +201,7 @@ async def execute_llm(
         logger_safe.warning(
             "LLM execute failed type=%s exc=%s", error_type, type(e).__name__
         )
-        if settings.USAGE_ANALYTICS_ENABLED:
+        if await platform_settings_service.is_usage_analytics_enabled(db):
             # Log failed request
             await usage_tracker.log_request(
                 db=db,

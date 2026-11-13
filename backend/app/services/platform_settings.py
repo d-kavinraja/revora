@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.platform import (
     FEATURE_FLAG_KEYS,
@@ -35,7 +36,15 @@ from app.models.platform import (
 logger = logging.getLogger(__name__)
 
 MAINTENANCE_KEY = "maintenance"
+USAGE_ANALYTICS_KEY = "usage_analytics"
 CACHE_TTL_SECONDS = 5.0
+
+DEFAULT_USAGE_ANALYTICS: dict[str, Any] = {
+    "enabled": None,  # None => fall back to env default
+    "changed_by": None,
+    "changed_at": None,
+    "version": 0,
+}
 
 #: Full internal state shape (§12.1). `reason` and `changed_by` are internal;
 #: the public payload is built via `public_state`.
@@ -89,6 +98,19 @@ def _normalize(raw: dict[str, Any] | None, version: int = 0) -> dict[str, Any]:
     return value
 
 
+def _normalize_ua(raw: dict[str, Any] | None, version: int = 0) -> dict[str, Any]:
+    value = dict(DEFAULT_USAGE_ANALYTICS)
+    if isinstance(raw, dict):
+        if "enabled" in raw and raw.get("enabled") is not None:
+            value["enabled"] = bool(raw.get("enabled"))
+        for key in ("changed_by", "changed_at"):
+            item = raw.get(key)
+            if item is not None:
+                value[key] = str(item)
+    value["version"] = int(version or 0)
+    return value
+
+
 class PlatformSettingsService:
     """TTL-cached reader / write-through writer for platform settings."""
 
@@ -98,6 +120,9 @@ class PlatformSettingsService:
         self._cache_at: float = 0.0
         self._flags_cache: dict[str, dict[str, Any]] | None = None
         self._flags_cache_at: float = 0.0
+        self._ua_cache: dict[str, Any] | None = None
+        self._ua_cache_at: float = 0.0
+        self._ua_last_known: dict[str, Any] | None = None
 
     # -- cache plumbing ----------------------------------------------------
 
@@ -106,6 +131,8 @@ class PlatformSettingsService:
         self._cache_at = 0.0
         self._flags_cache = None
         self._flags_cache_at = 0.0
+        self._ua_cache = None
+        self._ua_cache_at = 0.0
 
     def _cached(self) -> dict[str, Any] | None:
         if self._cache is None:
@@ -129,6 +156,17 @@ class PlatformSettingsService:
         self._flags_cache = {key: dict(item) for key, item in value.items()}
         self._flags_cache_at = time.monotonic()
 
+    def _cached_ua(self) -> dict[str, Any] | None:
+        if self._ua_cache is None:
+            return None
+        if (time.monotonic() - self._ua_cache_at) >= CACHE_TTL_SECONDS:
+            return None
+        return self._ua_cache
+
+    def _store_ua(self, value: dict[str, Any]) -> None:
+        self._ua_cache = dict(value)
+        self._ua_cache_at = time.monotonic()
+        self._ua_last_known = dict(value)
     # -- reads -------------------------------------------------------------
 
     async def _read_row(self, db: AsyncSession) -> tuple[dict[str, Any] | None, int]:
@@ -246,6 +284,110 @@ class PlatformSettingsService:
     async def is_feature_enabled(self, key: str, db: AsyncSession | None = None) -> bool:
         flag = await self.get_flag(key, db)
         return flag.get("status") == "enabled"
+
+    # -- usage analytics (master switch) -----------------------------------
+    async def _read_ua_row(self, db: AsyncSession) -> tuple[dict[str, Any] | None, int]:
+        result = await db.execute(
+            select(PlatformSetting).where(PlatformSetting.key == USAGE_ANALYTICS_KEY)
+        )
+        row = result.scalars().first()
+        if row is None:
+            return None, 0
+        raw = row.value if isinstance(row.value, dict) else None
+        return raw, int(row.version or 1)
+
+    async def get_usage_analytics(
+        self, db: AsyncSession | None = None, *, force: bool = False
+    ) -> dict[str, Any]:
+        if not force:
+            cached = self._cached_ua()
+            if cached is not None:
+                return dict(cached)
+
+        try:
+            if db is not None:
+                raw, version = await self._read_ua_row(db)
+            elif self.db_factory is not None:
+                async with self.db_factory() as session:
+                    raw, version = await self._read_ua_row(session)
+            else:
+                raw, version = None, 0
+        except Exception:
+            logger.warning(
+                "Usage analytics state read failed; using fallback", exc_info=True
+            )
+            if db is not None:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+            if self._ua_last_known is not None:
+                return dict(self._ua_last_known)
+            value = _normalize_ua(None, 0)
+            value["enabled"] = bool(settings.USAGE_ANALYTICS_ENABLED)
+            return value
+
+        value = _normalize_ua(raw, version)
+        if value.get("enabled") is None:
+            value["enabled"] = bool(settings.USAGE_ANALYTICS_ENABLED)
+        self._store_ua(value)
+        return dict(value)
+
+    async def is_usage_analytics_enabled(
+        self, db: AsyncSession | None = None
+    ) -> bool:
+        state = await self.get_usage_analytics(db)
+        enabled = state.get("enabled")
+        if enabled is None:
+            enabled = settings.USAGE_ANALYTICS_ENABLED
+        return bool(enabled)
+
+    async def set_usage_analytics(
+        self,
+        db: AsyncSession,
+        *,
+        enabled: bool,
+        admin_id: Any = None,
+        expected_version: int | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any], int | None]:
+        await db.flush()
+        result = await db.execute(
+            select(PlatformSetting).where(PlatformSetting.key == USAGE_ANALYTICS_KEY)
+        )
+        row = result.scalars().first()
+        row_version = int(row.version or 1) if row is not None else 0
+        prior_raw = (
+            row.value if row is not None and isinstance(row.value, dict) else None
+        )
+        prior = _normalize_ua(prior_raw, row_version)
+        if prior.get("enabled") is None:
+            prior["enabled"] = bool(settings.USAGE_ANALYTICS_ENABLED)
+
+        if expected_version is not None and int(expected_version) != row_version:
+            return dict(prior), dict(prior), row_version
+
+        new_value = dict(prior)
+        new_value["enabled"] = bool(enabled)
+        new_value["changed_at"] = datetime.now(UTC).isoformat()
+        new_value["changed_by"] = str(admin_id) if admin_id is not None else "system"
+        new_value["version"] = row_version + 1
+
+        if row is None:
+            row = PlatformSetting(
+                key=USAGE_ANALYTICS_KEY,
+                value=new_value,
+                updated_by=admin_id,
+                version=row_version + 1,
+            )
+            db.add(row)
+        else:
+            row.value = new_value
+            row.updated_by = admin_id
+            row.version = row_version + 1
+            db.add(row)
+
+        self._store_ua(new_value)
+        return dict(new_value), prior, None
 
     # -- writes ------------------------------------------------------------
 

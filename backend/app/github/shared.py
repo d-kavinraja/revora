@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.core.config import settings
+from app.services.platform_settings import platform_settings_service
 from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
@@ -405,9 +405,9 @@ async def record_usage_stats(
     api_key_id: str | None = None,
 ):
     """Record token usage for analytics and usage dashboards."""
-    if not settings.USAGE_ANALYTICS_ENABLED:
+    if not await platform_settings_service.is_usage_analytics_enabled():
         logger.debug(
-            "[usage] USAGE_ANALYTICS_ENABLED=False, skipping record_usage_stats"
+            "[usage] usage analytics disabled, skipping record_usage_stats"
         )
         return
     try:

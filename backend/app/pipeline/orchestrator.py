@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.ai.git_utils import GitService
-from app.core.config import settings
+from app.services.platform_settings import platform_settings_service
 from app.db.session import AsyncSessionLocal
 from app.github.client import github_client
 from app.github_review.generator import github_review_generator
@@ -1077,7 +1077,7 @@ class ReviewPipeline:
             logger.error(f"Failed to save review status: {e}")
 
         # --- 2. Record usage in a FRESH session ---
-        if settings.USAGE_ANALYTICS_ENABLED:
+        if await platform_settings_service.is_usage_analytics_enabled():
             try:
                 import uuid as _uuid
 

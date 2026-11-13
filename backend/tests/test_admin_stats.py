@@ -460,6 +460,41 @@ async def test_b11_overview_widgets_match_seed(test_db, seeded):
     assert data["maintenance"]["enabled"] is False
 
 
+async def test_b11_provider_health_ignores_unregistered_slugs(test_db, seeded):
+    test_db.add(
+        ProviderRegistry(
+            name="nvidia",
+            display_name="NVIDIA NIM",
+            slug="nvidia",
+            litellm_provider="nvidia_nim",
+            default_model="meta/llama-3.1-70b-instruct",
+            is_enabled=True,
+            status="available",
+        )
+    )
+    test_db.add_all(
+        [
+            ProviderHealth(
+                provider="nvidia",
+                status="healthy",
+                success_rate=1.0,
+                created_at=INSIDE,
+            ),
+            ProviderHealth(
+                provider="nvidia_nim",
+                status="healthy",
+                success_rate=1.0,
+                created_at=INSIDE,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    data = await _overview(test_db)
+    providers = {row["provider"] for row in data["provider_health"]}
+    assert "nvidia" in providers
+    assert "nvidia_nim" not in providers
+
 # ---------------------------------------------------------------------------
 # B13 — unrecorded fields are marked, never fabricated
 # ---------------------------------------------------------------------------
@@ -477,10 +512,10 @@ async def test_b13_unrecorded_metrics_marked_never_zero(test_db, seeded):
         assert data["active_users"][key]["value"] is None
         assert "not yet recorded" in data["active_users"][key]["reason"]
 
-    assert data["token_usage"]["available"] is False
-    assert data["token_usage"]["value"] is None
-    assert "USAGE_ANALYTICS_ENABLED" in data["token_usage"]["reason"]
-    assert data["cost_totals"]["available"] is False
+    assert data["token_usage"]["available"] is True
+    assert data["token_usage"]["value"] == 0
+    assert data["cost_totals"]["available"] is True
+    assert data["cost_totals"]["value"] == 0.0
 
     empty = await _overview(
         test_db,

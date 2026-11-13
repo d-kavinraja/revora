@@ -503,6 +503,22 @@ class AdminFeatureFlagUpdate(BaseModel):
         value = value.strip()
         return value or None
 
+# ---------------------------------------------------------------------------
+# Usage analytics master switch
+# ---------------------------------------------------------------------------
+
+
+class AdminUsageAnalyticsRead(BaseModel):
+    enabled: bool
+    changed_by: str | None = None
+    changed_at: str | None = None
+    version: int = 0
+
+
+class AdminUsageAnalyticsUpdate(BaseModel):
+    enabled: bool
+    version: int | None = None
+
 
 # ---------------------------------------------------------------------------
 # Model overrides (§11.2)

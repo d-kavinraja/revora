@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import get_db
 from app.models.platform import FeatureFlag
 from app.models.provider import ProviderRegistry
@@ -25,6 +24,12 @@ from app.services.announcements import public_announcements
 from app.services.platform_settings import platform_settings_service, public_state
 
 router = APIRouter()
+
+
+@router.get("/usage-analytics")
+async def get_usage_analytics_status(db: AsyncSession = Depends(get_db)):
+    enabled = await platform_settings_service.is_usage_analytics_enabled(db)
+    return {"enabled": enabled}
 
 
 @router.get("/announcements", response_model=list[PublicAnnouncementRead])
@@ -62,16 +67,9 @@ async def get_platform_features(db: AsyncSession = Depends(get_db)):
     flags = await platform_settings_service.get_flags(db)
     result: dict[str, PublicFeatureState] = {}
     for key, item in flags.items():
-        status = item["status"]
-        message = item.get("message")
-        if key in ("usage", "analytics") and not settings.USAGE_ANALYTICS_ENABLED:
-            status = "disabled"
-            message = (
-                "Usage analytics are temporarily disabled while we redesign "
-                "model-level pricing. No data has been lost; this feature will "
-                "be re-enabled in a future release."
-            )
-        result[key] = PublicFeatureState(status=status, message=message)
+        result[key] = PublicFeatureState(
+            status=item["status"], message=item.get("message")
+        )
     return result
 
 

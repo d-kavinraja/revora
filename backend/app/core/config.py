@@ -72,11 +72,12 @@ class Settings(BaseSettings):
     )
 
     # Usage & Analytics
-    # Temporarily disabled while redesigning model-level pricing.
-    # When False: recording is skipped, API returns disabled response.
+    # Master flag for usage tracking and analytics subsystem.
+    # Default True; admins may disable at runtime via the Admin Portal
+    # (persisted in platform_settings['usage_analytics']).
     USAGE_ANALYTICS_ENABLED: bool = Field(
-        default=False,
-        description="Master flag for usage tracking and analytics subsystem",
+        default=True,
+        description="Default master flag for usage tracking and analytics subsystem",
     )
 
     # Rate Limiting
