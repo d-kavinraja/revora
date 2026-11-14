@@ -1,3 +1,5 @@
+import logging
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -5,6 +7,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
@@ -67,11 +71,11 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
     attacker cannot attach the Authorization header cross-site).
     """
 
-    SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+    SAFE_METHODS: ClassVar[set[str]] = {"GET", "HEAD", "OPTIONS"}
     # Webhooks are authenticated by HMAC signature, not cookies — CSRF
     # cannot apply (an attacker cannot forge the signature), and GitHub's
     # Origin header is foreign by nature, so they must be exempt.
-    EXEMPT_PREFIXES = ("/api/v1/webhooks/", "/webhooks/")
+    EXEMPT_PREFIXES: ClassVar[tuple[str, ...]] = ("/api/v1/webhooks/", "/webhooks/")
 
     async def dispatch(self, request: Request, call_next):
         if request.method in self.SAFE_METHODS:
@@ -87,6 +91,11 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
             self_host = request.headers.get("host", "")
             origin_netloc = urlparse(origin).netloc
             if origin_netloc not in allowed and origin_netloc != self_host:
+                logger.warning(
+                    "origin check rejected origin=%s (allowed=%s)",
+                    origin_netloc,
+                    sorted(allowed),
+                )
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Cross-origin request blocked."},

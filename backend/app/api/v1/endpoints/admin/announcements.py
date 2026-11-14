@@ -8,6 +8,7 @@ announcements never change access controls, feature flags or maintenance
 (§12.5 separation) — they are informational copy only.
 """
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -32,17 +33,27 @@ from app.services.admin_audit import admin_audit
 from app.services.announcements import (
     MAX_MESSAGE_LEN,
     MAX_TITLE_LEN,
+    VERSION_BUMP_FIELDS,
     AnnouncementValidationError,
     sanitize_text,
+    validate_audience,
+    validate_display_policy,
     validate_link,
     validate_schedule,
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 #: Fields where an explicit `null` means "clear" (everything else ignores
 #: `null` so a partial update can never blank a required column).
-_CLEARABLE = {"starts_at", "ends_at", "link_url", "link_label"}
+_CLEARABLE = {
+    "starts_at",
+    "ends_at",
+    "link_url",
+    "link_label",
+    "recur_interval_minutes",
+}
 
 
 def _serialize(row: Announcement) -> AdminAnnouncementRead:
@@ -58,6 +69,10 @@ def _serialize(row: Announcement) -> AdminAnnouncementRead:
         link_label=row.link_label,
         is_enabled=row.is_enabled,
         is_dismissible=row.is_dismissible,
+        version=row.version,
+        display_policy=row.display_policy,
+        recur_interval_minutes=row.recur_interval_minutes,
+        audience=row.audience,
         created_by=row.created_by,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -76,16 +91,22 @@ async def list_announcements(
     current_admin: AdminUser = Depends(get_current_admin),
 ):
     """Every announcement including drafts/expired (admin only, newest first)."""
-    rows = (
-        (
-            await db.execute(
-                select(Announcement).order_by(Announcement.created_at.desc())
+    try:
+        rows = (
+            (
+                await db.execute(
+                    select(Announcement).order_by(Announcement.created_at.desc())
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    return [_serialize(row) for row in rows]
+        return [_serialize(row) for row in rows]
+    except Exception:
+        # Never expose driver details to callers; the stack trace stays in
+        # server logs and contains no credentials or request payloads.
+        logger.exception("Failed to load admin announcements")
+        raise
 
 
 @router.post(
@@ -117,6 +138,12 @@ async def create_announcement(
         )
         starts_at, ends_at = validate_schedule(data.starts_at, data.ends_at)
         link_url, link_label = validate_link(data.link_url, data.link_label)
+        display_policy, recur_interval_minutes = validate_display_policy(
+            data.display_policy,
+            data.recur_interval_minutes,
+            interval_provided=data.recur_interval_minutes is not None,
+        )
+        audience = validate_audience(data.audience)
     except AnnouncementValidationError as exc:
         raise _bad_request(exc)
 
@@ -133,6 +160,10 @@ async def create_announcement(
         is_dismissible=(
             True if data.is_dismissible is None else data.is_dismissible
         ),
+        version=1,
+        display_policy=display_policy,
+        recur_interval_minutes=recur_interval_minutes,
+        audience=audience,
         created_by=current_admin.id,
     )
     db.add(row)
@@ -216,12 +247,49 @@ async def update_announcement(
                 effective.get("link_url", row.link_url),
                 effective.get("link_label", row.link_label),
             )
+        if "display_policy" in effective or "recur_interval_minutes" in effective:
+            (
+                effective["display_policy"],
+                effective["recur_interval_minutes"],
+            ) = validate_display_policy(
+                effective.get("display_policy"),
+                effective.get("recur_interval_minutes"),
+                previous_policy=row.display_policy,
+                previous_interval=row.recur_interval_minutes,
+                interval_provided="recur_interval_minutes" in effective,
+            )
+        if "audience" in effective:
+            effective["audience"] = validate_audience(effective["audience"])
     except AnnouncementValidationError as exc:
         raise _bad_request(exc)
 
     prior_state = row.state
+    prior_version = row.version
+    prior_enabled = row.is_enabled
+    # Snapshot the current values of every version-bumping field so a real
+    # content change can be detected after the patch is applied.
+    prior_values = {key: getattr(row, key) for key in VERSION_BUMP_FIELDS}
+
     for key, value in effective.items():
         setattr(row, key, value)
+
+    # A published-content change (or a fresh publish) starts a new version:
+    # dismissal state is keyed by version, so everyone who dismissed the
+    # previous version becomes eligible again. Re-enabling an announcement
+    # also starts a new version so previous dismissals no longer apply.
+    content_changed = any(
+        key in effective and getattr(row, key) != prior_values[key]
+        for key in VERSION_BUMP_FIELDS
+    )
+    reenabled = (
+        "is_enabled" in effective
+        and effective["is_enabled"] is True
+        and not prior_enabled
+    )
+    if content_changed or reenabled or (
+        "state" in effective and row.state == "published" and prior_state != "published"
+    ):
+        row.version = prior_version + 1
 
     if "state" in effective and row.state != prior_state:
         action = (
@@ -243,6 +311,7 @@ async def update_announcement(
             "title": row.title,
             "prior_state": prior_state,
             "new_state": row.state,
+            "version": row.version,
             "changed": sorted(effective.keys()),
         },
         commit=False,

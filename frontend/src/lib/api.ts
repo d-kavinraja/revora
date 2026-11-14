@@ -67,6 +67,39 @@ apiClient.interceptors.request.use((config) => {
 });
 
 /**
+ * Anonymous device id — scopes announcement dismissals to one browser.
+ *
+ * Not a credential: it grants no access, it only keeps one user's
+ * dismissal from hiding an announcement for someone else on a shared
+ * device. Signed-in users are tracked by their account instead.
+ */
+const DEVICE_ID_STORAGE_KEY = 'revora.device-id';
+
+export function readDeviceId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const generated =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return null;
+  }
+}
+
+apiClient.interceptors.request.use((config) => {
+  const deviceId = readDeviceId();
+  if (deviceId) {
+    config.headers['X-Announcement-Device-Id'] = deviceId;
+  }
+  return config;
+});
+
+/**
  * Restore the session after a full page reload. The JWT lives only in the
  * HttpOnly cookie (never localStorage), so the store starts with no token;
  * `/auth/me` proves the cookie is valid and repopulates the non-secret
@@ -838,6 +871,16 @@ export const api = {
   // Phase 7 — public announcement feed (published + active only).
   getAnnouncements: () =>
     apiClient.get<PublicAnnouncementRead[]>('/platform/announcements').then((r) => r.data),
+  // Dismissal / impression markers. Both are idempotent and scoped to the
+  // calling subject (signed-in user, else anonymous device).
+  dismissAnnouncement: (id: string) =>
+    apiClient
+      .post<{ status: string; id: string }>(`/platform/announcements/${id}/dismiss`)
+      .then((r) => r.data),
+  markAnnouncementSeen: (id: string) =>
+    apiClient
+      .post<{ status: string; id: string }>(`/platform/announcements/${id}/seen`)
+      .then((r) => r.data),
 };
 
 // ---------------------------------------------------------------------------
@@ -961,6 +1004,17 @@ export interface PublicAnnouncementRead {
   link_url: string | null;
   link_label: string | null;
   is_dismissible: boolean;
+  /** Published-content revision. A bumped version makes the announcement
+   *  eligible again for users who dismissed the previous version. */
+  version: number;
+  /** once_until_dismissed | every_login | recurring */
+  display_policy: string;
+  /** Reappearance interval in minutes (recurring policy only). */
+  recur_interval_minutes: number | null;
+  /** Reserved targeting vocabulary. */
+  audience: string;
+  /** Whether the caller already dismissed this version. */
+  dismissed: boolean;
 }
 
 export interface AdminAnnouncementRead {
@@ -975,6 +1029,10 @@ export interface AdminAnnouncementRead {
   link_label: string | null;
   is_enabled: boolean;
   is_dismissible: boolean;
+  version: number;
+  display_policy: string;
+  recur_interval_minutes: number | null;
+  audience: string;
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -990,6 +1048,9 @@ export interface AdminAnnouncementCreate {
   link_label?: string | null;
   is_enabled?: boolean | null;
   is_dismissible?: boolean | null;
+  display_policy?: string | null;
+  recur_interval_minutes?: number | null;
+  audience?: string | null;
 }
 
 export interface AdminAnnouncementUpdate {
@@ -1003,6 +1064,9 @@ export interface AdminAnnouncementUpdate {
   link_label?: string | null;
   is_enabled?: boolean | null;
   is_dismissible?: boolean | null;
+  display_policy?: string | null;
+  recur_interval_minutes?: number | null;
+  audience?: string | null;
 }
 
 export interface AdminAuditLogItem {

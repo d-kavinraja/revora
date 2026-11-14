@@ -28,6 +28,7 @@ export default function UsagePage() {
   const { data: analyticsStatus } = useQuery({
     queryKey: ['platform', 'usage-analytics'],
     queryFn: api.getUsageAnalyticsStatus,
+    enabled: typeof window !== 'undefined',
     retry: 1,
   });
 
@@ -36,21 +37,21 @@ export default function UsagePage() {
   const summaryQuery = useQuery({
     queryKey: ['usage', 'summary', period],
     queryFn: () => api.getUsageSummary(period),
-    enabled: status === 'enabled',
+    enabled: typeof window !== 'undefined' && status === 'enabled',
     retry: 1,
   });
 
   const trendQuery = useQuery({
     queryKey: ['usage', 'trend'],
     queryFn: () => api.getUsageTrend(30),
-    enabled: status === 'enabled',
+    enabled: typeof window !== 'undefined' && status === 'enabled',
     retry: 1,
   });
 
   const recordsQuery = useQuery({
     queryKey: ['usage', 'records'],
     queryFn: () => api.getUsageRecords(20, 0),
-    enabled: status === 'enabled',
+    enabled: typeof window !== 'undefined' && status === 'enabled',
     retry: 1,
   });
 

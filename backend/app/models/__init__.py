@@ -19,6 +19,7 @@ from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
 from app.models.platform import (
     Announcement,
+    AnnouncementState,
     FeatureFlag,
     ModelOverride,
     PlatformSetting,
@@ -51,6 +52,7 @@ __all__ = [
     "AdminSession",
     "AdminUser",
     "Announcement",
+    "AnnouncementState",
     "ApiKey",
     "ApiKeyHealth",
     "AuditLog",

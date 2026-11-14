@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { Megaphone, Plus } from 'lucide-react';
 import {
   adminApi,
@@ -46,12 +48,64 @@ const KIND_LABELS: Record<string, string> = {
 
 const KINDS = Object.keys(KIND_LABELS);
 
+const DISPLAY_POLICY_LABELS: Record<string, string> = {
+  once_until_dismissed: 'Until dismissed',
+  every_login: 'Once per login',
+  recurring: 'Recurring',
+};
+
+const DISPLAY_POLICIES = Object.keys(DISPLAY_POLICY_LABELS);
+
 const EMPTY_ANNOUNCEMENTS: AdminAnnouncementRead[] = [];
+
+function announcementErrorStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function announcementErrorMessage(error: unknown): string {
+  const status = announcementErrorStatus(error);
+  if (status === 401) {
+    return 'Your admin session has expired. Sign in again to manage announcements.';
+  }
+  if (status === 403) {
+    return 'You do not have permission to manage announcements.';
+  }
+  if (status !== undefined && status >= 500) {
+    return 'The server could not load announcements. Please try again.';
+  }
+  if (axios.isAxiosError(error) && !error.response) {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
+  if (axios.isAxiosError(error)) {
+    const detail: unknown = error.response?.data?.detail;
+    if (typeof detail === 'string' && detail.trim() && detail.length <= 200) {
+      return `Could not load announcements: ${detail}`;
+    }
+  }
+  return 'Could not load announcements.';
+}
+
+function logAnnouncementsError(error: unknown) {
+  // Log only request metadata — never headers, cookies, or tokens.
+  if (axios.isAxiosError(error)) {
+    console.error('[admin/announcements] request failed', {
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      status: error.response?.status ?? 'network',
+    });
+    return;
+  }
+  console.error(
+    '[admin/announcements] request failed',
+    error instanceof Error ? error.message : 'unknown error',
+  );
+}
 
 const actionLinkCls =
   'cursor-pointer rounded text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 
 export default function AdminAnnouncementsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState('');
@@ -62,11 +116,26 @@ export default function AdminAnnouncementsPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<AdminAnnouncementRead | null>(null);
 
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['admin', 'announcements', { offset }],
-    queryFn: () => adminApi.announcements(),
+  const { data, isPending, isError, isSuccess, error, refetch } = useQuery({
+    queryKey: ['admin', 'announcements'],
+    queryFn: async () => {
+      try {
+        return await adminApi.announcements();
+      } catch (requestError) {
+        logAnnouncementsError(requestError);
+        throw requestError;
+      }
+    },
     retry: 1,
   });
+
+  const errorStatus = announcementErrorStatus(error);
+
+  useEffect(() => {
+    if (isError && errorStatus === 401) {
+      router.replace('/admin/login');
+    }
+  }, [isError, errorStatus, router]);
 
   const items = data ?? EMPTY_ANNOUNCEMENTS;
   const filteredItems = useMemo(() => {
@@ -168,6 +237,22 @@ export default function AdminAnnouncementsPage() {
       ),
     },
     {
+      key: 'display',
+      header: 'Display',
+      render: (row) => (
+        <div className="min-w-0">
+          <p className="text-xs text-foreground">
+            {DISPLAY_POLICY_LABELS[row.display_policy] ?? row.display_policy}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {row.display_policy === 'recurring' && row.recur_interval_minutes
+              ? `Every ${row.recur_interval_minutes} min`
+              : `v${row.version}`}
+          </p>
+        </div>
+      ),
+    },
+    {
       key: 'actions',
       header: '',
       className: 'text-right',
@@ -197,9 +282,13 @@ export default function AdminAnnouncementsPage() {
       eyebrow="System"
       title="Announcements"
       description={
-        filtersActive
-          ? `${filteredItems.length} of ${items.length} announcements`
-          : `${items.length} announcement${items.length === 1 ? '' : 's'}`
+        isError
+          ? 'Announcements unavailable'
+          : isPending
+            ? 'Loading announcements…'
+            : filtersActive
+              ? `${filteredItems.length} of ${items.length} announcements`
+              : `${items.length} announcement${items.length === 1 ? '' : 's'}`
       }
       actions={
         <AdminButton variant="primary" onClick={() => setCreating(true)}>
@@ -210,7 +299,7 @@ export default function AdminAnnouncementsPage() {
     >
       {isError && !isPending && (
         <QueryError
-          message="Could not load announcements."
+          message={announcementErrorMessage(error)}
           onRetry={() => refetch()}
         />
       )}
@@ -270,65 +359,69 @@ export default function AdminAnnouncementsPage() {
         </SelectFilter>
       </FilterBar>
 
-      <DataTable
-        columns={columns}
-        rows={paged}
-        keyOf={(row) => row.id}
-        isLoading={isPending}
-        empty={
-          <EmptyState
-            icon={<Megaphone size={22} />}
-            title={filtersActive ? 'No matching announcements' : 'No announcements'}
-            description={
-              filtersActive
-                ? 'Try a different search or clear the filters.'
-                : 'Create one to surface a site-wide banner on all user-facing pages, never in the admin console.'
-            }
-          />
-        }
-        ariaLabel="Announcements"
-        renderMobileCard={(row) => (
-          <div className="space-y-2 rounded-xl border border-border bg-surface-1 p-4">
-            <p className="break-words font-medium text-foreground">{row.title}</p>
-            <p className="break-words text-xs text-muted-foreground">{row.message}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill tone="muted">{KIND_LABELS[row.kind] ?? row.kind}</Pill>
-              <Pill
-                tone={toneForStatus(
-                  row.state === 'published' ? 'active' : 'disabled',
-                )}
-                dot
-              >
-                {row.state === 'published' ? 'Published' : 'Draft'}
-              </Pill>
-              <Pill tone={row.is_enabled ? 'success' : 'muted'} dot>
-                {row.is_enabled ? 'Enabled' : 'Disabled'}
-              </Pill>
+      {!isError && (
+        <DataTable
+          columns={columns}
+          rows={paged}
+          keyOf={(row) => row.id}
+          isLoading={isPending}
+          empty={
+            isSuccess ? (
+              <EmptyState
+                icon={<Megaphone size={22} />}
+                title={filtersActive ? 'No matching announcements' : 'No announcements'}
+                description={
+                  filtersActive
+                    ? 'Try a different search or clear the filters.'
+                    : 'Create one to surface a site-wide banner on all user-facing pages, never in the admin console.'
+                }
+              />
+            ) : undefined
+          }
+          ariaLabel="Announcements"
+          renderMobileCard={(row) => (
+            <div className="space-y-2 rounded-xl border border-border bg-surface-1 p-4">
+              <p className="break-words font-medium text-foreground">{row.title}</p>
+              <p className="break-words text-xs text-muted-foreground">{row.message}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone="muted">{KIND_LABELS[row.kind] ?? row.kind}</Pill>
+                <Pill
+                  tone={toneForStatus(
+                    row.state === 'published' ? 'active' : 'disabled',
+                  )}
+                  dot
+                >
+                  {row.state === 'published' ? 'Published' : 'Draft'}
+                </Pill>
+                <Pill tone={row.is_enabled ? 'success' : 'muted'} dot>
+                  {row.is_enabled ? 'Enabled' : 'Disabled'}
+                </Pill>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatWindow(row.starts_at, row.ends_at)}
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setEditing(row)}
+                  className={`${actionLinkCls} text-brand hover:underline`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting(row)}
+                  className={`${actionLinkCls} text-error hover:underline`}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {formatWindow(row.starts_at, row.ends_at)}
-            </p>
-            <div className="flex items-center gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => setEditing(row)}
-                className={`${actionLinkCls} text-brand hover:underline`}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleting(row)}
-                className={`${actionLinkCls} text-error hover:underline`}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
-      />
+          )}
+        />
+      )}
 
-      {filteredItems.length > PAGE_SIZE && (
+      {!isError && filteredItems.length > PAGE_SIZE && (
         <Pagination
           total={filteredItems.length}
           limit={PAGE_SIZE}
@@ -398,6 +491,12 @@ function AnnouncementEditor({
   const [linkLabel, setLinkLabel] = useState(initial?.link_label ?? '');
   const [isEnabled, setIsEnabled] = useState(initial?.is_enabled ?? true);
   const [isDismissible, setIsDismissible] = useState(initial?.is_dismissible ?? true);
+  const [displayPolicy, setDisplayPolicy] = useState(
+    initial?.display_policy ?? 'every_login',
+  );
+  const [recurIntervalMinutes, setRecurIntervalMinutes] = useState(
+    initial?.recur_interval_minutes ? String(initial.recur_interval_minutes) : '',
+  );
 
   const startsMs = startsAt ? new Date(startsAt).getTime() : null;
   const endsMs = endsAt ? new Date(endsAt).getTime() : null;
@@ -406,9 +505,16 @@ function AnnouncementEditor({
       ? 'End time must be after the start time.'
       : null;
 
+  const recurMinutes = recurIntervalMinutes.trim() === '' ? null : Number(recurIntervalMinutes);
+  const policyError =
+    displayPolicy === 'recurring' &&
+    (recurMinutes === null || !Number.isFinite(recurMinutes) || recurMinutes < 1)
+      ? 'Recurring announcements need an interval of at least 1 minute.'
+      : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (windowError) return;
+    if (windowError || policyError) return;
     const body: AdminAnnouncementUpdate = {
       title,
       message,
@@ -420,6 +526,11 @@ function AnnouncementEditor({
       link_label: linkLabel || null,
       is_enabled: isEnabled,
       is_dismissible: isDismissible,
+      display_policy: displayPolicy,
+      recur_interval_minutes:
+        displayPolicy === 'recurring' && recurMinutes !== null
+          ? recurMinutes
+          : null,
     };
     onSubmit(body);
   };
@@ -444,7 +555,8 @@ function AnnouncementEditor({
               pending ||
               !title.trim() ||
               !message.trim() ||
-              Boolean(windowError)
+              Boolean(windowError) ||
+              Boolean(policyError)
             }
           >
             {pending ? 'Saving…' : initial ? 'Save' : 'Create (draft)'}
@@ -558,6 +670,45 @@ function AnnouncementEditor({
           />
         </div>
 
+        <div className="grid gap-3 rounded-lg border border-border bg-surface-2/50 p-3 sm:grid-cols-2">
+          <Field
+            label="Display policy"
+            htmlFor="announcement-display-policy"
+            hint="How often the banner may reappear for a user."
+          >
+            <SelectFilter
+              id="announcement-display-policy"
+              value={displayPolicy}
+              onChange={(e) => setDisplayPolicy(e.target.value)}
+              className="w-full"
+            >
+              {DISPLAY_POLICIES.map((policy) => (
+                <option key={policy} value={policy}>
+                  {DISPLAY_POLICY_LABELS[policy]}
+                </option>
+              ))}
+            </SelectFilter>
+          </Field>
+          {displayPolicy === 'recurring' && (
+            <Field
+              label="Reappear every (minutes)"
+              htmlFor="announcement-recur-interval"
+              hint="How long after a dismissal before it shows again."
+            >
+              <input
+                id="announcement-recur-interval"
+                type="number"
+                min={1}
+                step={1}
+                className={ADMIN_INPUT_CLASS}
+                value={recurIntervalMinutes}
+                onChange={(e) => setRecurIntervalMinutes(e.target.value)}
+                required
+              />
+            </Field>
+          )}
+        </div>
+
         {initial && (
           <Field
             label="State"
@@ -596,6 +747,11 @@ function AnnouncementEditor({
         {windowError && (
           <p role="alert" className="text-sm text-error">
             {windowError}
+          </p>
+        )}
+        {policyError && (
+          <p role="alert" className="text-sm text-error">
+            {policyError}
           </p>
         )}
         {error && (

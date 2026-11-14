@@ -38,6 +38,47 @@ async def _token_from_request(request: Request, header_token: str | None) -> str
     return cookie_token or None
 
 
+async def get_optional_session(
+    request: Request,
+    header_token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> tuple[User | None, dict]:
+    """Resolve the optional user *and* the decoded token payload.
+
+    Unlike :func:`get_current_user` this NEVER raises for a missing or
+    invalid credential — it returns ``(None, {})`` instead. It is also
+    strictly read-only: no ``last_active_at`` touch and no commit, so it is
+    safe to call on hot, frequently-polled public endpoints.
+
+    The payload carries ``iat`` — the moment the current login session
+    started — which is the stable anchor for "once per login" behaviour.
+    The session cookie rides along automatically (``withCredentials``), so
+    browser clients are recognised without an explicit Authorization header.
+    """
+    try:
+        token = await _token_from_request(request, header_token)
+        if not token:
+            return None, {}
+        payload = decode_access_token(token)
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
+            return None, {}
+        user_id = uuid.UUID(user_id_str)
+        token_tv = int(payload.get("tv", 0) or 0)
+    except Exception:
+        return None, {}
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if user is None:
+        return None, {}
+    if (user.status or "active") != "active":
+        return None, {}
+    if token_tv != int(getattr(user, "token_version", 0) or 0):
+        return None, {}
+    return user, payload
+
+
 async def get_current_user(
     request: Request,
     header_token: str | None = Depends(oauth2_scheme),

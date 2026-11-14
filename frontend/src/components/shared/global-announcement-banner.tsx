@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -13,30 +13,10 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { api, type PublicAnnouncementRead } from '@/lib/api';
+import { api, readDeviceId, type PublicAnnouncementRead } from '@/lib/api';
+import { useAuthStore } from '@/store/useAuthStore';
 
-const DISMISSED_KEY = 'revora.dismissed-announcements';
-
-function readDismissed(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function writeDismissed(ids: string[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(ids));
-  } catch {
-    /* noop */
-  }
-}
+export const PLATFORM_ANNOUNCEMENTS_KEY = 'platform-announcements';
 
 function kindIcon(kind: string): { Icon: typeof Megaphone; className: string } {
   if (kind === 'service_interruption') {
@@ -53,6 +33,7 @@ function kindIcon(kind: string): { Icon: typeof Megaphone; className: string } {
 
 export function GlobalAnnouncementBanner() {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const isAdmin = pathname?.startsWith('/admin') ?? false;
   const isAuthRoute =
     !!pathname &&
@@ -61,8 +42,20 @@ export function GlobalAnnouncementBanner() {
       pathname.startsWith('/auth') ||
       pathname.startsWith('/waking-up'));
 
+  // The feed is resolved server-side for the calling subject (signed-in
+  // user, else anonymous device): dismissals are never a browser-local
+  // list, and an updated announcement (new version) is eligible again.
+  // The subject scope is part of the cache key so signing in or out
+  // refetches the feed with the right subject.
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const deviceId = useMemo(() => readDeviceId(), []);
+  const subjectKey = isAuthenticated
+    ? `user:${user?.id ?? 'anonymous'}`
+    : `device:${deviceId ?? 'anonymous'}`;
+
   const { data: announcements } = useQuery({
-    queryKey: ['platform-announcements'],
+    queryKey: [PLATFORM_ANNOUNCEMENTS_KEY, subjectKey],
     queryFn: api.getAnnouncements,
     enabled: !isAdmin,
     staleTime: 60_000,
@@ -70,11 +63,24 @@ export function GlobalAnnouncementBanner() {
     retry: false,
   });
 
-  const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed());
+  // Optimistic dismissals are keyed by id AND version: when an admin
+  // updates the announcement the version changes, the new version becomes
+  // eligible again and must reappear without a reload. The map is scoped
+  // to the actual subject (signed-in user id or anonymous device id) so
+  // switching accounts or browsers never shows another subject's dismissals.
+  const [dismissedBySubject, setDismissedBySubject] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  const dismissed = useMemo(
+    () => dismissedBySubject[subjectKey] ?? {},
+    [dismissedBySubject, subjectKey],
+  );
 
   const visible = useMemo(() => {
     if (!announcements || announcements.length === 0) return [];
-    return announcements.filter((a: PublicAnnouncementRead) => !dismissed.has(a.id));
+    return announcements.filter(
+      (a: PublicAnnouncementRead) => dismissed[a.id] !== a.version,
+    );
   }, [announcements, dismissed]);
 
   const [index, setIndex] = useState(0);
@@ -111,18 +117,60 @@ export function GlobalAnnouncementBanner() {
     };
   }, [isAdmin, visible.length]);
 
-  if (isAdmin || visible.length === 0) return null;
-
-  const safeIndex = Math.min(index, visible.length - 1);
+  const safeIndex = Math.min(index, Math.max(visible.length - 1, 0));
   const current = visible[safeIndex];
+
+  // Mark the announcement as seen once it becomes the active one. Only
+  // dismissible "every_login" announcements need this marker (it prevents
+  // the same announcement from being displayed repeatedly inside one login
+  // session); non-dismissible announcements stay visible, and the other
+  // policies are unaffected by it.
+  const seenRef = useRef<Map<string, Set<string>>>(new Map());
+  useEffect(() => {
+    if (
+      !current ||
+      current.display_policy !== 'every_login' ||
+      !current.is_dismissible
+    ) {
+      return;
+    }
+    const key = `${current.id}:${current.version}`;
+    const seenForSubject = seenRef.current.get(subjectKey) ?? new Set<string>();
+    if (seenForSubject.has(key)) return;
+    seenForSubject.add(key);
+    seenRef.current.set(subjectKey, seenForSubject);
+    void api.markAnnouncementSeen(current.id).catch(() => {
+      /* best-effort: a failed marker must not break the banner */
+    });
+  }, [current, subjectKey]);
+
+  if (isAdmin || visible.length === 0 || !current) return null;
+
   const { Icon, className: iconTone } = kindIcon(current.kind);
 
   const dismiss = () => {
-    const next = Array.from(new Set([...dismissed, current.id]));
-    writeDismissed(next);
-    setDismissed(new Set(next));
-  };
+    const id = current.id;
+    const version = current.version;
+    // Optimistic removal; the server persists the dismissal for this
+    // subject so it stays hidden after refresh, logout and across devices.
+    const markDismissed = (apply: (prev: Record<string, number>) => Record<string, number>) =>
+      setDismissedBySubject((prev) => ({
+        ...prev,
+        [subjectKey]: apply(prev[subjectKey] ?? {}),
+      }));
 
+    markDismissed((prev) => ({ ...prev, [id]: version }));
+    void api.dismissAnnouncement(id).catch(() => {
+      // Roll back the optimistic removal if the server refused it.
+      markDismissed((prev) => {
+        if (prev[id] !== version) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    });
+    void queryClient.invalidateQueries({ queryKey: [PLATFORM_ANNOUNCEMENTS_KEY] });
+  };
   const prev = () => setIndex((i) => (i - 1 + visible.length) % visible.length);
   const next = () => setIndex((i) => (i + 1) % visible.length);
 

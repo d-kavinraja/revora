@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import {
   adminApi,
   type AdminAuditLogItem,
@@ -12,6 +12,7 @@ import { Pagination } from '@/components/shared/pagination';
 import { EmptyState } from '@/components/shared/empty-state';
 import { CodeView } from '@/components/shared/code-view';
 import { Pill } from '@/components/shared/pill';
+import { SlideOver } from '@/components/shared/slide-over';
 import { TextFilter } from '@/components/shared/text-filter';
 import {
   formatDateTime,
@@ -20,6 +21,7 @@ import {
 import { AdminPage } from '@/components/admin/page-shell';
 import {
   ADMIN_INPUT_CLASS,
+  AdminButton,
   FilterBar,
   SelectFilter,
 } from '@/components/admin/controls';
@@ -44,6 +46,17 @@ function humanize(value: string): string {
     .join(' ');
 }
 
+function Detail({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 break-words text-sm text-foreground">{value}</dd>
+    </div>
+  );
+}
+
 export default function AdminAuditPage() {
   const [action, setAction] = useState('');
   const [actor, setActor] = useState('');
@@ -52,7 +65,7 @@ export default function AdminAuditPage() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [offset, setOffset] = useState(0);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'audit', { action, actor, entityType, period, start, end, offset }],
@@ -78,6 +91,8 @@ export default function AdminAuditPage() {
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
+  const selectedIndex = items.findIndex((item) => item.id === selectedId);
+  const selected = selectedIndex >= 0 ? items[selectedIndex] : null;
 
   const columns: DataTableColumn<AdminAuditLogItem>[] = [
     {
@@ -145,11 +160,11 @@ export default function AdminAuditPage() {
       render: (row) => (
         <button
           type="button"
-          onClick={() => setExpanded(expanded === row.id ? null : row.id)}
-          aria-expanded={expanded === row.id}
+          onClick={() => setSelectedId(selectedId === row.id ? null : row.id)}
+          aria-expanded={selectedId === row.id}
           className="cursor-pointer rounded text-xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
-          {expanded === row.id ? 'Hide' : 'View'}
+          {selectedId === row.id ? 'Hide' : 'View'}
         </button>
       ),
     },
@@ -167,6 +182,7 @@ export default function AdminAuditPage() {
           onChange={(value) => {
             setAction(value);
             setOffset(0);
+            setSelectedId(null);
           }}
           placeholder="Action…"
           ariaLabel="Filter by action"
@@ -177,6 +193,7 @@ export default function AdminAuditPage() {
           onChange={(value) => {
             setActor(value);
             setOffset(0);
+            setSelectedId(null);
           }}
           placeholder="Actor…"
           ariaLabel="Filter by actor"
@@ -187,6 +204,7 @@ export default function AdminAuditPage() {
           onChange={(value) => {
             setEntityType(value);
             setOffset(0);
+            setSelectedId(null);
           }}
           placeholder="Entity type…"
           ariaLabel="Filter by entity type"
@@ -197,7 +215,7 @@ export default function AdminAuditPage() {
           onChange={(event) => {
             setPeriod(event.target.value);
             setOffset(0);
-            setExpanded(null);
+            setSelectedId(null);
           }}
           aria-label="Filter by period"
           className="w-full sm:w-44"
@@ -219,6 +237,7 @@ export default function AdminAuditPage() {
               onChange={(event) => {
                 setStart(event.target.value);
                 setOffset(0);
+                setSelectedId(null);
               }}
             />
             <input
@@ -229,6 +248,7 @@ export default function AdminAuditPage() {
               onChange={(event) => {
                 setEnd(event.target.value);
                 setOffset(0);
+                setSelectedId(null);
               }}
             />
           </>
@@ -298,26 +318,98 @@ export default function AdminAuditPage() {
             </p>
             <button
               type="button"
-              onClick={() => setExpanded(expanded === row.id ? null : row.id)}
-              aria-expanded={expanded === row.id}
+              onClick={() => setSelectedId(selectedId === row.id ? null : row.id)}
+              aria-expanded={selectedId === row.id}
               className="cursor-pointer rounded text-xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
-              {expanded === row.id ? 'Hide details' : 'View details'}
+              {selectedId === row.id ? 'Hide details' : 'View details'}
             </button>
           </div>
         )}
       />
 
-      {expanded && (
-        <CodeView
-          code={JSON.stringify(
-            items.find((i: AdminAuditLogItem) => i.id === expanded)?.details ?? {},
-            null,
-            2,
-          )}
-          language="json"
-          title="Safe details (no secrets)"
-        />
+      {selected && (
+        <SlideOver
+          open={!!selected}
+          onClose={() => setSelectedId(null)}
+          title={selected.action}
+          description={`${selected.entity_type}/${selected.entity_id}`}
+          footer={
+            <div className="flex w-full items-center justify-between gap-2">
+              <AdminButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedId(items[selectedIndex - 1].id)}
+                disabled={selectedIndex <= 0}
+              >
+                <ChevronLeft size={15} />
+                Previous
+              </AdminButton>
+              <span className="text-xs text-muted-foreground">
+                {selectedIndex + 1} of {items.length}
+              </span>
+              <AdminButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedId(items[selectedIndex + 1].id)}
+                disabled={selectedIndex < 0 || selectedIndex >= items.length - 1}
+              >
+                Next
+                <ChevronRight size={15} />
+              </AdminButton>
+            </div>
+          }
+        >
+          <div className="space-y-5">
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Detail label="Time" value={formatDateTime(selected.created_at)} />
+              <Detail label="Actor" value={selected.actor_id ?? '—'} />
+              <Detail
+                label="Actor type"
+                value={selected.actor_type ? humanize(selected.actor_type) : '—'}
+              />
+              <Detail label="Action" value={<span className="font-mono text-xs">{selected.action}</span>} />
+              <Detail label="Entity type" value={selected.entity_type} />
+              <Detail label="Entity ID" value={selected.entity_id} />
+              <Detail
+                label="Outcome"
+                value={
+                  selected.outcome ? (
+                    <Pill
+                      tone={
+                        selected.outcome === 'success'
+                          ? 'success'
+                          : selected.outcome === 'failure' || selected.outcome === 'error'
+                            ? 'error'
+                            : 'muted'
+                      }
+                      dot
+                    >
+                      {humanize(selected.outcome)}
+                    </Pill>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )
+                }
+              />
+              <Detail label="IP address" value={selected.ip_address ?? '—'} />
+              <Detail label="User agent" value={selected.user_agent ?? '—'} />
+            </dl>
+
+            <div className="min-w-0">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Safe details (no secrets)
+              </p>
+              <CodeView
+                code={JSON.stringify(selected.details ?? {}, null, 2)}
+                language="json"
+                title="Safe details (no secrets)"
+                collapsible={false}
+                maxHeight={360}
+              />
+            </div>
+          </div>
+        </SlideOver>
       )}
 
       {total > PAGE_SIZE && (
@@ -325,7 +417,10 @@ export default function AdminAuditPage() {
           total={total}
           limit={PAGE_SIZE}
           offset={offset}
-          onChange={setOffset}
+          onChange={(nextOffset) => {
+            setOffset(nextOffset);
+            setSelectedId(null);
+          }}
         />
       )}
     </AdminPage>

@@ -576,6 +576,14 @@ class AdminAnnouncementRead(BaseModel):
     link_label: str | None = None
     is_enabled: bool
     is_dismissible: bool
+    #: Published-content revision; bumped by content-affecting edits.
+    version: int = 1
+    #: once_until_dismissed | every_login | recurring.
+    display_policy: str = "every_login"
+    #: Reappearance interval in minutes (recurring policy only).
+    recur_interval_minutes: int | None = None
+    #: Reserved targeting vocabulary.
+    audience: str = "all"
     created_by: uuid.UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -593,6 +601,9 @@ class AdminAnnouncementCreate(BaseModel):
     link_label: str | None = Field(default=None, max_length=100)
     is_enabled: bool | None = None
     is_dismissible: bool | None = None
+    display_policy: str | None = None
+    recur_interval_minutes: int | None = Field(default=None, ge=1, le=525600)
+    audience: str | None = None
 
     @field_validator("title", "message")
     @classmethod
@@ -628,6 +639,9 @@ class AdminAnnouncementUpdate(BaseModel):
     link_label: str | None = Field(default=None, max_length=100)
     is_enabled: bool | None = None
     is_dismissible: bool | None = None
+    display_policy: str | None = None
+    recur_interval_minutes: int | None = Field(default=None, ge=1, le=525600)
+    audience: str | None = None
 
     @field_validator("title", "message")
     @classmethod

@@ -15,6 +15,10 @@ export function usePlatformFeatures() {
   return useQuery({
     queryKey: PLATFORM_FEATURES_KEY,
     queryFn: api.getPlatformFeatures,
+    // Never fetch during SSR. The server and the client's first render
+    // must agree on the initial state (fail-open: `enabled`) to avoid a
+    // hydration mismatch; the real flags are applied after hydration.
+    enabled: typeof window !== 'undefined',
     staleTime: 30_000,
     refetchInterval: 60_000,
     retry: false,

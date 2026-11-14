@@ -50,6 +50,11 @@ def create_access_token(
         # current session generation (bumped on logout for revocation).
         "jti": str(uuid4()),
         "tv": int(token_version or 0),
+        # iat is the moment the session started. It is the stable anchor
+        # for per-login behaviour (e.g. announcements shown once per login
+        # session): every request carrying this token belongs to the same
+        # session, and a fresh login mints a new token with a new iat.
+        "iat": int(datetime.now(UTC).timestamp()),
     }
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

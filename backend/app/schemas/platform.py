@@ -38,7 +38,8 @@ class PublicAnnouncementRead(BaseModel):
     """One published, currently-active announcement for the user app (§13).
 
     User-facing fields only — no `state`, `is_enabled`, `created_by`; the
-    public feed only ever contains rows that passed the publication filter.
+    public feed only ever contains rows that passed the publication filter
+    and the calling subject's visibility policy.
     """
 
     id: uuid.UUID
@@ -50,6 +51,17 @@ class PublicAnnouncementRead(BaseModel):
     link_url: str | None = None
     link_label: str | None = None
     is_dismissible: bool = True
+    #: Published-content revision. A bumped version invalidates prior
+    #: dismissals, so updated content becomes eligible again.
+    version: int = 1
+    #: One of: once_until_dismissed | every_login | recurring.
+    display_policy: str = "every_login"
+    #: Reappearance interval in minutes (recurring policy only).
+    recur_interval_minutes: int | None = None
+    #: Reserved targeting vocabulary.
+    audience: str = "all"
+    #: Whether the calling subject has already dismissed this version.
+    dismissed: bool = False
 
 
 class PublicPlatformStatus(BaseModel):

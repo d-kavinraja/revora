@@ -25,6 +25,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3002",
     ]
 
+    # Optional regex for additional allowed origins. In development this
+    # defaults to any localhost/127.0.0.1 port so Vite/Next can pick an
+    # arbitrary port without a 400 preflight. Never set this to a wildcard
+    # in production.
+    CORS_ORIGIN_REGEX: str | None = Field(
+        default=None,
+        description="Optional regex for allowed CORS origins.",
+    )
+
     # Security - REQUIRED, no defaults for secrets
     SECRET_KEY: str = Field(
         ...,

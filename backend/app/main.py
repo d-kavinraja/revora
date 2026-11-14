@@ -227,9 +227,20 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(OriginCheckMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_upload_size=10 * 1024 * 1024)
 app.add_middleware(CorrelationIdMiddleware)
+# CORS is the outermost middleware (last added => first executed in
+# Starlette's LIFO order) so preflight OPTIONS requests are answered
+# before any inner guard runs. allow_origin_regex makes local development
+# work on any localhost/127.0.0.1 port without editing CORS_ORIGINS; in
+# production only the explicit allow-list (and an optionally configured
+# regex) is used.
+_is_dev = settings.APP_ENV in ("development", "testing")
+_allow_origin_regex = settings.CORS_ORIGIN_REGEX
+if _allow_origin_regex is None and _is_dev:
+    _allow_origin_regex = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
@@ -240,6 +251,7 @@ app.add_middleware(
         "X-GitHub-Event",
         "X-Request-ID",
         "X-Correlation-ID",
+        "X-Announcement-Device-Id",
         "ngrok-skip-browser-warning",
     ],
 )
