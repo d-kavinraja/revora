@@ -72,12 +72,25 @@ class GitHubService:
             await memory_cache.set(cache_key, result, ttl_seconds=PR_CACHE_TTL)
             return result
 
-        except httpx.HTTPStatusError as e:
-            logger.warning(
-                f"GitHub API error fetching PR {repo_full_name}#{pr_number}: {e}"
-            )
-            return {"state": "unknown", "error": sanitize_error_message(e)}
         except Exception as e:
+            # Distinguish installation-not-found (permanent) from transient.
+            from app.github.errors import GitHubConfigurationError
+            if isinstance(e, GitHubConfigurationError) and getattr(e, "status_code", None) == 404:
+                logger.warning(
+                    "GitHub installation not found for PR %s#%s: %s",
+                    repo_full_name,
+                    pr_number,
+                    sanitize_error_message(e),
+                )
+                return {"state": "unknown", "error": "installation_not_found"}
+            if isinstance(e, httpx.HTTPStatusError):
+                logger.warning(
+                    "GitHub API error fetching PR %s#%s: %s",
+                    repo_full_name,
+                    pr_number,
+                    sanitize_error_message(e),
+                )
+                return {"state": "unknown", "error": sanitize_error_message(e)}
             logger.error(
                 f"Failed to fetch PR {repo_full_name}#{pr_number}: {e}",
                 exc_info=True,

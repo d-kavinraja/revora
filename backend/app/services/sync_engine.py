@@ -307,14 +307,19 @@ async def sync_repositories_once(
                             skipped = True
                         else:
                             try:
-                                token = await github_app_auth.get_installation_token(
-                                    inst.installation_id
+                                token, was_cached = (
+                                    await github_app_auth.get_installation_token_with_status(
+                                        inst.installation_id
+                                    )
                                 )
-                                record_auth_success(
-                                    inst,
-                                    app_id=settings.GITHUB_APP_ID,
-                                    now=now,
-                                )
+                                if not was_cached:
+                                    record_auth_success(
+                                        inst,
+                                        app_id=settings.GITHUB_APP_ID,
+                                        now=now,
+                                    )
+                                else:
+                                    inst.last_auth_checked_at = now
                                 auth_headers = {
                                     **headers,
                                     "Authorization": f"Bearer {token}",
@@ -479,6 +484,15 @@ async def sync_repositories_once(
 
                             except GitHubAuthError as exc:
                                 category = exc.category
+                                # Permanent 404 from token endpoint: installation deleted.
+                                if exc.status_code == 404:
+                                    mark_inaccessible(inst, now=now)
+                                    skipped = True
+                                    logger.warning(
+                                        "Installation %s not found on GitHub (deleted); "
+                                        "marked inaccessible",
+                                        inst.installation_id,
+                                    )
                                 # Clarify 404/403 with metadata when possible.
                                 if category in (
                                     "transient_not_found",

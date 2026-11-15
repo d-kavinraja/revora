@@ -176,12 +176,16 @@ class GitHubAppAuth:
         retry_after = retry_after_from_headers(response.headers)
 
         if status_code == 404:
-            raise GitHubTransientError(
-                "transient_not_found",
+            # The installation does not exist for this App (deleted or
+            # inaccessible on GitHub).  Invalidate any stale cached token
+            # and classify as permanent/non-retryable.
+            self.invalidate_installation_token(installation_id)
+            raise GitHubConfigurationError(
+                "installation_not_found",
                 status_code=404,
-                retryable=True,
-                retry_after=retry_after,
-                message="GitHub returned 404 for the installation token.",
+                retryable=False,
+                retry_after=None,
+                message="GitHub installation not found (deleted or inaccessible).",
             )
         if status_code in (401, 422):
             raise GitHubConfigurationError(
@@ -221,6 +225,27 @@ class GitHubAppAuth:
             retry_after=retry_after,
             message="GitHub installation token request failed.",
         )
+
+
+    async def get_installation_token_with_status(
+        self, installation_id: int
+    ) -> tuple[str, bool]:
+        """Like ``get_installation_token`` but also reports whether the
+        returned token came from cache.
+
+        Returns ``(token, was_cached)``.  Callers that need to distinguish
+        fresh vs cached tokens (e.g. sync engine recording auth success)
+        should use this; all other callers keep using ``get_installation_token``.
+        """
+        cache_key = (str(self.app_id or ""), installation_id)
+        cached = self._token_cache.get(cache_key)
+        if cached is not None:
+            token, expires_at = cached
+            if expires_at > datetime.now(UTC) + timedelta(minutes=5):
+                return token, True
+
+        token = await self.get_installation_token(installation_id)
+        return token, False
 
 
 github_app_auth = GitHubAppAuth()

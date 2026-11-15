@@ -189,6 +189,11 @@ def _patch_sync_engine(
     )
     monkeypatch.setattr(
         sync_engine.github_app_auth,
+        "get_installation_token_with_status",
+        AsyncMock(return_value=(token, False)),
+    )
+    monkeypatch.setattr(
+        sync_engine.github_app_auth,
         "get_installation",
         AsyncMock(
             return_value={
