@@ -86,6 +86,18 @@ def _disable_operation_worker(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolated_github_app_id(monkeypatch):
+    # Keep the suite hermetic from the developer's .env: an unset GITHUB_APP_ID
+    # lets app-id checks pass for test seeds (fail-open on unconfigured
+    # deployments). Tests that exercise configured app ids monkeypatch them
+    # explicitly.
+    from app.core import config as _cfg
+
+    monkeypatch.setattr(_cfg.settings, "GITHUB_APP_ID", None, raising=False)
+    yield
+
+
 @pytest.fixture
 async def mock_user(test_db) -> User:
     import uuid

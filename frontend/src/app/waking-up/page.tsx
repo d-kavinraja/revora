@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { checkHealth } from '@/lib/api';
+import { isSafeInternalPath } from '@/lib/safe-redirect';
 import LetterGlitch from '@/components/ui/LetterGlitch';
 import PixelCard from '@/components/ui/PixelCard';
 
@@ -15,7 +16,9 @@ const MAX_ATTEMPTS = 40; // ~2 minutes
 function WakingUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/dashboard';
+  const redirectParam = searchParams.get('redirect');
+  // Never navigate to an attacker-supplied external URL after wake-up.
+  const redirect = isSafeInternalPath(redirectParam) ? redirectParam : '/dashboard';
   const [dots, setDots] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<'waking' | 'alive' | 'timeout'>('waking');

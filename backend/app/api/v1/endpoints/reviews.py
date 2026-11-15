@@ -15,6 +15,7 @@ from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
 from app.queue.models import JobStatus
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.github_service import github_service
 from app.services.review_selection import selection_api_fields
 
@@ -207,7 +208,11 @@ async def list_reviews(
                 "stats": stats,
                 "started_at": _fmt_dt(review.started_at),
                 "completed_at": _fmt_dt(review.completed_at),
-                "error_message": latest_exec.error_message if latest_exec else None,
+                "error_message": (
+                    sanitize_error_message(latest_exec.error_message)
+                    if latest_exec and latest_exec.error_message
+                    else None
+                ),
                 "created_at": _fmt_dt(review.created_at),
                 "github_pr_state": gh_state,
                 "pr_has_active_review": review.pr_id in active_pr_ids,
@@ -339,7 +344,11 @@ async def get_review(
         "stats": stats,
         "started_at": _fmt_dt(review.started_at),
         "completed_at": _fmt_dt(review.completed_at),
-        "error_message": current_execution.error_message if current_execution else None,
+        "error_message": (
+            sanitize_error_message(current_execution.error_message)
+            if current_execution and current_execution.error_message
+            else None
+        ),
         "created_at": _fmt_dt(review.created_at),
         "github_pr_state": gh_state,
         "pr_has_active_review": pr_has_active,
@@ -371,7 +380,9 @@ async def get_review(
                 **selection_api_fields(current_execution),
                 "summary": current_execution.summary,
                 "stats": current_execution.stats or {},
-                "error_message": current_execution.error_message,
+                "error_message": sanitize_error_message(
+                    current_execution.error_message
+                ),
                 "duration_ms": current_execution.duration_ms,
                 "started_at": _fmt_dt(current_execution.started_at),
                 "completed_at": _fmt_dt(current_execution.completed_at),

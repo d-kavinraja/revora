@@ -109,6 +109,41 @@ async def enqueue_review_job(
                 )
                 return None
 
+            # N6 replay guard: an automated webhook for a commit that already
+            # completed a review must not enqueue a duplicate run (and
+            # duplicate comments). Lifecycle actions (rerun/retry/restart)
+            # use enqueue_lifecycle_job instead; genuine reopened events stay
+            # allowed because a new delivery id represents a new user action.
+            if webhook_action in ("opened", "synchronize"):
+                from app.models.execution import ReviewExecution
+                from app.models.review import Review as ReviewModel
+
+                latest_review = await session.execute(
+                    select(ReviewModel.id)
+                    .where(ReviewModel.pr_id == db_pr.id)
+                    .order_by(ReviewModel.created_at.desc())
+                    .limit(1)
+                )
+                latest_review_id = latest_review.scalars().first()
+                if latest_review_id is not None:
+                    completed_exec = await session.execute(
+                        select(ReviewExecution.id)
+                        .where(
+                            ReviewExecution.review_id == latest_review_id,
+                            ReviewExecution.commit_sha == head_sha,
+                            ReviewExecution.trigger == webhook_action,
+                            ReviewExecution.status == "completed",
+                        )
+                        .limit(1)
+                    )
+                    if completed_exec.scalars().first() is not None:
+                        logger.info(
+                            f"Completed '{webhook_action}' review already exists "
+                            f"for PR #{pr_number} sha={head_sha[:12]} — "
+                            "skipping duplicate webhook enqueue"
+                        )
+                        return None
+
             active = await session.execute(
                 select(ReviewModel).where(
                     ReviewModel.pr_id == db_pr.id,

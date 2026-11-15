@@ -1,6 +1,7 @@
 import logging
 
 from app.github_review.models import GitHubReviewComment, GitHubReviewSummary
+from app.security.content_guard import sanitize_output
 from app.verification.models import VerificationResult
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,19 @@ class GitHubReviewGenerator:
             verified, risk_score, pr_title, usage_stats, duration_ms
         )
         comments = self._build_comments(verified)
+
+        # Output-side defense: model output may echo injected instructions or
+        # secrets from untrusted repository content. Sanitize before anything
+        # can be published to the pull request.
+        summary_body = sanitize_output(summary_body)
+        comments = [
+            GitHubReviewComment(
+                path=comment.path,
+                body=sanitize_output(comment.body),
+                line=comment.line,
+            )
+            for comment in comments
+        ]
 
         event = "COMMENT"
         if risk_score == "critical" or risk_score == "high":

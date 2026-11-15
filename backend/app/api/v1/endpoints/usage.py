@@ -226,7 +226,10 @@ async def update_budget(
     import uuid
 
     budget = await cost_estimator.update_budget(
-        db, uuid.UUID(budget_id), data.model_dump(exclude_unset=True)
+        db,
+        uuid.UUID(budget_id),
+        current_user.id,
+        data.model_dump(exclude_unset=True),
     )
     if not budget:
         raise HTTPException(status_code=404, detail="Budget not found")
@@ -242,6 +245,8 @@ async def delete_budget(
 ):
     import uuid
 
-    deleted = await cost_estimator.delete_budget(db, uuid.UUID(budget_id))
+    deleted = await cost_estimator.delete_budget(
+        db, uuid.UUID(budget_id), current_user.id
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Budget not found")

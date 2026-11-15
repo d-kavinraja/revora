@@ -14,6 +14,7 @@ from app.prompt_engine.models import (
     TokenMetadata,
 )
 from app.prompt_engine.review_types import get_review_config
+from app.security.content_guard import neutralize_untrusted
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +300,7 @@ class RelevantCodeBuilder(BaseSectionBuilder):
                 truncated = ctx.content[:1500]
                 if len(ctx.content) > 1500:
                     truncated += "\n... (truncated)"
+                truncated, _removed = neutralize_untrusted(truncated)
                 code_blocks.append(
                     f"### {ctx.file_path}\n```{self._detect_language(ctx.file_path)}\n{truncated}\n```"
                 )

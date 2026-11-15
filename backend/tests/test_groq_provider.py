@@ -110,7 +110,7 @@ async def test_create_groq_key_requires_gsk_prefix(
 
 
 def test_groq_key_redacted_from_errors():
-    from app.api.v1.endpoints.api_keys import sanitize_error_message
+    from app.security.error_sanitizer import sanitize_error_message
 
     leaked = f"connection failed for key {_Fake_GROQ_KEY} Bearer {_Fake_GROQ_KEY}"
     cleaned = sanitize_error_message(leaked)

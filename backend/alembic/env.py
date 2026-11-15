@@ -38,13 +38,21 @@ load_dotenv()
 
 
 def get_url():
-    url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://revora:revora_pass@localhost:5432/revora_db",
-    )
-    if not is_db_connectable(url):
-        url = "sqlite+aiosqlite:///./revora.db"
-    return url
+    configured = os.getenv("DATABASE_URL")
+    if configured is None:
+        # Zero-config local development keeps the explicit SQLite workflow.
+        return "sqlite+aiosqlite:///./revora.db"
+    if configured.startswith("sqlite"):
+        return configured
+    if not is_db_connectable(configured):
+        # Never silently migrate a different (SQLite) database than the one
+        # the operator configured: that hides outages and leaves the real
+        # database unmigrated while the app thinks it is up to date.
+        raise RuntimeError(
+            "Configured DATABASE_URL is unreachable; refusing to fall back to "
+            "SQLite. Restore database connectivity and rerun the migration."
+        )
+    return configured
 
 
 def run_migrations_offline() -> None:

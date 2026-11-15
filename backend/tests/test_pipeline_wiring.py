@@ -13,13 +13,16 @@ class TestPipelineWiring:
     """Test that webhook handler invokes the orchestrator pipeline."""
 
     @pytest.mark.asyncio
-    async def test_webhook_calls_enqueue(self):
+    async def test_webhook_calls_enqueue(self, monkeypatch):
         """Verify handle_pr_opened delegates to the job queue."""
+        from app.core.config import settings
         from app.github.webhooks import handle_pr_opened
+
+        monkeypatch.setattr(settings, "GITHUB_APP_ID", "12345", raising=False)
 
         # Mock the dependencies
         mock_payload = {
-            "installation": {"id": 12345},
+            "installation": {"id": 12345, "app_id": 12345},
             "repository": {
                 "id": 1,
                 "name": "test-repo",

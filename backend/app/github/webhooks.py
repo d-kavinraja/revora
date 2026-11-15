@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.github.auth import github_app_auth
 from app.models.github import Installation, PullRequest, Repository
 from app.models.sync_run import (
     SYNC_REASON_WEBHOOK,
@@ -40,12 +41,17 @@ def _payload_app_id(payload: dict[str, Any]) -> int | None:
 
 
 def _app_id_allowed(payload: dict[str, Any]) -> bool:
+    """Fail closed unless the delivery provably targets this GitHub App.
+
+    An unset GITHUB_APP_ID or a payload without installation.app_id means the
+    origin cannot be verified, so the event is ignored instead of trusted.
+    """
     configured = settings.GITHUB_APP_ID
-    if configured is None:
-        return True
+    if not configured:
+        return False
     payload_id = _payload_app_id(payload)
     if payload_id is None:
-        return True
+        return False
     return str(payload_id) == str(configured)
 
 
@@ -239,6 +245,9 @@ async def handle_installation_deleted(payload: dict[str, Any], delivery_id: str)
         )
         db_inst = res.scalars().first()
         if db_inst:
+            # Revocation is immediate: no cached token may outlive the
+            # uninstallation event.
+            github_app_auth.invalidate_installation_token(inst_id)
             if payload_app_id is not None:
                 db_inst.app_id = payload_app_id
             repos_res = await db.execute(
@@ -290,6 +299,7 @@ async def handle_installation_repositories(payload: dict[str, Any], delivery_id:
         if payload_app_id is not None:
             db_inst.app_id = payload_app_id
         if permissions:
+            github_app_auth.invalidate_installation_token(inst_id)
             db_inst.permissions = permissions
             db_inst.permissions_ok = _has_required_permissions(
                 db_inst.permissions, db_inst.suspended_at
@@ -376,6 +386,8 @@ async def handle_installation_permissions(payload: dict[str, Any], delivery_id: 
         if payload_app_id is not None:
             db_inst.app_id = payload_app_id
         if permissions:
+            # Permission scope changed: the cached token may not reflect it.
+            github_app_auth.invalidate_installation_token(inst_id)
             db_inst.permissions = permissions
         db_inst.permissions_ok = _has_required_permissions(
             db_inst.permissions, db_inst.suspended_at
@@ -421,10 +433,13 @@ async def handle_installation_suspend(
         if permissions:
             db_inst.permissions = permissions
         if suspended:
+            # Suspension revokes the installation's access immediately.
+            github_app_auth.invalidate_installation_token(inst_id)
             db_inst.suspended_at = datetime.now(UTC)
             db_inst.permissions_ok = False
             mark_suspended(db_inst)
         else:
+            github_app_auth.invalidate_installation_token(inst_id)
             db_inst.suspended_at = None
             db_inst.permissions_ok = _has_required_permissions(
                 db_inst.permissions, None
@@ -457,6 +472,13 @@ async def handle_pr_opened(
     payload: dict[str, Any], delivery_id: str, action: str = "opened"
 ):
     from app.queue.dispatcher import enqueue_review_job
+
+    if not _app_id_allowed(payload):
+        logger.warning(
+            f"[{delivery_id}] Ignoring pull_request.{action}: delivery does not "
+            "target the configured GitHub App"
+        )
+        return
 
     async with AsyncSessionLocal() as db:
         repository = payload.get("repository", {})
@@ -514,6 +536,12 @@ async def handle_pr_opened(
 
 async def handle_pr_closed(payload: dict[str, Any], delivery_id: str):
     """Update DB PR state on close/merge and invalidate the GitHub cache."""
+    if not _app_id_allowed(payload):
+        logger.warning(
+            f"[{delivery_id}] Ignoring pull_request.closed: delivery does not "
+            "target the configured GitHub App"
+        )
+        return
     repository = payload.get("repository", {})
     pull_request = payload.get("pull_request", {})
     pr_number = pull_request.get("number", 0)

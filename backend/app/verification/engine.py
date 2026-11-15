@@ -81,17 +81,17 @@ class VerificationEngine:
 
         review_id = context.get("review_id")
         if review_id:
-            # Cache results
-            await verification_cache.set_verification_result(
-                str(review_id), result.to_dict()
-            )
-
-            # Persist to database
+            # Persist FIRST, expose through the cache second. A verification
+            # result must never be readable (cache hit) while its database
+            # rows are missing because persistence failed.
             try:
                 parsed_uuid = (
                     uuid.UUID(review_id) if isinstance(review_id, str) else review_id
                 )
                 await self._persist_to_db(parsed_uuid, verified_raw, metrics)
+                await verification_cache.set_verification_result(
+                    str(review_id), result.to_dict()
+                )
             except Exception as e:
                 logger.error(f"Failed to persist verification results to DB: {e}")
 

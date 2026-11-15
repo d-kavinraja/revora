@@ -3,7 +3,7 @@
 Set-based aggregates only: constant-query overview widgets, LIMIT-bounded
 list pages with server-side pagination (``limit <= 100``), no per-row IO and
 no provider API calls. Error strings are sanitized before they are returned
-(the ``api_keys.sanitize_error_message`` pattern). Key material is never
+(the ``app.security.error_sanitizer`` pattern). Key material is never
 selected.
 
 Metric integrity (plan §7, binding): every value comes from stored rows.
@@ -18,7 +18,7 @@ from typing import Any
 from sqlalchemy import String, and_, case, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.endpoints.api_keys import sanitize_error_message
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.platform_settings import platform_settings_service
 from app.models.api_key import ApiKey
 from app.models.audit import AuditLog

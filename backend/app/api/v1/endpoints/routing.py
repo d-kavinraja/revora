@@ -10,6 +10,7 @@ from app.core.deps_flags import require_feature
 from app.core.security import encryption_service
 from app.db.session import get_db
 from app.models.user import User
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.api_key_service import api_key_service
 from app.services.model_discovery import model_discovery_engine
 from app.services.model_overrides import model_overrides_service
@@ -180,5 +181,6 @@ async def update_routing_preferences(
         logger.error(f"Failed to update routing preferences: {e}")
         await db.rollback()
         raise HTTPException(
-            status_code=500, detail=f"Failed to save preferences: {e!s}"
+            status_code=500,
+            detail=f"Failed to save preferences: {sanitize_error_message(e)}",
         )

@@ -27,6 +27,7 @@ from app.models.sync_run import (
     SyncRun,
 )
 from app.models.user import User
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.api_key_service import api_key_service
 from app.services.provider_registry import provider_registry_service
 from app.services.repository_service import repository_service
@@ -359,8 +360,18 @@ async def sync_repository(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid repository ID")
 
-        # Get repo
-        repo_result = await db.execute(select(Repository).where(Repository.id == rid))
+        # Ownership is enforced in the query itself: a user must never be able
+        # to trigger work (or consume GitHub installation credentials) for
+        # another tenant's repository. A foreign repo is indistinguishable
+        # from a missing one (404).
+        repo_result = await db.execute(
+            select(Repository)
+            .join(Installation, Installation.id == Repository.installation_id)
+            .where(
+                Repository.id == rid,
+                Installation.user_id == current_user.id,
+            )
+        )
         repo = repo_result.scalars().first()
         if not repo:
             raise HTTPException(status_code=404, detail="Repository not found")
@@ -391,7 +402,11 @@ async def sync_repository(
             raise _installation_auth_http_exception(e) from e
         except Exception as e:
             raise HTTPException(
-                status_code=503, detail=f"Failed to authenticate with GitHub App: {e}"
+                status_code=503,
+                detail=(
+                    "Failed to authenticate with GitHub App: "
+                    f"{sanitize_error_message(e)}"
+                ),
             ) from e
 
         # Duplicate-sync guard (browser refresh / double-click safe): an
@@ -434,7 +449,8 @@ async def sync_repository(
     except Exception as e:
         print(f"Error starting repository sync: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to start repository sync: {e}"
+            status_code=500,
+            detail=f"Failed to start repository sync: {sanitize_error_message(e)}",
         )
 
 
@@ -607,8 +623,10 @@ async def _background_single_repo_sync(
         logger.error(
             f"Background repository sync failed for {repo_id}: {e}", exc_info=True
         )
-        counts["failures"][str(repo_id)] = f"{type(e).__name__}: {e}"
-        await _finalize(SYNC_STATUS_FAILED, error=str(e))
+        counts["failures"][str(repo_id)] = sanitize_error_message(
+            f"{type(e).__name__}: {e}"
+        )
+        await _finalize(SYNC_STATUS_FAILED, error=sanitize_error_message(e))
     return counts
 
 
@@ -730,7 +748,13 @@ async def get_repo_github_stats(
     except GitHubAuthError as e:
         raise _installation_auth_http_exception(e) from e
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to authenticate with GitHub App: {e}") from e
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Failed to authenticate with GitHub App: "
+                f"{sanitize_error_message(e)}"
+            ),
+        ) from e
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1104,17 +1128,16 @@ async def list_sync_runs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Recent synchronization passes affecting this user (audit trail).
+    """Recent synchronization passes triggered by this user (audit trail).
 
-    Includes manual syncs triggered by the user plus the most recent
-    system-wide passes (startup / background / recovery), each with its
-    reason, status, and counts.
+    Only the caller's own runs are returned. System-wide passes (startup /
+    background / recovery) aggregate every tenant's repositories and failure
+    details, so exposing them to authenticated users would leak other
+    tenants' repository names and activity.
     """
     runs_result = await db.execute(
         select(SyncRun)
-        .where(
-            (SyncRun.triggered_by == current_user.id) | (SyncRun.triggered_by.is_(None))
-        )
+        .where(SyncRun.triggered_by == current_user.id)
         .order_by(SyncRun.started_at.desc())
         .limit(limit)
     )
@@ -1163,5 +1186,6 @@ async def get_repository_status(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to get repository status: {e}"
+            status_code=500,
+            detail=f"Failed to get repository status: {sanitize_error_message(e)}",
         )

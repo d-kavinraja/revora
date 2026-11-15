@@ -174,9 +174,20 @@ class CostEstimator:
         return budget
 
     async def update_budget(
-        self, db: AsyncSession, budget_id: uuid.UUID, data: dict
+        self,
+        db: AsyncSession,
+        budget_id: uuid.UUID,
+        user_id: uuid.UUID,
+        data: dict,
     ) -> CostBudget | None:
-        budget = await db.get(CostBudget, budget_id)
+        # Ownership is part of the lookup: never load/update another user's row.
+        result = await db.execute(
+            select(CostBudget).where(
+                CostBudget.id == budget_id,
+                CostBudget.user_id == user_id,
+            )
+        )
+        budget = result.scalars().first()
         if not budget:
             return None
         for key, value in data.items():
@@ -187,8 +198,16 @@ class CostEstimator:
         await db.refresh(budget)
         return budget
 
-    async def delete_budget(self, db: AsyncSession, budget_id: uuid.UUID) -> bool:
-        budget = await db.get(CostBudget, budget_id)
+    async def delete_budget(
+        self, db: AsyncSession, budget_id: uuid.UUID, user_id: uuid.UUID
+    ) -> bool:
+        result = await db.execute(
+            select(CostBudget).where(
+                CostBudget.id == budget_id,
+                CostBudget.user_id == user_id,
+            )
+        )
+        budget = result.scalars().first()
         if not budget:
             return False
         await db.delete(budget)

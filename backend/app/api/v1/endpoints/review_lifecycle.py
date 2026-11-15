@@ -19,6 +19,7 @@ from app.core.deps_flags import require_feature
 from app.db.session import get_db
 from app.models.review import Review
 from app.models.user import User
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.review_lifecycle import (
     ReviewLifecycleConflict,
     review_lifecycle_service,
@@ -48,7 +49,10 @@ def _handle_error(e: Exception, action: str):
                 status_code=500,
                 detail="Database schema is out of date. Please run database migrations.",
             )
-    raise HTTPException(status_code=500, detail=f"Failed to {action} review: {e}")
+    raise HTTPException(
+        status_code=500,
+        detail=f"Failed to {action} review: {sanitize_error_message(e)}",
+    )
 
 
 @router.post("/{review_id}/rerun", response_model=dict[str, Any])

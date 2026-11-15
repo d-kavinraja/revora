@@ -4,11 +4,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.git_utils import GitService
 from app.api.v1.endpoints.reviews import _ensure_review_ownership
 from app.core.deps import get_current_user
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, get_db
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
@@ -18,6 +19,7 @@ from app.models.verification import (
     VerificationResultModel,
 )
 from app.schemas.verification import VerificationRequest
+from app.security.error_sanitizer import sanitize_error_message
 from app.verification.cache import verification_cache
 from app.verification.engine import verification_engine
 
@@ -26,13 +28,25 @@ router = APIRouter()
 
 @router.post("/review", response_model=dict[str, Any])
 async def verify_review(
-    request: VerificationRequest, current_user: User = Depends(get_current_user)
+    request: VerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Verifies an AI-generated review against the repository.
     """
     repo_path = None
     try:
+        # Authorization before any external work: verifying another tenant's
+        # review would disclose its content (and cache it under their id).
+        review_result = await db.execute(
+            select(Review).where(Review.id == request.review_id)
+        )
+        review = review_result.scalars().first()
+        if not review:
+            raise HTTPException(status_code=404, detail="Review not found")
+        await _ensure_review_ownership(db, review, current_user.id)
+
         # Clone the repository dynamically using GitService instead of hardcoding
         # The request schema should ideally have clone_url and token, but we assume
         # repository_url works for public repos if token is not provided.
@@ -68,7 +82,10 @@ async def verify_review(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Verification failed: {e!s}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Verification failed: {sanitize_error_message(e)}",
+        )
     finally:
         if repo_path and os.path.exists(repo_path):
             try:
@@ -157,7 +174,8 @@ async def get_global_metrics(current_user: User = Depends(get_current_user)):
             }
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch global metrics: {e!s}"
+            status_code=500,
+            detail=f"Failed to fetch global metrics: {sanitize_error_message(e)}",
         )
 
 
@@ -229,7 +247,11 @@ async def get_global_hallucinations(
             ]
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch global hallucinations: {e!s}"
+            status_code=500,
+            detail=(
+                "Failed to fetch global hallucinations: "
+                f"{sanitize_error_message(e)}"
+            ),
         )
 
 

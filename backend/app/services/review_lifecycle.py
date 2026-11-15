@@ -17,7 +17,9 @@ from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.queue.dispatcher import enqueue_lifecycle_job
 from app.queue.models import JobStatus, ReviewJob
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.github_service import github_service
+from app.services.installation_lifecycle import can_attempt_token
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,27 @@ _ALLOWED_ACTIONS = {
 
 class ReviewLifecycleService:
     """Manages review lifecycle actions."""
+
+    @staticmethod
+    def _ensure_review_target_usable(
+        repo: Repository, installation: Installation, action: str
+    ) -> None:
+        """Reject execution paths for removed repos or revoked installations.
+
+        Every lifecycle action (rerun/retry/restart) revalidates state so a
+        cached token or stale UI state can never revive a review for a
+        repository that was uninstalled in the meantime.
+        """
+        if repo.removed_at is not None:
+            raise ValueError(
+                "Repository was removed from Revora. Re-add it by installing "
+                f"the GitHub App before attempting to {action} a review."
+            )
+        if not can_attempt_token(installation):
+            raise ValueError(
+                f"GitHub App installation is {installation.lifecycle_status}; "
+                f"cannot {action} a review until it is accessible again."
+            )
 
     async def _validate_and_get_pr_data(
         self, db: AsyncSession, review: Review, action: str, skip_github: bool = False
@@ -102,6 +125,9 @@ class ReviewLifecycleService:
         installation = inst_result.scalars().first()
         if not installation:
             raise ValueError("GitHub App installation not found.")
+
+        if action != "cancel":
+            self._ensure_review_target_usable(repo, installation, action)
 
         # Real-time PR state check from GitHub
         if action != "cancel" and not skip_github:
@@ -201,7 +227,11 @@ class ReviewLifecycleService:
                             )
                         )
                         installation = inst_result.scalars().first()
-                        if installation:
+                        if (
+                            installation
+                            and can_attempt_token(installation)
+                            and repo.removed_at is None
+                        ):
                             from app.github.client import GitHubClient
 
                             owner, repo_name = repo.full_name.split("/", 1)
@@ -328,6 +358,8 @@ class ReviewLifecycleService:
                         )
                     )
                     inst_pre = inst_pre_result.scalars().first()
+            if repo_pre is not None and inst_pre is not None:
+                self._ensure_review_target_usable(repo_pre, inst_pre, action)
             if pr_pre is not None and repo_pre is not None and inst_pre is not None:
                 gh_pr = await github_service.get_pull_request(
                     repo_pre.full_name, pr_pre.pr_number, inst_pre.installation_id
@@ -454,7 +486,9 @@ class ReviewLifecycleService:
                 db,
                 review.id,
                 "failed",
-                error_message=f"Failed to enqueue {action} job: {e}",
+                error_message=sanitize_error_message(
+                    f"Failed to enqueue {action} job: {e}"
+                ),
             )
             await db.commit()
 

@@ -11,6 +11,7 @@ import httpx
 
 from app.cache.memory_cache import memory_cache
 from app.github.auth import github_app_auth
+from app.security.error_sanitizer import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,13 @@ class GitHubService:
             logger.warning(
                 f"GitHub API error fetching PR {repo_full_name}#{pr_number}: {e}"
             )
-            return {"state": "unknown", "error": str(e)}
+            return {"state": "unknown", "error": sanitize_error_message(e)}
         except Exception as e:
             logger.error(
                 f"Failed to fetch PR {repo_full_name}#{pr_number}: {e}",
                 exc_info=True,
             )
-            return {"state": "unknown", "error": str(e)}
+            return {"state": "unknown", "error": sanitize_error_message(e)}
 
     async def batch_get_pull_requests(
         self,

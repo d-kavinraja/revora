@@ -24,6 +24,10 @@ from app.services.sync_engine import (
     run_sync_pass,
     sync_loop,
 )
+from app.services.webhook_delivery_service import (
+    recover_due_deliveries,
+    webhook_delivery_loop,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +155,15 @@ async def lifespan(app: FastAPI):
             run_operation_worker(standalone=False)
         )
 
+    # Durable webhook outbox: retry pending/failed deliveries and recover
+    # rows left in "processing" by a crashed process. Acknowledged (202)
+    # deliveries are therefore guaranteed to be retried until terminal.
+    try:
+        await recover_due_deliveries()
+    except Exception:
+        logger.exception("Webhook delivery startup recovery failed")
+    webhook_recovery_task = asyncio.create_task(webhook_delivery_loop())
+
     try:
         yield
     finally:
@@ -159,6 +172,7 @@ async def lifespan(app: FastAPI):
             operation_worker_task.cancel()
         if sync_task:
             sync_task.cancel()
+        webhook_recovery_task.cancel()
         if startup_sync_task and not startup_sync_task.done():
             startup_sync_task.cancel()
             try:
@@ -168,6 +182,7 @@ async def lifespan(app: FastAPI):
                 await worker_task
                 if operation_worker_task is not None:
                     await operation_worker_task
+                await webhook_recovery_task
             except asyncio.CancelledError:
                 pass
         try:
@@ -176,11 +191,18 @@ async def lifespan(app: FastAPI):
             logger.exception("Engine disposal during shutdown failed")
 
 
+_is_dev = settings.APP_ENV in ("development", "testing")
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="API for the Revora AI-powered Pull Request Review Platform",
     version="1.0.0",
     lifespan=lifespan,
+    # The schema/docs are an internal development aid: exposing them in
+    # production gives attackers the full route/parameter map for free.
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
+    openapi_url="/openapi.json" if _is_dev else None,
 )
 
 from fastapi.responses import JSONResponse
@@ -233,7 +255,6 @@ app.add_middleware(CorrelationIdMiddleware)
 # work on any localhost/127.0.0.1 port without editing CORS_ORIGINS; in
 # production only the explicit allow-list (and an optionally configured
 # regex) is used.
-_is_dev = settings.APP_ENV in ("development", "testing")
 _allow_origin_regex = settings.CORS_ORIGIN_REGEX
 if _allow_origin_regex is None and _is_dev:
     _allow_origin_regex = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
@@ -299,4 +320,8 @@ async def readiness():
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Revora API. Visit /docs for the API documentation."}
+    if _is_dev:
+        return {
+            "message": "Welcome to Revora API. Visit /docs for the API documentation."
+        }
+    return {"message": "Revora API"}

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test src/lib/safe-redirect.test.mjs"
   },
   "dependencies": {
     "@animateicons/react": "^0.3.4",

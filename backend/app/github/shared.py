@@ -210,11 +210,20 @@ async def get_or_create_review_records(
             db.add(db_repo)
             await db.commit()
             await db.refresh(db_repo)
-        elif db_repo.installation_id != db_inst.id:
-            db_repo.installation_id = db_inst.id
-            db.add(db_repo)
-            await db.commit()
-            await db.refresh(db_repo)
+        else:
+            if db_repo.removed_at is not None:
+                # Removed (uninstalled) repositories keep their history but
+                # must not be revived by background execution paths. Only the
+                # installation webhooks may re-link them.
+                raise ValueError(
+                    f"Repository {db_repo.full_name} was removed from Revora; "
+                    "refusing to run review work for it."
+                )
+            if db_repo.installation_id != db_inst.id:
+                db_repo.installation_id = db_inst.id
+                db.add(db_repo)
+                await db.commit()
+                await db.refresh(db_repo)
 
         # Get or create PullRequest
         res = await db.execute(

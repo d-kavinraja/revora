@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
 from app.github.errors import bounded_backoff
 from app.models.github import Installation
@@ -25,8 +28,14 @@ def _configured_app_id() -> str | None:
 
 def app_id_matches(installation: Installation) -> bool:
     configured = _configured_app_id()
-    if configured is None or installation.app_id is None:
+    if configured is None:
+        # No expected app id to compare against (unconfigured deployment).
         return True
+    if installation.app_id is None:
+        # Legacy rows written before app_id was tracked: fail closed until a
+        # subsequent installation event records the app id. This is
+        # intentional — an unverifiable installation must not mint tokens.
+        return False
     return str(installation.app_id) == str(configured)
 
 
@@ -48,6 +57,37 @@ def metadata_recheck_due(installation: Installation, now: datetime | None = None
     if not app_id_matches(installation):
         return False
     return not (installation.retry_after is not None and installation.retry_after > now)
+
+
+class InstallationNotAttemptableError(RuntimeError):
+    """Raised when work targets a missing or revoked installation."""
+
+
+async def require_attemptable_installation(
+    db: AsyncSession, installation_id: int
+) -> Installation:
+    """Fail-closed gate for execution paths.
+
+    Unknown installations (no local row) are rejected instead of being allowed
+    to proceed, and suspended/revoked/reauth-required installations are
+    refused before any token is requested.
+    """
+    result = await db.execute(
+        select(Installation).where(
+            Installation.installation_id == installation_id
+        )
+    )
+    installation = result.scalars().first()
+    if installation is None:
+        raise InstallationNotAttemptableError(
+            f"GitHub installation {installation_id} is unknown; refusing execution"
+        )
+    if not can_attempt_token(installation):
+        raise InstallationNotAttemptableError(
+            f"GitHub installation {installation_id} is {installation.lifecycle_status}; "
+            "token requests are paused"
+        )
+    return installation
 
 
 def record_auth_success(

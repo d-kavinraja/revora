@@ -15,27 +15,9 @@ from app.services.model_discovery import (
     model_discovery_engine,
 )
 from app.services.provider_registry import provider_registry_service
+from app.security.error_sanitizer import sanitize_error_message
 
 PER_KEY_VALIDATION_TIMEOUT_SECONDS = 22.0
-
-import re
-
-_SECRET_PATTERNS = (
-    re.compile(r"sk-[A-Za-z0-9_\-./+]{4,}"),
-    re.compile(r"sk-ant-[A-Za-z0-9_\-./+]{4,}"),
-    re.compile(r"gsk_[A-Za-z0-9_\-./+]{4,}"),
-    re.compile(r"xai-[A-Za-z0-9_\-./+]{4,}"),
-    re.compile(r"nvapi-[A-Za-z0-9_\-./+]{4,}"),
-    re.compile(r"Bearer\s+[A-Za-z0-9_\-./+=]+", re.IGNORECASE),
-    re.compile(r"api[_-]?key\s*[:=]\s*['\"]?[^'\"\s,}]+", re.IGNORECASE),
-)
-
-
-def sanitize_error_message(message: str) -> str:
-    cleaned = message or ""
-    for pattern in _SECRET_PATTERNS:
-        cleaned = pattern.sub("[redacted]", cleaned)
-    return cleaned[:300]
 
 
 _BUSY_ERROR_TYPES = {

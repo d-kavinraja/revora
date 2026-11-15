@@ -21,6 +21,7 @@ from sqlalchemy import select
 from app.db.session import AsyncSessionLocal
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
+from app.security.error_sanitizer import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,11 @@ async def _poll_review_updates(
                     "review_id": str(r.id),
                     "pr_id": str(r.pr_id),
                     "status": r.status,
-                    "error_message": error_map.get(r.id),
+                    "error_message": (
+                        sanitize_error_message(error_map.get(r.id))
+                        if error_map.get(r.id)
+                        else None
+                    ),
                     "updated_at": _iso(r.updated_at),
                 }
                 for r in reviews

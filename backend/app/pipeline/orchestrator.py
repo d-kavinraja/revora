@@ -33,7 +33,8 @@ from app.prompt_engine.models import ReviewType
 from app.retrieval.engine import retrieval_engine
 from app.retrieval.init import initialize_retrieval_engine
 from app.retrieval.models import RetrievalConfig
-from app.security.content_guard import sanitize_input
+from app.security.content_guard import neutralize_untrusted, sanitize_input
+from app.security.error_sanitizer import sanitize_error_message
 from app.sse.emitter import SSEEmitter
 from app.sse.events import EventType
 from app.verification.engine import verification_engine
@@ -344,10 +345,11 @@ class ReviewPipeline:
 
         except Exception as e:
             logger.error(f"Pipeline error: {e}", exc_info=True)
-            await emitter.emit_error("pipeline", str(e))
+            safe_error = sanitize_error_message(e)
+            await emitter.emit_error("pipeline", safe_error)
 
             # Mark review as failed
-            await self._save_failed(review_id, str(e))
+            await self._save_failed(review_id, safe_error)
 
             if check_run_id:
                 try:
@@ -361,14 +363,14 @@ class ReviewPipeline:
                         status="completed",
                         output={
                             "title": "Revora Review Failed",
-                            "summary": f"Pipeline error: {e}",
+                            "summary": f"Pipeline error: {safe_error}",
                             "conclusion": "failure",
                         },
                     )
                 except Exception:
                     pass
 
-            return {"status": "failed", "error": str(e)}
+            return {"status": "failed", "error": safe_error}
 
         finally:
             # Ensure repo cleanup
@@ -599,10 +601,27 @@ class ReviewPipeline:
         await emitter.emit("building_prompt", "running", EventType.STAGE_START)
 
         try:
+            # The diff is repository-controlled: redact secrets, remove
+            # high-confidence injection instructions, and fence it as
+            # untrusted data so it cannot masquerade as instructions.
+            safe_diff, removed = neutralize_untrusted(sanitize_input(diff_content))
+            if removed:
+                await emitter.emit(
+                    "building_prompt",
+                    "warning",
+                    message=(
+                        "Prompt-injection instructions were removed from the "
+                        "pull request diff before review."
+                    ),
+                )
             prompt = await prompt_builder.compile(
                 review_type=ReviewType.PR_REVIEW,
                 repo_path=".",
-                diff_content=sanitize_input(diff_content),
+                diff_content=(
+                    "<untrusted_pull_request_diff>\n"
+                    f"{safe_diff}\n"
+                    "</untrusted_pull_request_diff>"
+                ),
                 retrieval_result=retrieval_result,
                 intelligence_data=intelligence_data or {},
                 conventions=conventions or "",
@@ -1167,6 +1186,7 @@ class ReviewPipeline:
 
     async def _save_failed(self, review_id, error_message):
         """Save failed review to database."""
+        error_message = sanitize_error_message(error_message)
         try:
             async with AsyncSessionLocal() as db:
                 res = await db.execute(select(Review).where(Review.id == review_id))

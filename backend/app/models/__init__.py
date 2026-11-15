@@ -45,6 +45,7 @@ from app.models.verification import (
     VerificationMetricModel,
     VerificationResultModel,
 )
+from app.models.webhook_delivery import WebhookDelivery
 from app.queue.models import ReviewJob
 from app.queue.operation_models import OperationJob
 
@@ -99,4 +100,5 @@ __all__ = [
     "User",
     "VerificationMetricModel",
     "VerificationResultModel",
+    "WebhookDelivery",
 ]

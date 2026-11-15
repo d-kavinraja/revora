@@ -10,7 +10,8 @@ from sqlalchemy import and_, func, select, text, update
 
 from app.db.session import AsyncSessionLocal
 from app.queue.models import JobStatus, ReviewJob
-from app.services.installation_lifecycle import can_attempt_token
+from app.security.error_sanitizer import sanitize_error_message
+from app.services.installation_lifecycle import require_attemptable_installation
 from app.services.platform_settings import platform_settings_service
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ async def _mark_review_failed(job, error_str: str):
     """
     from app.models.review import Review
 
+    error_str = sanitize_error_message(error_str)
     review_id = _extract_review_id(job)
     try:
         async with AsyncSessionLocal() as db:
@@ -176,7 +178,6 @@ async def process_job(job_row) -> bool:
             get_or_create_review_records,
         )
         from app.github.webhooks import get_pr_diff
-        from app.models.github import Installation
         from app.pipeline.orchestrator import review_pipeline
 
         installation = payload.get("installation", {}) or {}
@@ -194,17 +195,11 @@ async def process_job(job_row) -> bool:
         if not installation_id:
             raise ValueError(f"Missing installation_id in payload for job {job_id}")
 
-        # Get installation token
+        # Get installation token. Fail closed: a missing local installation
+        # row is just as untrusted as a suspended one — never fall through to
+        # a token request for unknown installations.
         async with AsyncSessionLocal() as install_db:
-            inst_result = await install_db.execute(
-                select(Installation).where(Installation.installation_id == installation_id)
-            )
-            inst = inst_result.scalars().first()
-        if inst is not None and not can_attempt_token(inst, datetime.now(UTC)):
-            raise RuntimeError(
-                f"GitHub installation {installation_id} is {inst.lifecycle_status}; "
-                "token requests are paused"
-            )
+            await require_attemptable_installation(install_db, installation_id)
         try:
             token = await github_app_auth.get_installation_token(installation_id)
         except GitHubAuthError as exc:
@@ -313,16 +308,19 @@ async def process_job(job_row) -> bool:
         # actionable error. Never execute with a model that was not resolved.
         if not selection.is_resolved:
             error_msg = (
-                selection.error
-                or "## AI Review could not start\n\n"
-                "**Reason:** No AI configuration found for this repository.\n\n"
-                "---\n\n"
-                "### To fix this:\n\n"
-                "1. **Add an API Key** in Settings > API Keys\n"
-                "2. **Select a Provider and Model** in Repository Settings > Config\n"
-                "3. **Re-run the Pull Request**\n\n"
-                "---\n\n"
-                "*If you continue to see this error, contact support.*"
+                sanitize_error_message(selection.error)
+                if selection.error
+                else (
+                    "## AI Review could not start\n\n"
+                    "**Reason:** No AI configuration found for this repository.\n\n"
+                    "---\n\n"
+                    "### To fix this:\n\n"
+                    "1. **Add an API Key** in Settings > API Keys\n"
+                    "2. **Select a Provider and Model** in Repository Settings > Config\n"
+                    "3. **Re-run the Pull Request**\n\n"
+                    "---\n\n"
+                    "*If you continue to see this error, contact support.*"
+                )
             )
             logger.warning(f"MODE 3: No AI config for job {job_id}. PR #{pr_number}")
             try:
@@ -419,13 +417,16 @@ async def process_job(job_row) -> bool:
 
     except Exception as e:
         logger.exception(f"Worker {_worker_id} job {job_id} failed")
-        error_str = str(e) or f"Execution failed ({type(e).__name__})"
+        error_str = sanitize_error_message(
+            str(e) or f"Execution failed ({type(e).__name__})"
+        )
         await _mark_review_failed(job_row, error_str)
         return False
 
 
 async def _fail_job_and_review(session, job, error_message: str):
     """Mark a job as failed and its associated review as failed."""
+    error_message = sanitize_error_message(error_message)
     from app.models.review import Review
 
     job.status = JobStatus.FAILED

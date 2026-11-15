@@ -49,6 +49,7 @@ from app.models.sync_run import (
     SYNC_STATUS_SUCCESS,
     SyncRun,
 )
+from app.security.error_sanitizer import sanitize_error_message
 from app.services.installation_lifecycle import (
     ACTIVE as LIFECYCLE_ACTIVE,
 )
@@ -104,8 +105,9 @@ def _has_required_permissions(permissions: dict[str, Any] | None, suspended_at) 
     if suspended_at is not None:
         return False
     if not permissions:
-        # Unknown permission set — never gate on missing data.
-        return True
+        # Unknown permission set: fail closed. Treating "unknown" as "allowed"
+        # lets a revoked/never-granted installation through the gate.
+        return False
     for perm, required_level in REQUIRED_PERMISSIONS.items():
         granted = _PERMISSION_LEVELS.get(str(permissions.get(perm, "none")).lower(), 0)
         if granted < _PERMISSION_LEVELS[required_level]:
@@ -1098,7 +1100,7 @@ async def _run_sync_pass(reason: str, user_id: uuid.UUID | None) -> dict[str, An
                     db,
                     reason,
                     SYNC_STATUS_FAILED,
-                    error=str(e),
+                    error=sanitize_error_message(e),
                     triggered_by=user_id,
                     run_id=run_id,
                 )

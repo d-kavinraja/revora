@@ -73,7 +73,7 @@ def sanitize_input(content: str) -> str:
 
 
 def sanitize_output(content: str) -> str:
-    """Filter secrets from generated review output before publishing.
+    """Filter secrets and chat-control markers from generated output.
 
     This is the critical output-side defense against prompt injection
     attacks that try to exfiltrate secrets via PR comments.
@@ -82,12 +82,65 @@ def sanitize_output(content: str) -> str:
         content: Generated review content to filter.
 
     Returns:
-        Content with any leaked secrets redacted.
+        Content with any leaked secrets redacted and role/control markers
+        removed.
     """
     sanitized = content
     for pattern, replacement in SECRET_PATTERNS:
         sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
+    for pattern in _OUTPUT_MARKER_PATTERNS:
+        sanitized = re.sub(pattern, "", sanitized, flags=re.IGNORECASE)
     return sanitized
+
+
+# High-confidence instruction-override phrases used in untrusted repository
+# content (diffs, PR text, retrieved code). Deliberately narrower than
+# INJECTION_PATTERNS: broad tokens like "system:" occur in ordinary code and
+# must not be stripped.
+UNTRUSTED_PATTERNS = [
+    r"ignore\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instructions?|prompts?|rules?)",
+    r"disregard\s+(?:all\s+)?(?:previous|above|prior)\s*(?:instructions?|prompts?|rules?)?",
+    r"forget\s+(?:everything|all|previous)\s*(?:instructions?|prompts?|rules?)?",
+    r"new\s+instructions?\s*:",
+    r"you\s+are\s+now\s+(?:a|an|the)\b",
+    r"reveal\s+(?:the\s+)?(?:system|hidden)\s+(?:prompt|instructions?)",
+    r"print\s+(?:the\s+)?(?:system|hidden)\s+(?:prompt|instructions?)",
+    r"include\s+(?:the\s+)?(?:contents?\s+of|any\s+file)",
+    r"when\s+reviewing.*(?:include|output|show|print)",
+]
+
+# Chat/template control markers that must never appear in untrusted input or
+# generated output.
+_CONTROL_MARKERS = [
+    r"<\s*\|\s*(?:im_start|im_end|system|endoftext)\s*\|\s*>",
+    r"<\s*/?\s*system\s*>",
+    r"\[/?INST\]",
+]
+UNTRUSTED_PATTERNS.extend(_CONTROL_MARKERS)
+_OUTPUT_MARKER_PATTERNS = _CONTROL_MARKERS
+
+UNTRUSTED_PLACEHOLDER = "[removed-untrusted-instruction]"
+
+
+def neutralize_untrusted(content: str) -> tuple[str, int]:
+    """Strip high-confidence injection instructions from untrusted content.
+
+    Used for repository-controlled text (diffs, PR text, retrieved code)
+    before it is embedded in a prompt. Returns ``(neutralized, removed_count)``.
+    """
+    neutralized = content
+    removed = 0
+    for pattern in UNTRUSTED_PATTERNS:
+        neutralized, count = re.subn(
+            pattern, UNTRUSTED_PLACEHOLDER, neutralized, flags=re.IGNORECASE
+        )
+        removed += count
+    if removed:
+        logger.warning(
+            "Neutralized %s prompt-injection pattern(s) in untrusted content",
+            removed,
+        )
+    return neutralized, removed
 
 
 def detect_injection(content: str) -> tuple[bool, list[str]]:

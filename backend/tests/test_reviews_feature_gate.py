@@ -29,6 +29,7 @@ from app.models.github import Installation, PullRequest, Repository
 from app.models.platform import FeatureFlag, PlatformSetting
 from app.models.review import Review
 from app.models.user import User
+from app.models.webhook_delivery import WebhookDelivery
 from app.queue.models import JobStatus, ReviewJob
 from app.queue.worker import claim_next_job_with_factory, process_job
 from app.services.platform_settings import platform_settings_service
@@ -37,6 +38,7 @@ from app.services.review_selection import ResolvedSelection
 
 SHA = "c" * 40
 INSTALLATION_ID = 515151
+APP_ID = 909090
 REPO_GITHUB_ID = 818181
 FULL_NAME = "testowner/feature-gate-repo"
 
@@ -44,7 +46,7 @@ FULL_NAME = "testowner/feature-gate-repo"
 def _payload(pr_number: int = 41, sha: str = SHA) -> dict:
     return {
         "action": "opened",
-        "installation": {"id": INSTALLATION_ID},
+        "installation": {"id": INSTALLATION_ID, "app_id": APP_ID},
         "repository": {
             "id": REPO_GITHUB_ID,
             "name": "feature-gate-repo",
@@ -94,7 +96,8 @@ def _post_webhook(payload: dict, delivery_id: str) -> TestClient:
 
 
 @pytest.fixture(autouse=True)
-def _reset_limiter():
+def _reset_limiter(monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_APP_ID", str(APP_ID), raising=False)
     limiter.reset()
     yield
     limiter.reset()
@@ -115,12 +118,14 @@ async def reviews_env(test_engine):
             "app.github.shared.AsyncSessionLocal",
             "app.queue.worker.AsyncSessionLocal",
             "app.db.session.AsyncSessionLocal",
+            "app.services.webhook_delivery_service._session_factory",
         ):
             stack.enter_context(patch(target, factory))
         yield factory
 
     async with factory() as db:
         for model in (
+            WebhookDelivery,
             ReviewExecution,
             Review,
             PullRequest,
@@ -155,6 +160,7 @@ async def _seed(factory) -> dict:
             account_type="User",
             user_id=user.id,
             repository_selection="all",
+            app_id=APP_ID,
             permissions={},
             events={},
             permissions_ok=True,

@@ -126,6 +126,17 @@ class GitHubAppAuth:
             )
         return response.json()
 
+    def invalidate_installation_token(self, installation_id: int) -> None:
+        """Drop every cached token for an installation.
+
+        Called when GitHub reports the installation as suspended, deleted, or
+        its permissions changed. The cache key includes the configured app id,
+        which may also have changed, so all keys for the installation are
+        cleared.
+        """
+        for key in [k for k in self._token_cache if k[1] == installation_id]:
+            self._token_cache.pop(key, None)
+
     async def get_installation_token(self, installation_id: int) -> str:
         """Get or create an installation access token."""
         cache_key = (str(self.app_id or ""), installation_id)
