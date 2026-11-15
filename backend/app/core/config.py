@@ -276,6 +276,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "GITHUB_WEBHOOK_SECRET must be set in non-development environments."
                 )
+            import logging
+
+            # PyJWT's HS256 expects at least a 256-bit key; a shorter key only
+            # produces an InsecureKeyLengthWarning and still signs, but it
+            # should not be the norm in production.
+            if len(self.JWT_SECRET_KEY.encode("utf-8")) < 32:
+                logging.getLogger(__name__).warning(
+                    "JWT_SECRET_KEY is %d bytes long (minimum 32 recommended for "
+                    "HS256). Generate with: python -c \"import secrets; "
+                    "print(secrets.token_urlsafe(32))\"",
+                    len(self.JWT_SECRET_KEY.encode("utf-8")),
+                )
         return self
 
 

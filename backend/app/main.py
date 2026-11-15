@@ -164,6 +164,17 @@ async def lifespan(app: FastAPI):
         logger.exception("Webhook delivery startup recovery failed")
     webhook_recovery_task = asyncio.create_task(webhook_delivery_loop())
 
+    # Best-effort recovery of verification results that could not be persisted
+    # to the database.  Pending files are ephemeral (/tmp) and are NOT
+    # durably stored; this is a best-effort attempt, not a guarantee.
+    try:
+        from app.verification.engine import verification_engine
+
+        result = await verification_engine.recover_pending_files()
+        logger.info("Verification pending-file recovery: %s", result)
+    except Exception:
+        logger.exception("Verification pending-file recovery failed")
+
     try:
         yield
     finally:

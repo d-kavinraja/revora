@@ -198,7 +198,9 @@ class ReviewPipeline:
                 logger.warning(f"Failed to create GitHub check run: {e}")
 
             # Stage 2: Clone repository
-            repo_path = await self._stage_clone(emitter, clone_url, token, head_sha)
+            repo_path = await self._stage_clone(
+                emitter, clone_url, token, head_sha, pr_number=pr_number
+            )
 
             # Stage 3: Intelligence analysis (if cloned)
             intelligence_data = await self._stage_intelligence(emitter, repo_path)
@@ -380,7 +382,7 @@ class ReviewPipeline:
                 except Exception as e:
                     logger.warning(f"Failed to cleanup repo: {e}")
 
-    async def _stage_clone(self, emitter, clone_url, token, head_sha=None):
+    async def _stage_clone(self, emitter, clone_url, token, head_sha=None, *, pr_number=None):
         """Stage: Clone repository."""
         await emitter.emit("cloning_repository", "running", EventType.STAGE_START)
 
@@ -394,7 +396,9 @@ class ReviewPipeline:
             return None
 
         try:
-            repo_path = await GitService.clone_repository(clone_url, token, head_sha)
+            repo_path = await GitService.clone_repository(
+                clone_url, token, head_sha, pr_number=pr_number
+            )
             await emitter.emit(
                 "cloning_repository", "completed", EventType.STAGE_COMPLETE
             )
@@ -743,9 +747,15 @@ class ReviewPipeline:
                     previous_review_id = rv.get("id")
                     break
         except Exception as e:
+            # A failed list request must never fall through to creating a
+            # new review — that would stack duplicates on every transient
+            # failure. Surface the error so the review is marked failed.
             logger.warning(f"Failed to list previous PR reviews: {e}")
+            raise
 
         if previous_review_id:
+            import httpx
+
             try:
                 await github_client.update_pr_review(
                     installation_id=installation_id,
@@ -759,10 +769,23 @@ class ReviewPipeline:
                     f"Updated existing PR review {previous_review_id} on PR #{pr_number}"
                 )
                 return previous_review_id
-            except Exception as e:
-                logger.warning(
-                    f"Failed to update PR review {previous_review_id}, creating new: {e}"
-                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    # The previous Revora review was deleted or dismissed;
+                    # create a fresh one.
+                    logger.info(
+                        f"Previous Revora review {previous_review_id} no longer exists on PR "
+                        f"#{pr_number}; creating a new review"
+                    )
+                else:
+                    # Transient/server-side failure: do NOT create a duplicate
+                    # review — surface the failure so the review is marked
+                    # failed instead of stacking another Revora review.
+                    logger.warning(
+                        f"Failed to update PR review {previous_review_id} (HTTP "
+                        f"{e.response.status_code}); not creating a duplicate review"
+                    )
+                    raise
 
         created = await github_client.create_pr_review(
             installation_id=installation_id,

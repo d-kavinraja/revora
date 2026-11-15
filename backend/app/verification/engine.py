@@ -1,7 +1,9 @@
+import json
 import logging
 import os
 import re
 import uuid
+from pathlib import Path
 from typing import Any
 
 from app.db.session import AsyncSessionLocal
@@ -12,11 +14,21 @@ from app.models.verification import (
     VerificationMetricModel,
     VerificationResultModel,
 )
+from app.security.error_sanitizer import sanitize_error_message
 from app.verification.cache import verification_cache
 from app.verification.models import VerificationResult, VerifiedFinding
 from app.verification.pipeline import pipeline
 
 logger = logging.getLogger(__name__)
+
+# Count of verification persistence failures since process startup.
+# Exposed in logs on each final failure; restart resets it.
+VERIFICATION_PERSIST_FAILURES = 0
+
+# Best-effort pending verification results directory.  Files here are written
+# when all DB persistence attempts fail.  They are NOT durable (ephemeral on
+# Render free tier) and are never exposed via any API endpoint.
+PENDING_VERIFICATION_DIR = Path(os.environ.get("TMPDIR", "/tmp")) / "revora_pending_verification"
 
 
 class VerificationEngine:
@@ -84,21 +96,183 @@ class VerificationEngine:
             # Persist FIRST, expose through the cache second. A verification
             # result must never be readable (cache hit) while its database
             # rows are missing because persistence failed.
-            try:
-                parsed_uuid = (
-                    uuid.UUID(review_id) if isinstance(review_id, str) else review_id
-                )
-                await self._persist_to_db(parsed_uuid, verified_raw, metrics)
+            parsed_uuid = (
+                uuid.UUID(review_id) if isinstance(review_id, str) else review_id
+            )
+            persisted = await self._persist_with_retry(
+                parsed_uuid, verified_raw, metrics
+            )
+            if persisted:
                 await verification_cache.set_verification_result(
                     str(review_id), result.to_dict()
                 )
-            except Exception as e:
-                logger.error(f"Failed to persist verification results to DB: {e}")
+            else:
+                # Best-effort: write to a local pending file.  This is NOT
+                # durable (ephemeral disk on Render free tier) and does NOT
+                # guarantee recovery.  It is an attempt, not a promise.
+                self._write_pending_file(parsed_uuid, verified_raw, metrics)
+                logger.error(
+                    "Verification results could not be persisted for review %s "
+                    "after retries; result was NOT cached. A best-effort pending "
+                    "file was written (ephemeral, not durable). Findings remain "
+                    "available in the HTTP response and the GitHub PR review.",
+                    review_id,
+                )
 
         logger.info(
             f"Verification complete: {result.verified_count} verified, {result.rejected_count} rejected"
         )
         return result
+
+    async def _persist_with_retry(
+        self,
+        review_id: uuid.UUID,
+        verified_findings: list[dict[str, Any]],
+        metrics: dict[str, Any],
+        max_attempts: int = 3,
+    ) -> bool:
+        """Bounded retries with exponential backoff for verification persistence.
+
+        The commit inside ``_persist_to_db`` is atomic, so a failed attempt
+        leaves no rows behind and a retry cannot create duplicates.
+        """
+        import asyncio
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self._persist_to_db(review_id, verified_findings, metrics)
+                return True
+            except Exception as error:
+                logger.warning(
+                    "Verification persistence failed (attempt %d/%d) for review %s: %s",
+                    attempt,
+                    max_attempts,
+                    review_id,
+                    sanitize_error_message(error),
+                )
+                if attempt < max_attempts:
+                    await asyncio.sleep(min(2 ** (attempt - 1) * 0.5, 4.0))
+        global VERIFICATION_PERSIST_FAILURES
+        VERIFICATION_PERSIST_FAILURES += 1
+        logger.error(
+            "Verification persistence exhausted after %d attempts for review %s; "
+            "total persistence failures since startup: %d",
+            max_attempts,
+            review_id,
+            VERIFICATION_PERSIST_FAILURES,
+        )
+        return False
+
+    def _pending_file_path(self, review_id: uuid.UUID) -> Path:
+        return PENDING_VERIFICATION_DIR / f"{review_id}.json"
+
+    def _write_pending_file(
+        self,
+        review_id: uuid.UUID,
+        verified_findings: list[dict[str, Any]],
+        metrics: dict[str, Any],
+    ) -> None:
+        """Best-effort: write verification data to a local file when DB is
+        unavailable.  The file is NOT durably persisted (ephemeral disk).
+        Contains only finding metadata and metrics — no raw AI response,
+        no credentials, no user data."""
+        try:
+            PENDING_VERIFICATION_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(PENDING_VERIFICATION_DIR, 0o700)
+            data = {
+                "review_id": str(review_id),
+                "verified_findings": verified_findings,
+                "metrics": metrics,
+                "timestamp": __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc
+                ).isoformat(),
+            }
+            target = self._pending_file_path(review_id)
+            tmp = target.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, target)
+            try:
+                os.chmod(target, 0o600)
+            except OSError:
+                pass
+            logger.warning(
+                "Wrote best-effort pending verification file for review %s "
+                "(NOT durably persisted — ephemeral disk)",
+                review_id,
+            )
+        except Exception as write_error:
+            logger.error(
+                "Failed to write pending verification file for review %s: %s",
+                review_id,
+                sanitize_error_message(write_error),
+            )
+
+    async def recover_pending_files(self) -> dict[str, int]:
+        """Best-effort startup recovery: attempt to flush pending files to DB.
+
+        Returns counts of recovered and failed files.  Never raises.
+        """
+        recovered = 0
+        failed = 0
+        if not PENDING_VERIFICATION_DIR.exists():
+            return {"recovered": recovered, "failed": failed}
+        for path in sorted(PENDING_VERIFICATION_DIR.glob("*.json")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                review_id = uuid.UUID(data["review_id"])
+                # Idempotency: check if already persisted
+                async with AsyncSessionLocal() as db:
+                    from sqlalchemy import select as sa_select
+                    from app.models.verification import VerificationResultModel
+
+                    existing = await db.execute(
+                        sa_select(VerificationResultModel.id).where(
+                            VerificationResultModel.review_id == review_id
+                        ).limit(1)
+                    )
+                    if existing.scalars().first() is not None:
+                        path.unlink(missing_ok=True)
+                        recovered += 1
+                        continue
+                # Attempt persistence
+                persisted = await self._persist_with_retry(
+                    review_id,
+                    data.get("verified_findings", []),
+                    data.get("metrics", {}),
+                )
+                if persisted:
+                    path.unlink(missing_ok=True)
+                    recovered += 1
+                    logger.info(
+                        "Recovered pending verification for review %s", review_id
+                    )
+                else:
+                    failed += 1
+            except (json.JSONDecodeError, KeyError, ValueError) as parse_error:
+                logger.warning(
+                    "Malformed pending verification file %s: %s; moving to error dir",
+                    path.name,
+                    sanitize_error_message(parse_error),
+                )
+                error_dir = PENDING_VERIFICATION_DIR / "errors"
+                error_dir.mkdir(mode=0o700, exist_ok=True)
+                try:
+                    os.replace(path, error_dir / path.name)
+                except Exception:
+                    pass
+                failed += 1
+            except Exception as error:
+                logger.error(
+                    "Recovery failed for pending file %s: %s",
+                    path.name,
+                    sanitize_error_message(error),
+                )
+                failed += 1
+        return {"recovered": recovered, "failed": failed}
 
     async def _persist_to_db(
         self,

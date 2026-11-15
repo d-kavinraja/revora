@@ -27,17 +27,59 @@ def _dir_size_bytes(path: str) -> int:
     return total
 
 
+def _git_fetch_with_auth(
+    repo_path: str, token: str, *refs: str, timeout: int = 120
+) -> None:
+    """Fetch refs from origin using a transient auth header.
+
+    Credentials are passed via ``GIT_CONFIG_*`` environment variables so
+    they never appear in process arguments (``ps``), Git config files, or
+    error messages.  The env vars are scoped to this subprocess only.
+    """
+    env = os.environ.copy()
+    if token:
+        credential = base64.b64encode(
+            f"x-access-token:{token}".encode("utf-8")
+        ).decode("ascii")
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
+        env["GIT_CONFIG_VALUE_0"] = f"Authorization: Basic {credential}"
+    cmd = ["git", "fetch", "origin", *refs]
+    proc = subprocess.run(
+        cmd,
+        cwd=repo_path,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=timeout,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git fetch failed (exit {proc.returncode}) for {refs}"
+        )
+
+
 class GitService:
     """Utility class for cloning and analyzing repositories."""
 
     @staticmethod
     async def clone_repository(
-        clone_url: str, token: str, head_sha: str | None = None
+        clone_url: str,
+        token: str,
+        head_sha: str | None = None,
+        pr_number: int | None = None,
     ) -> str:
         """
         Clones a repository securely into a temporary directory.
         Uses the provided installation token via a transient git header —
         the token NEVER appears in any URL, config, or log.
+
+        When ``head_sha`` is provided, the commit is fetched from origin
+        (PR refs are fetched for GitHub pull requests, including forks) and
+        verified before checkout. ``pr_number`` enables fetching
+        ``refs/pull/{n}/head``, which works for both same-repo and fork
+        pull requests.
         """
         # Validate the requested commit first: GitPython passes head_sha to
         # `git checkout`, so a value starting with '-' would be parsed as a
@@ -92,7 +134,50 @@ class GitService:
                 )
             repo = Repo(temp_dir)
             if head_sha:
-                repo.git.checkout("--", head_sha)
+                # GitHub exposes pull request heads (same-repo and fork) at
+                # refs/pull/{n}/head. Fetching it brings fork commits into the
+                # local object store without relying on any branch ref.
+                #
+                # Authentication uses GIT_CONFIG_* environment variables
+                # (transient, scoped to the subprocess) so the credential
+                # never appears in process arguments, Git config, or logs.
+                if pr_number is not None:
+                    try:
+                        _git_fetch_with_auth(
+                            temp_dir, token, f"refs/pull/{pr_number}/head"
+                        )
+                    except Exception as fetch_error:
+                        logger.warning(
+                            "Failed to fetch refs/pull/%s/head: %s",
+                            pr_number,
+                            fetch_error,
+                        )
+                # Best-effort direct fetch of the exact commit (works when the
+                # server allows fetching arbitrary reachable SHAs).
+                try:
+                    _git_fetch_with_auth(temp_dir, token, head_sha)
+                except Exception as fetch_error:
+                    logger.debug(
+                        "Direct fetch of %s failed (will rely on PR ref or clone): %s",
+                        head_sha,
+                        fetch_error,
+                    )
+
+                # The commit must be present locally before we can check it
+                # out; a force-pushed or fork-only SHA that was never fetched
+                # is reported with a clear message instead of a confusing
+                # pathspec error.
+                try:
+                    repo.git.cat_file("-e", f"{head_sha}^{{commit}}")
+                except Exception as verify_error:
+                    raise RuntimeError(
+                        f"Commit {head_sha} not found in {clone_url}. "
+                        "It may belong to a force-pushed or deleted branch."
+                    ) from verify_error
+
+                # Detach to the exact commit. NOTE: do not pass `--` here —
+                # it would make git treat the SHA as a pathspec, not a ref.
+                repo.git.checkout(head_sha)
 
         try:
             await asyncio.to_thread(_clone)
