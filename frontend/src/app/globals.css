@@ -78,6 +78,9 @@
 
 :root {
   --revora-announcement-height: 0px;
+  /* Height of the fixed mobile navigation header (md:hidden). Single source
+     of truth shared by the sidebar and the inference loader. */
+  --revora-app-header-h: 4rem;
 
   /* Global announcement banner — warm maintenance-alert palette */
   --announcement-bg: #F8E9E5;

@@ -396,7 +396,6 @@ function MouthMapLab() {
       }
 
       setPhase('uploading');
-      setPhase('processing');
       const out = await mouthmapApi.runInference(
         sel.blob,
         sel.filename,
@@ -406,9 +405,19 @@ function MouthMapLab() {
           signal: controller.signal,
         },
         (p, done) => {
-          setPhase('uploading');
           setUploadPct(p);
-          if (done) setUploadDone(true);
+          if (done) {
+            // Bytes delivered: transition to processing exactly once, and
+            // never let a stray upload progress event move the machine back.
+            setUploadDone(true);
+            setPhase('processing');
+          } else {
+            setPhase((prev) =>
+              prev === 'processing' || prev === 'completed' || prev === 'failed'
+                ? prev
+                : 'uploading',
+            );
+          }
         },
       );
       if (controller.signal.aborted) return;

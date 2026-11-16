@@ -181,7 +181,7 @@ export function GlobalAnnouncementBanner() {
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-x-0 top-0 z-[70] border-b ${
+      className={`sticky top-0 z-[70] w-full border-b ${
         isAuthRoute
           ? 'border-white/10 bg-[#090909] text-white'
           : 'border-[var(--announcement-border)] bg-[var(--announcement-bg)] text-[var(--announcement-title)]'

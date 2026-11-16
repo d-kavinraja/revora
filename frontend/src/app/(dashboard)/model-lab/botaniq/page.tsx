@@ -178,7 +178,12 @@ const pickDatasetImage = useCallback(
           },
           (pct, done) => {
             setUploadPct(pct);
-            if (done) setPhase('processing');
+            setPhase((prev) => {
+              // Idempotent, monotonic upload -> processing transition:
+              // keep processing/completed/failed once entered.
+              if (prev !== 'uploading') return prev;
+              return done ? 'processing' : 'uploading';
+            });
           },
         );
       }

@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isModelLab = pathname.startsWith('/model-lab');
 
   return (
-    <div className="min-h-dvh bg-background text-foreground flex w-full relative pt-[var(--revora-announcement-height,0px)]">
+    <div className="min-h-[calc(100dvh-var(--revora-announcement-height,0px))] bg-background text-foreground flex w-full relative">
       {!isModelLab && (
         <TargetCursor
           spinDuration={2}
@@ -99,7 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <Sidebar />
-      <main className="flex-1 min-w-0 overflow-auto z-10 pt-16 md:pt-0">
+      <main className="flex-1 min-w-0 overflow-auto z-10 pt-[var(--revora-app-header-h)] md:pt-0">
         <MaintenanceBanner />
         {children}
       </main>

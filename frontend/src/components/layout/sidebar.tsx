@@ -162,7 +162,7 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="md:hidden fixed left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
+      <div className="md:hidden fixed left-0 right-0 h-[var(--revora-app-header-h)] bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
         <div className="flex items-center gap-3">
           <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} style={{ width: 28, height: 28 }} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>

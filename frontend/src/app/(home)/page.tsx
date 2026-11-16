@@ -50,7 +50,7 @@ export default function LandingPage() {
   const isLight = theme === 'light';
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground relative overflow-hidden pt-[var(--revora-announcement-height,0px)]">
+    <div className="flex min-h-[calc(100dvh-var(--revora-announcement-height,0px))] flex-col bg-background text-foreground relative overflow-hidden">
       {/* Top Banner */}
       <StickyBanner sticky={false} className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 font-mono text-xs md:text-sm">
         <p className="mx-0 max-w-[90%] flex items-center justify-center gap-2 flex-wrap text-center py-1">

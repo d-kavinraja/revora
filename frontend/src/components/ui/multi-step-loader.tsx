@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { LoaderIcon } from "@/components/ui/loader-icon";
@@ -14,6 +15,10 @@ export interface LoaderStage {
   /** Live detail line rendered under the label (real values only — never fabricated). */
   detail?: string | null;
 }
+
+const subscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 const PendingIcon = ({ className }: { className?: string }) => (
   <svg
@@ -178,6 +183,16 @@ export function MultiStepLoader({
 }: MultiStepLoaderProps) {
   const reduceMotion = useReducedMotion();
 
+  // Portal target lives on document.body. Rendering the portal only on the
+  // client (getServerSnapshot => false) keeps SSR/hydration clean. Portaled
+  // to the body, the Cancel button participates in the root stacking
+  // context, so no ancestor — not `main`'s z-10, the overlay's backdrop-blur
+  // containing block, the announcement or the mobile header — can clip, cap
+  // or hide it. It still renders spatially below the announcement and the
+  // mobile header via the same measured CSS variables, and above them in
+  // paint order.
+  const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
+
   // Lock body scroll while the blocking overlay is open.
   useEffect(() => {
     if (!open || typeof document === "undefined") return;
@@ -198,8 +213,23 @@ export function MultiStepLoader({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onCancel]);
 
+  const cancelButton =
+    mounted && open && onCancel ? (
+      <button
+        type="button"
+        onClick={onCancel}
+        aria-label="Cancel inference"
+        autoFocus
+        className="fixed z-[75] flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring top-[calc(var(--revora-announcement-height,0px)_+_var(--revora-app-header-h)_+_env(safe-area-inset-top,0px)_+_0.75rem)] right-[calc(1rem_+_env(safe-area-inset-right,0px))] md:h-8 md:w-8 md:top-[calc(var(--revora-announcement-height,0px)_+_env(safe-area-inset-top,0px)_+_0.75rem)]"
+      >
+        <CloseIcon />
+      </button>
+    ) : null;
+
   return (
-    <AnimatePresence>
+    <>
+      {cancelButton ? createPortal(cancelButton, document.body) : null}
+      <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -211,19 +241,16 @@ export function MultiStepLoader({
           aria-modal="true"
           aria-label={title}
         >
-          {onCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="Cancel inference"
-              autoFocus
-              className="fixed top-4 right-4 z-10 rounded-full text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <CloseIcon />
-            </button>
-          ) : null}
+          {/* Cancel is portaled to document.body below (root stacking
+              context) — it must never render inside the overlay, whose
+              backdrop-blur containing block and main's z-10 trap fixed
+              descendants underneath the announcement and mobile header. */}
 
-          <div className="relative mt-32 w-full md:mt-40" role="status" aria-live="polite">
+          <div
+            className="relative w-full mt-[calc(var(--revora-announcement-height,0px)_+_8rem_+_env(safe-area-inset-top,0px))] md:mt-[calc(var(--revora-announcement-height,0px)_+_10rem)]"
+            role="status"
+            aria-live="polite"
+          >
             <div className="mx-auto mb-8 max-w-xl">
               <p className="text-xl font-semibold text-foreground md:text-2xl">{title}</p>
               <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
@@ -241,6 +268,7 @@ export function MultiStepLoader({
           />
         </motion.div>
       )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </>
   );
 }

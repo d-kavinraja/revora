@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col min-h-screen bg-background pt-[var(--revora-announcement-height,0px)]">
+    <div className="flex flex-col min-h-[calc(100dvh-var(--revora-announcement-height,0px))] bg-background">
       <Header />
       <main className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
         {children}
