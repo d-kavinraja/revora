@@ -10,9 +10,11 @@ from app.db import session as db_session
 def _reset_engine():
     db_session._engine = None
     db_session._sessionmaker = None
+    db_session._INSTRUMENTED_ENGINES.clear()
     yield
     db_session._engine = None
     db_session._sessionmaker = None
+    db_session._INSTRUMENTED_ENGINES.clear()
 
 
 @pytest.mark.asyncio
@@ -101,4 +103,49 @@ async def test_engine_disposal_idempotent(monkeypatch):
     await db_session.dispose_engine()
     assert db_session._engine is None
     # second call should not raise
+    await db_session.dispose_engine()
+
+
+import asyncpg
+from sqlalchemy.exc import TimeoutError
+
+
+@pytest.mark.asyncio
+async def test_classifier_maps_closed_connection(monkeypatch):
+    exc = asyncpg.exceptions.InterfaceError("underlying connection is closed")
+    result = db_session._classify_db_exception(exc)
+    assert result["error_classification"] == "connection_closed"
+
+
+@pytest.mark.asyncio
+async def test_classifier_maps_sqlstate_and_timeout(monkeypatch):
+    class IdleError(Exception):
+        sqlstate = "57P05"
+
+    assert db_session._classify_db_exception(IdleError("idle"))["error_classification"] == "idle_session_timeout"
+    assert db_session._classify_db_exception(TimeoutError("pool"))["error_classification"] == "pool_timeout"
+
+
+@pytest.mark.asyncio
+async def test_sanitizer_redacts_secrets(monkeypatch):
+    text = db_session._sanitize_db_error(
+        Exception("postgresql://user:secret@db.example.com/revora password=hunter2 [SQL: SELECT 1] [parameters: (1,)]")
+    )
+    assert "secret" not in text
+    assert "hunter2" not in text
+    assert "redacted-url" in text
+    assert "password=[redacted]" in text
+
+
+@pytest.mark.asyncio
+async def test_pool_configuration_log_does_not_leak_url(monkeypatch, caplog):
+    monkeypatch.setattr(config_module.settings, "APP_ENV", "testing", raising=False)
+    monkeypatch.setattr(config_module.settings, "DATABASE_URL", "sqlite+aiosqlite:///:memory:", raising=False)
+
+    caplog.set_level("INFO")
+    engine, _ = await db_session.get_engine_and_sessionmaker()
+    assert engine is not None
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "redacted-url" not in messages
+    assert "sqlite+aiosqlite" not in messages
     await db_session.dispose_engine()
