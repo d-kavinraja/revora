@@ -11,6 +11,9 @@ const BACKEND_ORIGIN = (process.env.BACKEND_ORIGIN ?? "")
 const nextConfig: NextConfig = {
   /* config options here */
   devIndicators: false,
+  experimental: {
+    agentUpgrade: "security",
+  },
   // Same-origin API proxy: the browser calls /api/v1/* on the frontend
   // host (carrying the HttpOnly session cookie) and Next forwards each
   // request to Render untouched (method, query, headers, cookies, body,
