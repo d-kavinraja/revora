@@ -3,6 +3,7 @@
 .ds-viewport {
   font-family: "Inter Tight", "Reference Sans", Arial, sans-serif;
   position: relative;
+  z-index: 30;
   isolation: isolate;
   background: #000;
   color: #fff;
@@ -61,8 +62,20 @@
   z-index: -2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.03), transparent 24%, transparent 82%, rgba(0, 0, 0, 0.05)),
-    radial-gradient(ellipse at 44% 54%, transparent 30%, rgba(0, 0, 0, 0.055) 100%);
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.72) 0%,
+      rgba(0, 0, 0, 0.48) 34%,
+      rgba(0, 0, 0, 0.14) 66%,
+      rgba(0, 0, 0, 0.3) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.32) 0%,
+      transparent 32%,
+      transparent 68%,
+      rgba(0, 0, 0, 0.52) 100%
+    );
 }
 
 /* ---------- Header ---------- */
@@ -72,9 +85,124 @@
   inset: var(--header-top) var(--gutter-end) auto var(--gutter-start);
   height: 48px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   white-space: nowrap;
   z-index: 2;
+  transition: background 0.25s ease, padding 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ds-viewport.is-scrolled {
+  overflow: visible;
+}
+
+.ds-header.is-scrolled {
+  position: fixed;
+  top: var(--revora-announcement-height, 0px);
+  right: 0;
+  left: 0;
+  bottom: auto;
+  height: auto;
+  z-index: 60;
+  padding: 9px var(--gutter-end) 11px var(--gutter-start);
+  background: linear-gradient(180deg, rgba(6, 6, 8, 0.88), rgba(6, 6, 8, 0.6));
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+.ds-header.is-scrolled::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 90, 44, 0.5) 28%,
+    rgba(246, 180, 138, 0.62) 50%,
+    rgba(255, 90, 44, 0.5) 72%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.ds-header.is-scrolled .ds-brand,
+.ds-header.is-scrolled .ds-nav,
+.ds-header.is-scrolled .ds-nav-link:first-child {
+  top: 0;
+}
+
+/* Light mode: solid white scrolled header (dark mode untouched). */
+html.light .ds-header.is-scrolled {
+  background: #ffffff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+
+html.light .ds-header.is-scrolled .ds-brand {
+  filter: none;
+}
+
+html.light .ds-header.is-scrolled .ds-brand-name {
+  color: #111111;
+  text-shadow: none;
+}
+
+html.light .ds-header.is-scrolled .ds-nav-link {
+  color: rgba(0, 0, 0, 0.68);
+  text-shadow: none;
+}
+
+html.light .ds-header.is-scrolled .ds-nav-link:hover,
+html.light .ds-header.is-scrolled .ds-nav-link-active {
+  color: #000000;
+}
+
+html.light .ds-header.is-scrolled .ds-nav-link-active::after {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+html.light .ds-header.is-scrolled .ds-time-value {
+  color: rgba(0, 0, 0, 0.68);
+}
+
+html.light .ds-header.is-scrolled .ds-theme-wrap,
+html.light .ds-header.is-scrolled .ds-theme-wrap button {
+  color: rgba(0, 0, 0, 0.68);
+}
+
+html.light .ds-header.is-scrolled .ds-theme-wrap button:hover {
+  color: #000000;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Keep the dark mobile/tablet dropdown legible when the scrolled header is white. */
+html.light .ds-header.is-scrolled.menu-open .ds-nav-link {
+  color: rgba(255, 255, 255, 0.77);
+}
+
+html.light .ds-header.is-scrolled.menu-open .ds-nav-link:hover,
+html.light .ds-header.is-scrolled.menu-open .ds-nav-link-active {
+  color: #ffffff;
+}
+
+html.light .ds-header.is-scrolled.menu-open .ds-nav-link-active::after {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+html.light .ds-header.is-scrolled.menu-open .ds-time-value {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+html.light .ds-header.is-scrolled.menu-open .ds-theme-wrap,
+html.light .ds-header.is-scrolled.menu-open .ds-theme-wrap button {
+  color: rgba(255, 255, 255, 0.77);
+}
+
+html.light .ds-theme-wrap svg {
+  color: #e5e5e6;
 }
 
 .ds-brand {
@@ -82,7 +210,7 @@
   align-items: center;
   gap: 10px;
   position: relative;
-  top: 10px;
+  top: 0;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
@@ -114,17 +242,21 @@
   gap: clamp(32px, 2.9vw, 43px);
   margin-left: 0;
   position: relative;
-  top: 9px;
+  top: 0;
 }
 
 .ds-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font-size: 16px;
   font-weight: 430;
   letter-spacing: -0.36px;
   color: rgba(229, 229, 230, 0.77);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   position: relative;
-  padding-bottom: 6px;
+  padding: 0 2px 6px;
+  border-radius: 6px;
 }
 
 .ds-nav-fourth {
@@ -132,7 +264,7 @@
 }
 
 .ds-nav-link:first-child {
-  top: -3px;
+  top: 0;
 }
 
 .ds-nav-link:hover {
@@ -155,31 +287,33 @@
 }
 
 .ds-time-panel {
-  margin-left: auto;
-  width: 211px;
+  margin-left: clamp(20px, 2vw, 32px);
+  width: auto;
   height: 48px;
-  padding-left: 8px;
-  border-left: 2px solid rgba(230, 230, 230, 0.52);
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  align-items: center;
+  opacity: 0.62;
+  transition: opacity 0.2s ease;
 }
 
-.ds-time-label {
-  font-size: 15px;
-  font-weight: 420;
-  color: rgba(240, 240, 240, 0.77);
+.ds-time-panel:hover {
+  opacity: 0.92;
 }
 
 .ds-time-value {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 15px;
-  font-weight: 440;
-  color: rgba(255, 255, 255, 0.93);
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.82);
   white-space: nowrap;
+}
+
+.ds-signup-wrap {
+  margin-left: auto;
 }
 
 .ds-signup-wrap {
@@ -190,11 +324,16 @@
 .ds-theme-wrap {
   margin-left: clamp(20px, 1.95vw, 29px);
   position: relative;
-  top: 2px;
+  top: 0;
   color: rgba(229, 229, 230, 0.77);
 }
 
 .ds-theme-wrap button {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: rgba(229, 229, 230, 0.77);
 }
 
@@ -208,7 +347,8 @@
   align-items: center;
   justify-content: center;
   width: 109px;
-  height: 42px;
+  height: 44px;
+  min-height: 44px;
   margin-left: clamp(20px, 1.95vw, 29px);
   border-radius: 7px;
   background: #fff;
@@ -220,7 +360,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 1px 5px rgba(0, 0, 0, 0.34);
   position: relative;
-  top: var(--control-baseline-shift);
+  top: 0;
 }
 
 .ds-toggle-wrap {
@@ -312,11 +452,19 @@
   margin-top: var(--copy-cta-gap);
 }
 
+.ds-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .ds-primary-cta {
   position: relative;
   display: inline-flex;
   align-items: center;
   width: var(--cta-width);
+  min-height: 44px;
   height: var(--cta-height);
   border-radius: 7px;
   background: #fff;
@@ -326,6 +474,52 @@
   letter-spacing: -0.3px;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.38);
   left: var(--control-inline-nudge);
+}
+
+.ds-ghost-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: var(--primary-control-font-size);
+  font-weight: 440;
+  letter-spacing: -0.2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.ds-ghost-cta:hover {
+  border-color: rgba(246, 180, 138, 0.7);
+  background: rgba(255, 90, 44, 0.14);
+  color: #fff;
+}
+
+.ds-ghost-cta:focus-visible {
+  outline: 2px solid #f6b48a;
+  outline-offset: 3px;
+}
+
+.ds-trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.ds-trust span[aria-hidden] {
+  color: rgba(246, 180, 138, 0.85);
 }
 
 .ds-primary-cta .ds-label {
@@ -381,6 +575,11 @@
 .ds-viewport :focus-visible {
   outline: 2px solid #fff;
   outline-offset: 3px;
+}
+
+.ds-sign-up:focus-visible,
+.ds-primary-cta:focus-visible {
+  outline-color: #ff5a2c;
 }
 
 @keyframes ds-entrance-brand {
@@ -464,6 +663,93 @@ html.motion-pending .ds-demo-card {
   top: 0;
 }
 
+/* ---------- Compact desktop: keep the card clear of the headline ---------- */
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .ds-screen {
+    --display-size: clamp(48px, 5.6vw, 70px);
+    --display-leading: 1.17;
+    --card-width: clamp(248px, 25vw, 300px);
+  }
+
+  .ds-hero-content {
+    max-width: calc(
+      100vw - var(--gutter-start) - var(--gutter-end) - var(--card-width) - 72px
+    );
+  }
+
+  .ds-hero-copy {
+    width: clamp(340px, 46vw, 460px);
+  }
+
+  .ds-nav {
+    gap: clamp(20px, 2.2vw, 30px);
+  }
+
+  .ds-header-actions {
+    margin-left: clamp(24px, 2.5vw, 36px);
+  }
+}
+
+@media (max-width: 1279px) {
+  .ds-header:not(.menu-open) .ds-time-panel {
+    display: none;
+  }
+}
+
+/* Desktop: keep the live clock horizontally centered without disturbing flow. */
+@media (min-width: 1280px) {
+  .ds-time-panel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    margin-left: 0;
+  }
+}
+
+/* ---------- Stacked hero (tablet + below) ---------- */
+
+@media (max-width: 1023px) {
+  .ds-screen {
+    --display-size: clamp(48px, 8vw, 76px);
+    --display-leading: 1.16;
+  }
+
+  .ds-viewport {
+    min-height: 100svh;
+  }
+
+  .ds-hero {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(24px, 4svh, 40px);
+    padding: calc(var(--header-top) + 82px) var(--gutter-end) var(--hero-bottom)
+      var(--gutter-start);
+  }
+
+  .ds-hero-content {
+    position: static;
+    max-width: 100%;
+  }
+
+  .ds-hero-copy {
+    width: min(100%, 560px);
+  }
+
+  .ds-demo-card {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .ds-demo-card .ml-card-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 /* ---------- Tablet ---------- */
 
 @media (min-width: 620px) and (max-width: 790px),
@@ -489,8 +775,8 @@ html.motion-pending .ds-demo-card {
     padding: 18px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.13);
-    background: linear-gradient(145deg, rgba(24, 22, 20, 0.92), rgba(5, 12, 14, 0.94));
-    backdrop-filter: blur(18px) saturate(108%);
+    background: #0b0a09;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.985);
@@ -568,8 +854,8 @@ html.motion-pending .ds-demo-card {
     padding: 18px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.13);
-    background: linear-gradient(145deg, rgba(24, 22, 20, 0.92), rgba(5, 12, 14, 0.94));
-    backdrop-filter: blur(18px) saturate(108%);
+    background: #0b0a09;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
     opacity: 0;
     visibility: hidden;
     transform: translateY(-8px) scale(0.985);
@@ -657,7 +943,8 @@ html.motion-pending .ds-demo-card {
 
   .ds-demo-card {
     position: static;
-    width: min(100%, 400px);
+    width: 100%;
+    max-width: 100%;
     aspect-ratio: auto;
   }
 }
@@ -681,11 +968,12 @@ html.motion-pending .ds-demo-card {
 
 @media (max-width: 1100px) and (orientation: landscape) and (max-height: 500px) {
   .ds-hero-content {
-    max-width: calc(100vw - var(--gutter-start) - var(--gutter-end) - var(--card-width) - 32px);
+    max-width: 100%;
   }
 
   .ds-demo-card {
-    width: min(250px, 34vw);
+    width: 100%;
+    max-width: 100%;
   }
 }
 

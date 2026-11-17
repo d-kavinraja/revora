@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { REVORA, SOCIAL_IMAGE } from '@/lib/site';
 
 const homeTitle = `${REVORA.systemName} | ${REVORA.tagline}`;
@@ -47,6 +47,10 @@ export const metadata: Metadata = {
     description: homeDescription,
     images: [twitterImage],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#000000',
 };
 
 export default function HomeLayout({ children }: { children: React.ReactNode }) {

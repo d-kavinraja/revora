@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
@@ -14,32 +14,102 @@ const VIDEO_SRC =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260808_064556_051587f1-74a1-4336-8c05-4dde3594ed05.mp4';
 
 const NAV = [
-  { label: 'Product', href: '#setup' },
+  { label: 'Setup', href: '#setup' },
   { label: 'Docs', href: REVORA.github.readme },
   { label: 'Install', href: REVORA.github.app },
   { label: 'Sign In', href: '/login' },
 ];
 
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+function getReducedMotion() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
 export function DataSignalHero() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsible, setCollapsible] = useState(false);
   const [now, setNow] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState('setup');
+  const reducedMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, () => false);
+  const [videoReady, setVideoReady] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLElement>(null);
+  const screenRef = useRef<HTMLElement>(null);
   const fallbackRef = useRef<number | null>(null);
 
-  // Live timezone clock in "9:47 PM • 14 July 2026" format, client-only.
+  // Compact local clock, client-only.
   useEffect(() => {
     const tick = () => {
       const d = new Date();
-      const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      const date = `${d.getDate()} ${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`;
-      setNow(`${time} • ${date}`);
+      setNow(d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }));
     };
     tick();
     const id = window.setInterval(tick, 20_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Sticky navbar: transparent over the video, glass + hairline once scrolled.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 72);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Active-section highlight for the one in-page nav link.
+  useEffect(() => {
+    const ids = ['setup', 'features', 'sample-review', 'faq'];
+    const sections = ids
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => Boolean(section));
+
+    if (!sections.length || !('IntersectionObserver' in window)) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible) setActiveSection(visible.target.id);
+      },
+      { rootMargin: '-42% 0px -42% 0px', threshold: [0, 0.25, 0.5] },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  // Lazy video source. Reduced motion keeps the poster.
+  useEffect(() => {
+    if (reducedMotion) return;
+
+    const screen = screenRef.current;
+    if (!screen || !('IntersectionObserver' in window)) {
+      setVideoReady(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVideoReady(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '240px' },
+    );
+
+    observer.observe(screen);
+    return () => observer.disconnect();
+  }, [reducedMotion]);
 
   // One-shot entrance timeline gate: `motion-pending` + 3500ms fallback.
   useEffect(() => {
@@ -96,7 +166,7 @@ export function DataSignalHero() {
   }, [menuOpen]);
 
   return (
-    <main className="ds-viewport">
+    <div className={cn('ds-viewport', scrolled && 'is-scrolled')}>
       {/* Display + UI type: closest public analogues to the prompt's
           Reference Display / Reference Sans (fictional names). */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -105,20 +175,25 @@ export function DataSignalHero() {
         href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@100..900&family=Source+Serif+4:opsz,wght@8..60,200..900&display=swap"
         rel="stylesheet"
       />
-      <section className="ds-screen" id="screen">
+      <section ref={screenRef} className="ds-screen" id="screen">
         <video
           className="ds-background"
-          autoPlay
+          src={videoReady ? VIDEO_SRC : undefined}
+          poster="/assets/hero-poster.svg"
+          preload="none"
+          autoPlay={!reducedMotion}
           muted
           loop
           playsInline
           disablePictureInPicture
           aria-hidden="true"
-        >
-          <source src={VIDEO_SRC} type="video/mp4" />
-        </video>
+          tabIndex={-1}
+        />
 
-        <header ref={headerRef} className={cn('ds-header', menuOpen && 'menu-open')}>
+        <header
+          ref={headerRef}
+          className={cn('ds-header', menuOpen && 'menu-open', scrolled && 'is-scrolled')}
+        >
           <div className="ds-entrance ds-entrance-brand">
             <Link href="/" aria-label="Revora home" className="ds-brand">
               <Image
@@ -141,7 +216,12 @@ export function DataSignalHero() {
           >
             <nav aria-label="Primary" className="ds-nav">
               <span className="ds-entrance ds-entrance-nav" style={{ animationDelay: '130ms' }}>
-                <Link href={NAV[0].href} onClick={() => setMenuOpen(false)} className="ds-nav-link ds-nav-link-active">
+                <Link
+                  href={NAV[0].href}
+                  onClick={() => setMenuOpen(false)}
+                  className={cn('ds-nav-link', activeSection === 'setup' && 'ds-nav-link-active')}
+                  aria-current={activeSection === 'setup' ? 'location' : undefined}
+                >
                   {NAV[0].label}
                 </Link>
               </span>
@@ -166,10 +246,10 @@ export function DataSignalHero() {
               className="ds-entrance ds-entrance-nav ds-time-panel"
               style={{ animationDuration: '520ms', animationDelay: '180ms' }}
               role="status"
-              aria-label="Local time"
+              aria-label={now ? `Local time ${now}` : 'Local time'}
+              title="Your local time"
             >
-              <span className="ds-time-label">Timezone</span>
-              <span className="ds-time-value">{now ?? ' '}</span>
+              <span className="ds-time-value">{now ?? ' '}</span>
             </div>
 
             <div className="ds-entrance ds-entrance-action ds-signup-wrap" style={{ animationDelay: '220ms' }}>
@@ -221,17 +301,29 @@ export function DataSignalHero() {
               finding, so every merge is backed by code you trust.
             </p>
             <div className="ds-entrance ds-entrance-action ds-cta-wrap">
-              <a
-                href={REVORA.github.app}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ds-primary-cta"
-              >
-                <span className="ds-label">Install Revora-PR</span>
-                <span aria-hidden="true" className="ds-arrow-box">
-                  <ArrowRight size={14} strokeWidth={2.2} />
-                </span>
-              </a>
+              <div className="ds-cta-row">
+                <a
+                  href={REVORA.github.app}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ds-primary-cta"
+                >
+                  <span className="ds-label">Install Revora-PR</span>
+                  <span aria-hidden="true" className="ds-arrow-box">
+                    <ArrowRight size={14} strokeWidth={2.2} />
+                  </span>
+                </a>
+                <a href="#setup" className="ds-ghost-cta" onClick={() => setMenuOpen(false)}>
+                  See how it works
+                </a>
+              </div>
+              <p className="ds-trust">
+                <span>Free</span>
+                <span aria-hidden="true">·</span>
+                <span>Open source</span>
+                <span aria-hidden="true">·</span>
+                <span>2-minute setup</span>
+              </p>
             </div>
           </div>
 
@@ -240,6 +332,6 @@ export function DataSignalHero() {
           </article>
         </section>
       </section>
-    </main>
+    </div>
   );
 }

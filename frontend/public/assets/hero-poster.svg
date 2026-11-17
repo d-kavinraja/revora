@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-label="Revora hero background">
+  <defs>
+    <radialGradient id="ember-glow" cx="34%" cy="58%" r="72%">
+      <stop offset="0%" stop-color="#ff5a2c" stop-opacity="0.22" />
+      <stop offset="46%" stop-color="#c2260f" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="peach-glow" cx="76%" cy="18%" r="52%">
+      <stop offset="0%" stop-color="#f6b48a" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#050506" stop-opacity="0" />
+      <stop offset="100%" stop-color="#050506" stop-opacity="0.92" />
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="#050506" />
+  <rect width="1920" height="1080" fill="url(#ember-glow)" />
+  <rect width="1920" height="1080" fill="url(#peach-glow)" />
+  <g stroke="#f6b48a" stroke-opacity="0.055" stroke-width="1">
+    <path d="M0 300 C 420 240, 760 380, 1120 300 S 1680 210, 1920 280" fill="none" />
+    <path d="M0 520 C 380 470, 800 600, 1180 520 S 1700 430, 1920 500" fill="none" />
+    <path d="M0 760 C 420 700, 820 840, 1240 760 S 1720 680, 1920 740" fill="none" />
+  </g>
+  <rect width="1920" height="1080" fill="url(#floor)" />
+</svg>

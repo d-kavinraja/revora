@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, type FC, type ReactNode } from 'react';
+import React, { useEffect, useId, useRef, useState, type FC, type ReactNode } from 'react';
+import { CheckCircle2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,8 @@ interface FooterProps extends React.HTMLAttributes<HTMLElement> {
   socialLinks?: { label: string; href: string; icon: ReactNode }[];
   /** The title for the newsletter subscription section. */
   newsletterTitle?: string;
+  /** One-line description shown under the newsletter title. */
+  newsletterDescription?: string;
   /** Async function to handle email subscription. Should return `true` for success and `false` for failure. */
   onSubscribe?: (email: string) => Promise<boolean>;
 }
@@ -49,14 +52,16 @@ export const Footer: FC<FooterProps> = ({
   companyName = 'Revora',
   description = 'Revora is an open-source, repository-aware AI code review platform for GitHub pull requests.',
   usefulLinks = [
-    { label: 'GitHub Repository', href: REVORA.github.repo },
+    { label: 'Documentation', href: REVORA.github.readme },
     { label: 'Install GitHub App', href: REVORA.github.app },
+    { label: 'License', href: REVORA.github.license },
   ],
   socialLinks = [
-    { label: 'GitHub', href: REVORA.github.repo, icon: <GithubIcon /> },
+    { label: 'GitHub Repository', href: REVORA.github.repo, icon: <GithubIcon /> },
     { label: 'Report an Issue', href: REVORA.github.issues, icon: <IssueIcon /> },
   ],
   newsletterTitle = 'Subscribe to our newsletter',
+  newsletterDescription = 'Release notes and repository-aware review tips. One email a month.',
   onSubscribe = async (email) => {
     // Default mock implementation
     console.log(`Subscribing ${email}...`);
@@ -69,30 +74,61 @@ export const Footer: FC<FooterProps> = ({
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const errorId = useId();
+  const statusId = useId();
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current) window.clearTimeout(resetTimer.current);
+    },
+    [],
+  );
 
   const handleSubscribe = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!email || !onSubscribe || isSubmitting) return;
+    if (isSubmitting) return;
 
+    const value = email.trim();
+    if (!value) {
+      setFieldError('Enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setFieldError('Enter a valid email address.');
+      return;
+    }
+
+    setFieldError(null);
     setIsSubmitting(true);
-    const success = await onSubscribe(email);
+
+    let success = false;
+    try {
+      success = onSubscribe ? await onSubscribe(value) : false;
+    } catch {
+      success = false;
+    }
 
     setSubscriptionStatus(success ? 'success' : 'error');
     setIsSubmitting(false);
+    if (success) setEmail('');
 
-    if (success) {
-      setEmail('');
-    }
-
-    // Reset the status message after 3 seconds
-    setTimeout(() => {
-      setSubscriptionStatus('idle');
-    }, 3000);
+    if (resetTimer.current) window.clearTimeout(resetTimer.current);
+    resetTimer.current = window.setTimeout(
+      () => setSubscriptionStatus('idle'),
+      success ? 4000 : 3000,
+    );
   };
+
+  const locked = isSubmitting || subscriptionStatus === 'success';
 
   return (
     <footer className={cn('bg-muted/50 text-foreground border-t border-border mt-auto', className)} {...props}>
-      <div className="split-flap-board">
+      <p className="sr-only">
+        Repository-aware. Machine-verified. AI code review.
+      </p>
+      <div className="split-flap-board" aria-hidden="true">
         <SplitFlapText
           words={['REPOSITORY AWARE', 'MACHINE VERIFIED', 'AI CODE REVIEW']}
           loop
@@ -125,7 +161,7 @@ export const Footer: FC<FooterProps> = ({
                 <a
                   href={link.href}
                   {...externalLinkProps(link.href)}
-                  className="text-sm text-muted-foreground transition-colors hover:text-primary"
+                  className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-primary"
                 >
                   {link.label}
                 </a>
@@ -144,7 +180,7 @@ export const Footer: FC<FooterProps> = ({
                   href={link.href}
                   {...externalLinkProps(link.href)}
                   aria-label={link.label}
-                  className="flex items-center gap-3 text-sm text-muted-foreground transition-colors hover:text-primary group"
+                  className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground transition-colors hover:text-primary group"
                 >
                   <span className="group-hover:scale-110 transition-transform">{link.icon}</span>
                   <span>{link.label}</span>
@@ -156,40 +192,66 @@ export const Footer: FC<FooterProps> = ({
 
         {/* Newsletter */}
         <div>
-          <h3 className="mb-4 text-base font-semibold">{newsletterTitle}</h3>
-          <form onSubmit={handleSubscribe} className="relative w-full max-w-sm">
+          <h3 className="mb-2 text-base font-semibold">{newsletterTitle}</h3>
+          <p className="mb-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            {newsletterDescription}
+          </p>
+          <form onSubmit={handleSubscribe} noValidate className="relative w-full max-w-sm">
             <div className="relative flex rounded-md">
               <Input
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="Your email address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isSubmitting || subscriptionStatus !== 'idle'}
-                required
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldError) setFieldError(null);
+                }}
+                disabled={locked}
                 aria-label="Email for newsletter"
-                className="pr-28 h-11"
+                aria-invalid={Boolean(fieldError)}
+                aria-describedby={fieldError ? errorId : undefined}
+                className="pr-28 h-11 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
               />
               <Button
                 type="submit"
-                disabled={isSubmitting || subscriptionStatus !== 'idle'}
+                disabled={locked}
                 className="absolute right-0 top-0 h-full rounded-l-none px-5"
               >
-                {isSubmitting ? 'Subscribing...' : 'Subscribe'}
+                {isSubmitting
+                  ? 'Subscribing...'
+                  : subscriptionStatus === 'success'
+                    ? 'Subscribed'
+                    : 'Subscribe'}
               </Button>
             </div>
-            {/* Advanced Animation Overlay */}
-            {(subscriptionStatus === 'success' || subscriptionStatus === 'error') && (
-              <div
-                key={subscriptionStatus} // Re-trigger animation on status change
-                className="animate-in fade-in zoom-in-95 absolute inset-0 flex items-center justify-center rounded-md bg-background/80 text-center backdrop-blur-md border border-border"
-              >
-                {subscriptionStatus === 'success' ? (
-                  <span className="font-semibold text-green-500">Subscribed! 🎉</span>
-                ) : (
-                  <span className="font-semibold text-destructive">Failed. Try again.</span>
-                )}
-              </div>
-            )}
+            <div className="mt-2 min-h-5 text-xs">
+              {fieldError ? (
+                <p id={errorId} role="alert" className="flex items-center gap-1.5 text-destructive">
+                  <TriangleAlert size={13} aria-hidden="true" />
+                  {fieldError}
+                </p>
+              ) : subscriptionStatus === 'success' ? (
+                <p
+                  id={statusId}
+                  role="status"
+                  className="flex items-center gap-1.5 text-success motion-reduce:animate-none"
+                >
+                  <CheckCircle2 size={13} aria-hidden="true" />
+                  Subscribed. Check your inbox.
+                </p>
+              ) : subscriptionStatus === 'error' ? (
+                <p
+                  id={statusId}
+                  role="alert"
+                  className="flex items-center gap-1.5 text-destructive motion-reduce:animate-none"
+                >
+                  <TriangleAlert size={13} aria-hidden="true" />
+                  Couldn&apos;t subscribe. Try again.
+                </p>
+              ) : null}
+            </div>
           </form>
         </div>
       </div>

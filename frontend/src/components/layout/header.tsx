@@ -4,6 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { REVORA } from "@/lib/site";
+import { AuthMobileMenu } from "@/components/layout/auth-mobile-menu";
 
 /**
  * GitHub mark. Inlined (like the other icon primitives in this codebase) so the header
@@ -34,7 +35,7 @@ export function Header({ className, hideThemeToggle = false }: HeaderProps) {
           Revora
         </Link>
       </div>
-      <nav className="flex items-center gap-3">
+      <nav className="hidden items-center gap-3 md:flex">
         {!hideThemeToggle && <ThemeToggle />}
         <a
           href={REVORA.github.repo}
@@ -59,6 +60,11 @@ export function Header({ className, hideThemeToggle = false }: HeaderProps) {
           Get Started
         </Link>
       </nav>
+
+      <div className="flex items-center gap-2 md:hidden">
+        {!hideThemeToggle && <ThemeToggle />}
+        <AuthMobileMenu />
+      </div>
     </header>
   );
 }
