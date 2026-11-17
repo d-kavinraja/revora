@@ -1,92 +1,494 @@
-/* Model Lab promo card — lives inside the Data Signal demo-card shell. */
+/* Model Lab promo card — premium ember / terminal aesthetic */
 
-.ml-glare {
-  width: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
+.ml-card-wrapper {
+  position: relative;
+  width: 340px;
+  max-width: 100%;
+  perspective: 1000px;
+  animation: ml-float 5s ease-in-out infinite alternate;
 }
 
-.ml-card-inner {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  padding: 16px;
-  gap: 12px;
+@keyframes ml-float {
+  0% {
+    transform: translateY(0px);
+  }
+  100% {
+    transform: translateY(-6px);
+  }
 }
 
-.ml-media {
+/* Conic gradient sweep animated border container */
+.ml-card-border-glow {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 10;
-  border-radius: 12px;
+  border-radius: 24px;
+  padding: 1px; /* border thickness */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 90, 44, 0.45) 0%,
+    rgba(255, 90, 44, 0.12) 50%,
+    rgba(255, 90, 44, 0.05) 100%
+  );
+  box-shadow: 0 20px 60px -20px rgba(255, 90, 44, 0.35);
+  transition: box-shadow 0.3s ease, transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform, box-shadow;
+  transform-style: preserve-3d;
   overflow: hidden;
-  background: linear-gradient(145deg, #120506, #2a1012);
-  border: 1px solid rgba(220, 95, 55, 0.24);
 }
 
-.ml-media img {
-  object-fit: cover;
+.ml-card-wrapper:hover .ml-card-border-glow {
+  box-shadow: 0 24px 70px -15px rgba(255, 90, 44, 0.55),
+              0 0 25px 2px rgba(255, 90, 44, 0.2);
 }
 
-.ml-badge {
+/* Subtle animated rotating sweep behind the border */
+.ml-card-border-glow::before {
+  content: '';
+  position: absolute;
+  inset: -150%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(255, 90, 44, 0.5) 60deg,
+    rgba(246, 180, 138, 0.7) 90deg,
+    rgba(255, 90, 44, 0.5) 120deg,
+    transparent 180deg
+  );
+  animation: ml-conic-sweep 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+.ml-card-wrapper:hover .ml-card-border-glow::before {
+  opacity: 0.95;
+}
+
+@keyframes ml-conic-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Inner card body with glassmorphism */
+.ml-card-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 23px; /* 24px minus 1px padding */
+  background: rgba(20, 10, 8, 0.75);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+/* Light mode support */
+:global(.light) .ml-card-inner,
+html:not(.dark) .ml-card-inner {
+  background: rgba(255, 245, 235, 0.85);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+}
+
+:global(.light) .ml-card-border-glow,
+html:not(.dark) .ml-card-border-glow {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 90, 44, 0.5) 0%,
+    rgba(246, 180, 138, 0.3) 50%,
+    rgba(255, 90, 44, 0.1) 100%
+  );
+  box-shadow: 0 16px 45px -15px rgba(255, 90, 44, 0.25);
+}
+
+/* Visual header: Neural Network canvas container */
+.ml-media-header {
+  position: relative;
+  width: 100%;
+  height: 126px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, #1a0b08 0%, #0a0403 100%);
+  border: 1px solid rgba(255, 90, 44, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global(.light) .ml-media-header,
+html:not(.dark) .ml-media-header {
+  background: radial-gradient(circle at 50% 50%, #fff1e8 0%, #fbe3d5 100%);
+  border-color: rgba(255, 90, 44, 0.2);
+}
+
+/* Faint scanline & dotted grid texture overlay */
+.ml-grid-texture {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: 
+    radial-gradient(rgba(255, 90, 44, 0.15) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 10px 10px, 100% 3px;
+  opacity: 0.7;
+}
+
+:global(.light) .ml-grid-texture,
+html:not(.dark) .ml-grid-texture {
+  background-image: 
+    radial-gradient(rgba(255, 90, 44, 0.2) 1px, transparent 1px),
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+}
+
+/* Neural Network SVG */
+.ml-neural-svg {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* Breathing glow on AI center node */
+.ml-ai-node-glow {
+  animation: ml-pulse-glow 3s ease-in-out infinite;
+  transform-origin: 150px 60px;
+}
+
+@keyframes ml-pulse-glow {
+  0%, 100% {
+    r: 18;
+    opacity: 0.35;
+    fill: #ff5a2c;
+  }
+  50% {
+    r: 22;
+    opacity: 0.75;
+    fill: #ff7c55;
+  }
+}
+
+/* NEW pill badge */
+.ml-badge-pill {
   position: absolute;
   top: 10px;
   left: 10px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #fff;
-  background: #2563eb;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
   border-radius: 9999px;
-  padding: 3px 9px;
+  background: linear-gradient(135deg, #ff5a2c, #c2260f);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 8px rgba(194, 38, 15, 0.4);
+}
+
+.ml-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #f6b48a;
+  animation: ml-dot-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes ml-dot-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+
+.ml-badge-text {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  line-height: 1;
+}
+
+/* Content block */
+.ml-content-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .ml-title {
   margin: 0;
+  font-family: var(--font-oxanium, "Inter Tight", sans-serif);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
-.ml-copy {
+:global(.light) .ml-title,
+html:not(.dark) .ml-title {
+  color: #1a0a06;
+}
+
+.ml-title-gradient {
+  background: linear-gradient(120deg, #ff5a2c 20%, #f6b48a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.ml-subtext {
   margin: 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   font-weight: 400;
-  letter-spacing: 0.1px;
-  color: rgba(245, 225, 210, 0.86);
+  color: #f5e6d3;
+  opacity: 0.88;
 }
 
-.ml-cta {
-  margin-top: auto;
+:global(.light) .ml-subtext,
+html:not(.dark) .ml-subtext {
+  color: #4a2820;
+  opacity: 0.95;
+}
+
+/* Feature chips row */
+.ml-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ml-chip {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  color: #f6b48a;
+  background: rgba(255, 90, 44, 0.1);
+  border: 1px solid rgba(255, 90, 44, 0.22);
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+
+.ml-chip:hover {
+  background: rgba(255, 90, 44, 0.18);
+  border-color: rgba(255, 90, 44, 0.4);
+  color: #ff5a2c;
+}
+
+:global(.light) .ml-chip,
+html:not(.dark) .ml-chip {
+  color: #c2260f;
+  background: rgba(255, 90, 44, 0.08);
+  border-color: rgba(255, 90, 44, 0.2);
+}
+
+/* Status row: Green pulsing dot + "Beta · Free forever" */
+.ml-status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 11px;
+  color: #c4b5a5;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+
+:global(.light) .ml-status-row,
+html:not(.dark) .ml-status-row {
+  color: #6e4b3c;
+}
+
+.ml-status-dot-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+}
+
+.ml-status-dot-ping {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: #10b981;
+  opacity: 0.75;
+  animation: ml-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.ml-status-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+}
+
+@keyframes ml-ping {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* CTA button */
+.ml-cta-btn {
+  position: relative;
+  margin-top: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 11px 12px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #f6c7a8, #f3a97a);
-  color: #1a0808;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ff5a2c 0%, #f6b48a 100%);
+  color: #100503;
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
-  transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 4px 15px -2px rgba(255, 90, 44, 0.4);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  text-decoration: none;
 }
 
-.ml-cta:hover {
-  background: linear-gradient(135deg, #f8d4b8, #f6c094);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+.ml-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -2px rgba(255, 90, 44, 0.55),
+              0 0 12px rgba(246, 180, 138, 0.4);
 }
 
-.ml-cta:focus-visible {
-  outline: 2px solid #f6c7a8;
+.ml-cta-btn:active {
+  transform: scale(0.98);
+}
+
+.ml-cta-btn:focus-visible {
+  outline: 2px solid #ff5a2c;
   outline-offset: 3px;
+}
+
+/* Shimmer sweep on CTA */
+.ml-cta-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.ml-cta-btn:hover .ml-cta-shimmer {
+  animation: ml-shimmer-sweep 1s ease-in-out infinite;
+}
+
+@keyframes ml-shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Arrow translation */
+.ml-cta-arrow {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ml-cta-btn:hover .ml-cta-arrow {
+  transform: translateX(4px);
+}
+
+/* Entrance animation */
+@keyframes ml-card-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ml-entrance-anim {
+  animation: ml-card-entrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+}
+
+/* Responsive & Reduced motion */
+@media (max-width: 1024px) {
+  .ml-card-wrapper {
+    width: min(100%, 420px);
+    perspective: none;
+    animation: none;
+  }
+  
+  .ml-card-border-glow {
+    transform: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-card-wrapper {
+    animation: none !important;
+    perspective: none !important;
+  }
+
+  .ml-card-border-glow {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .ml-card-border-glow::before {
+    animation: none !important;
+  }
+
+  .ml-entrance-anim {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .ml-ai-node-glow,
+  .ml-badge-dot,
+  .ml-status-dot-ping,
+  .ml-cta-btn:hover .ml-cta-shimmer,
+  .ml-neural-pulse {
+    animation: none !important;
+  }
+
+  .ml-cta-btn:hover {
+    transform: none !important;
+  }
+
+  .ml-cta-btn:hover .ml-cta-arrow {
+    transform: none !important;
+  }
 }

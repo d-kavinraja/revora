@@ -355,20 +355,15 @@
   position: absolute;
   right: var(--gutter-end);
   bottom: 0;
-  width: var(--card-width);
-  aspect-ratio: 201 / 265;
-  container-type: inline-size;
+  width: auto;
+  max-width: var(--card-width);
   display: flex;
   flex-direction: column;
   transform-origin: 82% 50%;
-  border: 1px solid rgba(185, 75, 45, 0.32);
-  border-radius: clamp(12px, 1.52vh, 18px);
-  background: linear-gradient(145deg, #16080a, #240f12);
-  box-shadow:
-    0 8px 22px rgba(70, 18, 8, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-  backdrop-filter: blur(10px) saturate(105%);
-  overflow: hidden;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
 }
 
 /* ---------- Motion ---------- */
