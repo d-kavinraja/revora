@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { checkHealth } from '@/lib/api';
 import { claimWakeRedirect } from '@/lib/wake-guard';
 import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
+import { FeatureNoticeBanner } from '@/components/shared/feature-notice-banner';
 import { usePlatformFeatures } from '@/lib/use-platform-features';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -101,6 +102,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sidebar />
       <main className="flex-1 min-w-0 overflow-auto z-10 pt-[var(--revora-app-header-h)] md:pt-0">
         <MaintenanceBanner />
+        <FeatureNoticeBanner />
         {children}
       </main>
     </div>

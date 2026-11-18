@@ -256,11 +256,12 @@ export default function AdminFeaturesPage() {
           </span>
         </summary>
         <p className="mt-3 max-w-[75ch] text-sm leading-relaxed text-muted-foreground">
-          Disabling a flag returns 503 for non-admin requests with the message
-          below. The feature stays in navigation so users see a clear
-          unavailable state. Nothing is deleted, and re-enabling restores it
-          instantly. Maintenance, coming soon and under testing are separate
-          availability states for planned work.
+          While a flag is enabled, a non-empty message appears as an
+          informational banner at the top of its feature page. When the flag is
+          not enabled, the same message is shown on the unavailable screen and
+          returned with the 503 response. Disabling a flag never deletes data,
+          and re-enabling restores access instantly. Maintenance, coming soon
+          and under testing are separate availability states for planned work.
         </p>
       </details>
 
@@ -357,7 +358,7 @@ export default function AdminFeaturesPage() {
                 />
               </div>
 
-              <div className="mt-3 grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)_auto] lg:items-end">
+              <div className="mt-3 grid gap-x-3 gap-y-1 lg:grid-cols-[200px_minmax(0,1fr)_auto] lg:items-end">
                 <Field label="Status" htmlFor={`status-${flag.key}`}>
                   <SelectFilter
                     id={`status-${flag.key}`}
@@ -375,8 +376,9 @@ export default function AdminFeaturesPage() {
                   </SelectFilter>
                 </Field>
                 <Field
-                  label="User-facing message (optional, shown with the 503)"
+                  label="User-facing message (optional)"
                   htmlFor={`message-${flag.key}`}
+                  className="mt-2 lg:mt-0"
                 >
                   <input
                     id={`message-${flag.key}`}
@@ -391,14 +393,23 @@ export default function AdminFeaturesPage() {
                     onChange={(event) =>
                       setDraft(flag, { message: event.target.value })
                     }
+                    aria-describedby={`message-hint-${flag.key}`}
                     className={ADMIN_INPUT_CLASS}
                   />
                 </Field>
+                <p
+                  id={`message-hint-${flag.key}`}
+                  className="mt-1 text-xs leading-relaxed text-muted-foreground lg:col-start-2 lg:row-start-2 lg:mt-0"
+                >
+                  Shown as an informational banner at the top of this
+                  feature&apos;s page while it is enabled, and on the
+                  unavailable screen when it is not. Leave empty to hide it.
+                </p>
                 <AdminButton
                   variant={dirty ? 'primary' : 'secondary'}
                   disabled={!dirty || updateMutation.isPending}
                   onClick={() => setConfirmingKey(flag.key)}
-                  className="w-full lg:w-auto"
+                  className="mt-2 w-full lg:col-start-3 lg:row-start-1 lg:mt-0 lg:w-auto"
                 >
                   {busy ? 'Saving…' : 'Save'}
                 </AdminButton>
