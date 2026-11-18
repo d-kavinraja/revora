@@ -9,6 +9,10 @@ import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { UsageChart } from '@/components/usage/usage-chart';
 import { KpiTile, RankedList, StatGroup } from '@/components/admin/metrics';
 import { AdminLoading, QueryError } from '@/components/admin/states';
+import {
+  ProviderMark,
+  providerDisplayName,
+} from '@/components/ui/provider-brand';
 
 export default function AnalyticsPage() {
   const { data: features } = usePlatformFeatures();
@@ -92,9 +96,10 @@ export default function AnalyticsPage() {
 
   const providerItems = providerUsage.map((p) => ({
     key: p.provider,
-    label: p.provider,
+    label: providerDisplayName(p.provider),
     value: p.request_count,
     tone: 'info' as const,
+    leading: <ProviderMark slug={p.provider} size="xs" />,
   }));
 
   const errorTypeItems = Object.entries(errors?.by_type ?? {}).map(([key, value]) => ({
@@ -158,9 +163,10 @@ export default function AnalyticsPage() {
             <RankedList
               items={Object.entries(errors?.by_provider ?? {}).map(([key, value]) => ({
                 key,
-                label: key,
+                label: providerDisplayName(key),
                 value,
                 tone: 'error' as const,
+                leading: <ProviderMark slug={key} size="xs" />,
               }))}
               tone="error"
             />

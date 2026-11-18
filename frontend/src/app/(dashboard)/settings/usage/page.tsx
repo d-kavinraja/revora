@@ -10,6 +10,12 @@ import { UsageChart } from '@/components/usage/usage-chart';
 import { KpiTile, RankedList, StatGroup } from '@/components/admin/metrics';
 import { AdminLoading, QueryError } from '@/components/admin/states';
 import { formatDateTime } from '@/components/shared/time-ago';
+import {
+  ProviderBadge,
+  ProviderMark,
+  providerDisplayName,
+  providerFromModel,
+} from '@/components/ui/provider-brand';
 
 const PERIODS = [
   { key: 'today', label: 'Today' },
@@ -69,17 +75,22 @@ export default function UsagePage() {
 
   const providerItems = Object.entries(summary?.by_provider ?? {}).map(([key, value]) => ({
     key,
-    label: key,
+    label: providerDisplayName(key),
     value: Math.round(value * 10000) / 10000,
     tone: 'brand' as const,
+    leading: <ProviderMark slug={key} size="xs" />,
   }));
 
-  const modelItems = Object.entries(summary?.by_model ?? {}).map(([key, value]) => ({
-    key,
-    label: key,
-    value: Math.round(value * 10000) / 10000,
-    tone: 'info' as const,
-  }));
+  const modelItems = Object.entries(summary?.by_model ?? {}).map(([key, value]) => {
+    const provider = providerFromModel(key);
+    return {
+      key,
+      label: key,
+      value: Math.round(value * 10000) / 10000,
+      tone: 'info' as const,
+      leading: provider ? <ProviderMark slug={provider} size="xs" /> : undefined,
+    };
+  });
 
   const featureItems = Object.entries(summary?.by_feature ?? {}).map(([key, value]) => ({
     key,
@@ -172,7 +183,9 @@ export default function UsagePage() {
                 {records.map((r) => (
                   <tr key={r.id} className="border-t border-border">
                     <td className="py-2 text-muted-foreground">{formatDateTime(r.created_at)}</td>
-                    <td className="py-2">{r.provider}</td>
+                    <td className="py-2">
+                      <ProviderBadge slug={r.provider} size="xs" className="max-w-[220px]" />
+                    </td>
                     <td className="py-2">{r.model}</td>
                     <td className="py-2">{r.feature}</td>
                     <td className="py-2 text-right">{(r.input_tokens + r.output_tokens).toLocaleString()}</td>

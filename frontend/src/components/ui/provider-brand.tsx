@@ -2,21 +2,82 @@ import { ProviderIcon } from '@/components/ui/provider-icon';
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Claude',
+  azure: 'Azure OpenAI',
   azure_openai: 'Azure OpenAI',
+  claude: 'Claude',
   cohere: 'Cohere',
   deepseek: 'DeepSeek',
   gemini: 'Google Gemini',
+  google: 'Google Gemini',
+  google_gemini: 'Google Gemini',
+  grok: 'Grok',
   groq: 'Groq',
   mistral: 'Mistral AI',
+  mistralai: 'Mistral AI',
   nvidia: 'NVIDIA NIM',
   nvidia_nim: 'NVIDIA NIM',
   ollama: 'Ollama',
   ollama_cloud: 'Ollama Cloud',
   openai: 'OpenAI',
   openrouter: 'OpenRouter',
+  xai: 'Grok',
+  'x-ai': 'Grok',
+};
+
+const PROVIDER_ALIASES: Record<string, string> = {
+  azure: 'azure_openai',
+  claude: 'anthropic',
+  google: 'gemini',
+  google_gemini: 'gemini',
+  mistralai: 'mistral',
+  'x-ai': 'grok',
+  xai: 'grok',
 };
 
 const KNOWN_PROVIDERS = new Set(Object.keys(PROVIDER_LABELS));
+
+function normalizeProviderSlug(slug?: string | null): string {
+  const normalized = (slug ?? '').trim().toLowerCase();
+  return PROVIDER_ALIASES[normalized] ?? normalized;
+}
+
+const MODEL_PROVIDER_FAMILIES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^claude(?:[-_.:]|$)/, 'anthropic'],
+  [
+    /^(?:gpt-(?!oss(?:[-_.:]|$))|o[1-9](?:[-_.:]|$)|chatgpt(?:[-_.:]|$)|text-embedding-|dall-e-)/,
+    'openai',
+  ],
+  [/^gemini(?:[-_.:]|$)/, 'gemini'],
+  [/^deepseek(?:[-_.:]|$)/, 'deepseek'],
+  [
+    /^(?:mistral|mixtral|codestral|ministral|pixtral|devstral|magistral)(?:[-_.:]|$)/,
+    'mistral',
+  ],
+  [/^(?:command|embed-english|embed-multilingual|rerank)(?:[-_.:]|$)/, 'cohere'],
+  [/^grok(?:[-_.:]|$)/, 'grok'],
+];
+
+/**
+ * Resolve a provider from a model identifier only when the identifier makes
+ * the provider family unambiguous. Ambiguous models (for example a hosted
+ * Llama variant) intentionally return null instead of guessing.
+ */
+export function providerFromModel(model?: string | null): string | null {
+  const normalized = (model ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  const slashIndex = normalized.indexOf('/');
+  if (slashIndex > 0) {
+    const prefix = normalizeProviderSlug(normalized.slice(0, slashIndex));
+    if (KNOWN_PROVIDERS.has(prefix)) return prefix;
+  }
+
+  for (const [pattern, provider] of MODEL_PROVIDER_FAMILIES) {
+    if (pattern.test(normalized)) return provider;
+  }
+
+  return null;
+}
 
 function humanizeSlug(slug: string): string {
   return slug
@@ -53,16 +114,18 @@ export function providerInitials(
 }
 
 export function isKnownProvider(slug?: string | null): boolean {
-  return KNOWN_PROVIDERS.has((slug ?? '').trim().toLowerCase());
+  return KNOWN_PROVIDERS.has(normalizeProviderSlug(slug));
 }
 
 const MARK_SIZES = {
+  xs: 'h-[22px] w-[22px] rounded-md',
   sm: 'h-7 w-7 rounded-md',
   md: 'h-8 w-8 rounded-lg',
   lg: 'h-10 w-10 rounded-lg',
 } as const;
 
 const ICON_SIZES = {
+  xs: 18,
   sm: 15,
   md: 17,
   lg: 21,
