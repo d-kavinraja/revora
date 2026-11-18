@@ -74,6 +74,41 @@ class FailureCategory(BaseModel):
     count: int
 
 
+class ExecutionOutcomeStats(BaseModel):
+    successful: int
+    failed: int
+    cancelled: int
+    processing: int
+    other: int
+    eligible: int
+    total: int
+
+
+class FailureByProvider(BaseModel):
+    provider: str | None
+    successful: int
+    failed: int
+    cancelled: int
+    processing: int
+    other: int
+    eligible: int
+    total: int
+    failure_rate: float | None
+
+
+class FailureByModel(BaseModel):
+    provider: str | None
+    model: str | None
+    successful: int
+    failed: int
+    cancelled: int
+    processing: int
+    other: int
+    eligible: int
+    total: int
+    failure_rate: float | None
+
+
 class ProviderHealthRead(BaseModel):
     provider: str
     status: str
@@ -109,6 +144,10 @@ class OverviewResponse(BaseModel):
     duration_p50_ms: NumericMetric
     duration_p95_ms: NumericMetric
     failure_rate: NumericMetric
+    failure_rate_previous_period: NumericMetric
+    review_execution_outcomes: ExecutionOutcomeStats
+    failure_by_provider: list[FailureByProvider]
+    failure_by_model: list[FailureByModel]
     failure_categories: list[FailureCategory]
     provider_health: list[ProviderHealthRead]
     maintenance: MaintenanceStateRead

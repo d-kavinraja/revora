@@ -9,7 +9,8 @@ Deterministic expectations (window 2026-10-01 → 2026-10-16 UTC):
 - latest-execution provider/model: openai/gpt-4o ×2, groq/llama ×1,
   openai/gpt-4o-mini ×1, unrecorded ×1
 - durations [100, 200, 300] → p50 200.0, p95 290.0
-- latest-execution failure rate 1/5; sanitized categories {rate limit: 1}
+- latest-execution failure rate 1/4 (completed + failed only; running
+  excluded from the denominator); sanitized categories {rate limit: 1}
 """
 
 import re
@@ -446,8 +447,33 @@ async def test_b11_overview_widgets_match_seed(test_db, seeded):
     assert data["duration_p50_ms"]["value"] == 200.0
     assert data["duration_p95_ms"]["value"] == 290.0
 
-    assert data["failure_rate"]["value"] == pytest.approx(0.2)
-    assert data["failure_rate"]["sample_size"] == 5
+    assert data["failure_rate"]["value"] == pytest.approx(0.25)
+    assert data["failure_rate"]["sample_size"] == 4
+    assert data["failure_rate"]["reason"] is None
+    assert data["review_execution_outcomes"] == {
+        "successful": 3,
+        "failed": 1,
+        "cancelled": 0,
+        "processing": 1,
+        "other": 0,
+        "eligible": 4,
+        "total": 5,
+    }
+    assert data["failure_rate_previous_period"]["value"] is None
+    assert data["failure_rate_previous_period"]["sample_size"] == 0
+    assert data["failure_rate_previous_period"]["reason"] is not None
+    failure_providers = {
+        row["provider"]: row for row in data["failure_by_provider"]
+    }
+    assert failure_providers["groq"]["failed"] == 1
+    assert failure_providers["groq"]["failure_rate"] == pytest.approx(1.0)
+    assert failure_providers["openai"]["successful"] == 3
+    assert failure_providers["openai"]["failure_rate"] == pytest.approx(0.0)
+    failure_models = {
+        (row["provider"], row["model"]): row for row in data["failure_by_model"]
+    }
+    assert failure_models[("groq", "llama-3.3-70b")]["failed"] == 1
+    assert ("openai", "gpt-4o") in failure_models
     assert data["failure_categories"] == [{"category": "rate limit", "count": 1}]
 
     health = {row["provider"]: row for row in data["provider_health"]}
@@ -951,3 +977,114 @@ def test_admin_read_endpoints_respond(admin_client, seeded):
     assert admin_client.get("/api/v1/admin/reviews?provider=groq").json()[
         "total"
     ] == 1
+
+# ---------------------------------------------------------------------------
+# Failure-rate outcome accounting (execution-time window)
+# ---------------------------------------------------------------------------
+
+
+async def test_failure_rate_cancelled_excluded_from_denominator(test_db, seeded):
+    """Cancelled executions stay out of the denominator, not as failures."""
+    reviews = seeded["reviews"]
+    test_db.add(
+        ReviewExecution(
+            review_id=reviews[4].id,
+            execution_number=2,
+            trigger="rerun",
+            status="cancelled",
+            started_at=INSIDE + timedelta(minutes=5),
+            completed_at=INSIDE + timedelta(minutes=6),
+        )
+    )
+    await test_db.commit()
+
+    data = await _overview(test_db)
+
+    assert data["review_execution_outcomes"]["cancelled"] == 1
+    assert data["review_execution_outcomes"]["processing"] == 0
+    assert data["review_execution_outcomes"]["eligible"] == 4
+    assert data["failure_rate"]["sample_size"] == 4
+    assert data["failure_rate"]["value"] == pytest.approx(0.25)
+
+
+async def test_failure_rate_timed_out_counts_as_failure(test_db, seeded):
+    """Legacy `timed_out` rows fold into the failure bucket."""
+    reviews = seeded["reviews"]
+    test_db.add(
+        ReviewExecution(
+            review_id=reviews[0].id,
+            execution_number=2,
+            trigger="retry",
+            status="timed_out",
+            started_at=INSIDE + timedelta(minutes=10),
+        )
+    )
+    await test_db.commit()
+
+    data = await _overview(test_db)
+
+    assert data["review_execution_outcomes"]["failed"] == 2
+    assert data["review_execution_outcomes"]["successful"] == 2
+    assert data["failure_rate"]["value"] == pytest.approx(0.5)
+
+
+async def test_failure_rate_ignores_executions_outside_window(test_db, seeded):
+    """Newest execution outside the window does not affect the metric."""
+    reviews = seeded["reviews"]
+    test_db.add(
+        ReviewExecution(
+            review_id=reviews[0].id,
+            execution_number=2,
+            trigger="rerun",
+            status="failed",
+            provider="openai",
+            model="gpt-4o",
+            started_at=WINDOW_END + timedelta(days=1),
+        )
+    )
+    await test_db.commit()
+
+    data = await _overview(test_db)
+
+    # review0 falls back to its in-window completed execution; the
+    # out-of-window failure is ignored entirely.
+    assert data["review_execution_outcomes"]["successful"] == 3
+    assert data["review_execution_outcomes"]["failed"] == 1
+    assert data["failure_rate"]["sample_size"] == 4
+
+
+async def test_failure_rate_previous_period_comparison(test_db, seeded):
+    """The previous equal-length window reports its own eligible outcomes."""
+    reviews = seeded["reviews"]
+    prev_start = WINDOW_START - (WINDOW_END - WINDOW_START)
+    test_db.add(
+        ReviewExecution(
+            review_id=reviews[2].id,
+            execution_number=2,
+            trigger="webhook",
+            status="failed",
+            provider="groq",
+            model="llama-3.3-70b",
+            started_at=prev_start + timedelta(days=1),
+            error_message="Rate limit exceeded (429)",
+        )
+    )
+    await test_db.commit()
+
+    data = await _overview(test_db)
+
+    assert data["failure_rate_previous_period"]["value"] == pytest.approx(1.0)
+    assert data["failure_rate_previous_period"]["sample_size"] == 1
+    assert data["failure_rate_previous_period"]["reason"] is None
+    # Current period is unchanged.
+    assert data["failure_rate"]["value"] == pytest.approx(0.25)
+
+
+async def test_failure_rate_eligible_excludes_processing(test_db, seeded):
+    """Only completed + failed executions form the denominator."""
+    data = await _overview(test_db)
+
+    outcomes = data["review_execution_outcomes"]
+    assert outcomes["processing"] == 1  # the running execution
+    assert outcomes["eligible"] == outcomes["successful"] + outcomes["failed"]
+    assert outcomes["eligible"] == 4

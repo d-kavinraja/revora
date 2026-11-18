@@ -386,6 +386,14 @@ export interface DashboardStats {
   total_issues_caught: number;
   total_completed_reviews: number;
   total_failed_reviews: number;
+  issues_caught_available: boolean;
+  issues_caught_reason: string | null;
+  suggestions_count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  other_severity_count: number;
 }
 
 export interface ApiKey {
@@ -930,6 +938,41 @@ export interface AdminFailureCategory {
   count: number;
 }
 
+export interface AdminExecutionOutcomes {
+  successful: number;
+  failed: number;
+  cancelled: number;
+  processing: number;
+  other: number;
+  eligible: number;
+  total: number;
+}
+
+export interface AdminFailureBreakdown {
+  provider: string | null;
+  successful: number;
+  failed: number;
+  cancelled: number;
+  processing: number;
+  other: number;
+  eligible: number;
+  total: number;
+  failure_rate: number | null;
+}
+
+export interface AdminFailureModelBreakdown {
+  provider: string | null;
+  model: string | null;
+  successful: number;
+  failed: number;
+  cancelled: number;
+  processing: number;
+  other: number;
+  eligible: number;
+  total: number;
+  failure_rate: number | null;
+}
+
 export interface AdminProviderHealthRead {
   provider: string;
   status: string;
@@ -1142,6 +1185,10 @@ export interface AdminOverview {
   duration_p50_ms: NumericMetric;
   duration_p95_ms: NumericMetric;
   failure_rate: NumericMetric;
+  failure_rate_previous_period: NumericMetric;
+  review_execution_outcomes: AdminExecutionOutcomes;
+  failure_by_provider: AdminFailureBreakdown[];
+  failure_by_model: AdminFailureModelBreakdown[];
   failure_categories: AdminFailureCategory[];
   provider_health: AdminProviderHealthRead[];
   maintenance: AdminMaintenanceState;

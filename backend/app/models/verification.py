@@ -14,6 +14,15 @@ class VerificationResultModel(Base):
     review_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("reviews.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    # The ReviewExecution that produced this finding (nullable for legacy rows
+    # persisted before execution attribution existed). Findings are de-duplicated
+    # with a stable fingerprint (review + location + category) so reruns of the
+    # same review never double-count the same issue.
+    execution_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("review_executions.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
     finding_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)

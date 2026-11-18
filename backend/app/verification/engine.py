@@ -92,6 +92,13 @@ class VerificationEngine:
         )
 
         review_id = context.get("review_id")
+        execution_id = context.get("execution_id")
+        if isinstance(execution_id, str):
+            try:
+                execution_id = uuid.UUID(execution_id)
+            except ValueError:
+                execution_id = None
+
         if review_id:
             # Persist FIRST, expose through the cache second. A verification
             # result must never be readable (cache hit) while its database
@@ -100,7 +107,7 @@ class VerificationEngine:
                 uuid.UUID(review_id) if isinstance(review_id, str) else review_id
             )
             persisted = await self._persist_with_retry(
-                parsed_uuid, verified_raw, metrics
+                parsed_uuid, verified_raw, metrics, execution_id=execution_id
             )
             if persisted:
                 await verification_cache.set_verification_result(
@@ -110,7 +117,9 @@ class VerificationEngine:
                 # Best-effort: write to a local pending file.  This is NOT
                 # durable (ephemeral disk on Render free tier) and does NOT
                 # guarantee recovery.  It is an attempt, not a promise.
-                self._write_pending_file(parsed_uuid, verified_raw, metrics)
+                self._write_pending_file(
+                    parsed_uuid, verified_raw, metrics, execution_id=execution_id
+                )
                 logger.error(
                     "Verification results could not be persisted for review %s "
                     "after retries; result was NOT cached. A best-effort pending "
@@ -130,6 +139,7 @@ class VerificationEngine:
         verified_findings: list[dict[str, Any]],
         metrics: dict[str, Any],
         max_attempts: int = 3,
+        execution_id: uuid.UUID | None = None,
     ) -> bool:
         """Bounded retries with exponential backoff for verification persistence.
 
@@ -140,7 +150,9 @@ class VerificationEngine:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                await self._persist_to_db(review_id, verified_findings, metrics)
+                await self._persist_to_db(
+                    review_id, verified_findings, metrics, execution_id=execution_id
+                )
                 return True
             except Exception as error:
                 logger.warning(
@@ -171,6 +183,7 @@ class VerificationEngine:
         review_id: uuid.UUID,
         verified_findings: list[dict[str, Any]],
         metrics: dict[str, Any],
+        execution_id: uuid.UUID | None = None,
     ) -> None:
         """Best-effort: write verification data to a local file when DB is
         unavailable.  The file is NOT durably persisted (ephemeral disk).
@@ -181,6 +194,7 @@ class VerificationEngine:
             os.chmod(PENDING_VERIFICATION_DIR, 0o700)
             data = {
                 "review_id": str(review_id),
+                "execution_id": str(execution_id) if execution_id else None,
                 "verified_findings": verified_findings,
                 "metrics": metrics,
                 "timestamp": __import__("datetime").datetime.now(
@@ -239,10 +253,18 @@ class VerificationEngine:
                         recovered += 1
                         continue
                 # Attempt persistence
+                stored_exec_id = data.get("execution_id")
+                execution_id = None
+                if stored_exec_id:
+                    try:
+                        execution_id = uuid.UUID(str(stored_exec_id))
+                    except ValueError:
+                        execution_id = None
                 persisted = await self._persist_with_retry(
                     review_id,
                     data.get("verified_findings", []),
                     data.get("metrics", {}),
+                    execution_id=execution_id,
                 )
                 if persisted:
                     path.unlink(missing_ok=True)
@@ -279,6 +301,7 @@ class VerificationEngine:
         review_id: uuid.UUID,
         verified_findings: list[dict[str, Any]],
         metrics: dict[str, Any],
+        execution_id: uuid.UUID | None = None,
     ):
         async with AsyncSessionLocal() as db:
             # Save metrics
@@ -298,6 +321,7 @@ class VerificationEngine:
             for finding in verified_findings:
                 db_finding = VerificationResultModel(
                     review_id=review_id,
+                    execution_id=execution_id,
                     finding_id=finding.get("id", str(uuid.uuid4())),
                     title=finding.get("title", ""),
                     file_path=finding.get("file_path", ""),
@@ -332,6 +356,7 @@ class VerificationEngine:
                 # Create a rejected finding record first
                 db_finding = VerificationResultModel(
                     review_id=review_id,
+                    execution_id=execution_id,
                     finding_id=h.get("finding_id", str(uuid.uuid4())),
                     file_path=raw.get("file_path", "unknown"),
                     line_number=raw.get("line_number"),
@@ -355,6 +380,7 @@ class VerificationEngine:
                 raw = fp.get("finding", {})
                 db_finding = VerificationResultModel(
                     review_id=review_id,
+                    execution_id=execution_id,
                     finding_id=fp.get("finding_id", str(uuid.uuid4())),
                     file_path=raw.get("file_path", "unknown"),
                     line_number=raw.get("line_number"),

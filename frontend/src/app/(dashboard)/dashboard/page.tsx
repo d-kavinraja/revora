@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, Review, DashboardStats } from '@/lib/api';
 import Link from 'next/link';
@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonCard, SkeletonList } from '@/components/shared/skeleton';
 import { useQuery } from '@tanstack/react-query';
 
-function StatCard({ label, value, icon: Icon, accent }: { label: string; value: number | string; icon: any; accent: string }) {
+function StatCard({ label, value, icon: Icon, accent, sub }: { label: string; value: number | string; icon: any; accent: string; sub?: ReactNode }) {
   const iconRef = useRef<any>(null);
   return (
     <div
@@ -20,10 +20,13 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
       className="cursor-target relative overflow-hidden rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:border-brand/30"
     >
       <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent}`} />
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">{label}</p>
           <p className="mt-2 text-3xl font-heading font-bold tracking-tight text-foreground">{value}</p>
+          {sub && (
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{sub}</p>
+          )}
         </div>
         <div className="rounded-lg bg-white/[0.04] p-2 text-muted-foreground">
           <Icon ref={iconRef} size={18} isAnimated={false} />
@@ -79,6 +82,16 @@ export default function Dashboard() {
   }, [statsUpdated]);
 
   const hasActiveReviews = reviews.some((r) => r.status === 'running' || r.status === 'pending');
+  const issuesCaughtValue = !stats
+    ? 0
+    : stats.issues_caught_available
+      ? stats.total_issues_caught
+      : '—';
+  const issuesCaughtSub = !stats
+    ? undefined
+    : !stats.issues_caught_available
+      ? stats.issues_caught_reason ?? 'Findings data unavailable'
+      : `Critical ${stats.critical_count} · High ${stats.high_count} · Medium ${stats.medium_count} · Low ${stats.low_count} · Suggestions ${stats.suggestions_count}`;
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
@@ -129,9 +142,10 @@ export default function Dashboard() {
           />
           <StatCard
             label="Issues Caught"
-            value={stats?.total_issues_caught ?? 0}
+            value={issuesCaughtValue}
             accent="bg-gradient-to-r from-warning to-amber-500"
             icon={TriangleAlertIcon}
+            sub={issuesCaughtSub}
           />
           <StatCard
             label="Completed Reviews"

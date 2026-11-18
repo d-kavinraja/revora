@@ -211,6 +211,180 @@ def _mapping_joins(stmt):
 # ---------------------------------------------------------------------------
 
 
+# Review execution outcome classification. Historical rows may use the
+# legacy terminal statuses `stopped` / `timed_out`; they are folded into the
+# nearest current bucket instead of being dropped: `timed_out` counts as a
+# failure, `stopped` counts as cancelled. Anything unrecognized is reported as
+# "other" so totals stay honest without fabricating meaning.
+SUCCESS_EXECUTION_STATUSES = ("completed",)
+FAILURE_EXECUTION_STATUSES = ("failed", "timed_out")
+CANCELLED_EXECUTION_STATUSES = ("cancelled", "stopped", "skipped")
+PROCESSING_EXECUTION_STATUSES = ("queued", "running", "pending")
+
+
+def _windowed_latest_execution_subquery(start: datetime, end: datetime):
+    """Latest execution per review WITHIN the reporting window.
+
+    Attributed by `ReviewExecution.started_at` (not Review.created_at, which
+    is the PR's first-review creation time and would hide all reruns/retries
+    for old review rows).
+    """
+    windowed_exec = and_(
+        ReviewExecution.started_at.is_not(None),
+        ReviewExecution.started_at >= start,
+        ReviewExecution.started_at < end,
+    )
+    return (
+        select(
+            ReviewExecution.review_id,
+            ReviewExecution.provider,
+            ReviewExecution.model,
+            ReviewExecution.status,
+            ReviewExecution.error_message,
+            func.row_number()
+            .over(
+                partition_by=ReviewExecution.review_id,
+                order_by=ReviewExecution.execution_number.desc(),
+            )
+            .label("rn"),
+        )
+        .where(windowed_exec)
+        .subquery()
+    )
+
+
+def _sum_status_counts(by_status: dict[str, int], statuses: tuple[str, ...]) -> int:
+    return sum(int(by_status.get(status, 0) or 0) for status in statuses)
+
+
+async def _execution_outcomes(
+    db: AsyncSession, start: datetime, end: datetime
+) -> dict[str, Any]:
+    """Latest-execution outcome outcomes (with provider/model breakdowns)."""
+    latest = _windowed_latest_execution_subquery(start, end)
+
+    status_rows = (
+        await db.execute(
+            select(latest.c.status, func.count())
+            .where(latest.c.rn == 1)
+            .group_by(latest.c.status)
+        )
+    ).all()
+    by_status = {status: int(count) for status, count in status_rows}
+
+    successful = _sum_status_counts(by_status, SUCCESS_EXECUTION_STATUSES)
+    failed = _sum_status_counts(by_status, FAILURE_EXECUTION_STATUSES)
+    cancelled = _sum_status_counts(by_status, CANCELLED_EXECUTION_STATUSES)
+    processing = _sum_status_counts(by_status, PROCESSING_EXECUTION_STATUSES)
+    total = sum(by_status.values())
+    other = total - successful - failed - cancelled - processing
+    eligible = successful + failed
+    failure_rate = (failed / eligible) if eligible else None
+
+    pm_rows = (
+        await db.execute(
+            select(latest.c.provider, latest.c.model, latest.c.status, func.count())
+            .where(latest.c.rn == 1)
+            .group_by(latest.c.provider, latest.c.model, latest.c.status)
+        )
+    ).all()
+
+    provider_agg: dict[str | None, dict[str, Any]] = {}
+    model_agg: dict[tuple[str | None, str | None], dict[str, Any]] = {}
+    for provider, model, status, count in pm_rows:
+        count = int(count)
+        p_entry = provider_agg.setdefault(
+            provider,
+            {
+                "provider": provider,
+                "successful": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "processing": 0,
+                "other": 0,
+            },
+        )
+        m_entry = model_agg.setdefault(
+            (provider, model),
+            {
+                "provider": provider,
+                "model": model,
+                "successful": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "processing": 0,
+                "other": 0,
+            },
+        )
+        bucket = (
+            "successful"
+            if status in SUCCESS_EXECUTION_STATUSES
+            else "failed"
+            if status in FAILURE_EXECUTION_STATUSES
+            else "cancelled"
+            if status in CANCELLED_EXECUTION_STATUSES
+            else "processing"
+            if status in PROCESSING_EXECUTION_STATUSES
+            else "other"
+        )
+        p_entry[bucket] += count
+        m_entry[bucket] += count
+
+    def _finalize(entry: dict[str, Any]) -> dict[str, Any]:
+        successful_ = entry["successful"]
+        failed_ = entry["failed"]
+        eligible_ = successful_ + failed_
+        entry["eligible"] = eligible_
+        entry["total"] = (
+            successful_
+            + failed_
+            + entry["cancelled"]
+            + entry["processing"]
+            + entry["other"]
+        )
+        entry["failure_rate"] = (failed_ / eligible_) if eligible_ else None
+        return entry
+
+    failure_by_provider = sorted(
+        (_finalize(entry) for entry in provider_agg.values()),
+        key=lambda item: (-item["failed"], -item["eligible"], str(item["provider"])),
+    )
+    failure_by_model = sorted(
+        (_finalize(entry) for entry in model_agg.values()),
+        key=lambda item: (-item["failed"], -item["eligible"], str(item["provider"])),
+    )[:10]
+
+    error_rows = (
+        (
+            await db.execute(
+                select(latest.c.error_message)
+                .where(
+                    latest.c.rn == 1,
+                    latest.c.status.in_(FAILURE_EXECUTION_STATUSES),
+                    latest.c.error_message.is_not(None),
+                )
+                .limit(500)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return {
+        "successful": successful,
+        "failed": failed,
+        "cancelled": cancelled,
+        "processing": processing,
+        "other": other,
+        "total": total,
+        "eligible": eligible,
+        "failure_rate": failure_rate,
+        "failure_by_provider": failure_by_provider,
+        "failure_by_model": failure_by_model,
+        "error_rows": error_rows,
+    }
+
+
 def _latest_execution_subquery():
     return select(
         ReviewExecution.review_id,
@@ -236,6 +410,34 @@ _ERROR_CATEGORY_RULES = (
     ),
     ("timeout", ("timeout", "timed out", "deadline")),
     ("provider unavailable", ("unavailable", "overloaded", "503", "502")),
+    (
+        "model unavailable",
+        (
+            "model not found",
+            "unknown model",
+            "model_not_found",
+            "no endpoints found",
+            "model is not available",
+        ),
+    ),
+    (
+        "invalid model response",
+        (
+            "invalid response",
+            "malformed",
+            "failed to parse",
+            "empty response",
+            "no content",
+        ),
+    ),
+    (
+        "repository access",
+        ("permission denied", "access denied", "not found on github", "repository not found"),
+    ),
+    (
+        "internal",
+        ("internal error", "unexpected error", "exception", "traceback"),
+    ),
 )
 
 
@@ -387,42 +589,22 @@ async def overview(
         p50 = _percentile(list(duration_values), 0.5)
         p95 = _percentile(list(duration_values), 0.95)
 
-    latest_total, latest_failed = (
-        await db.execute(
-            select(
-                func.count(),
-                func.coalesce(
-                    func.sum(case((latest.c.status == "failed", 1), else_=0)),
-                    0,
-                ),
-            )
-            .join(Review, Review.id == latest.c.review_id)
-            .where(latest.c.rn == 1, windowed)
-        )
-    ).one()
-    failure_rate = (
-        (latest_failed / latest_total) if latest_total else None
+    # Failure-rate outcomes use execution time (ReviewExecution.started_at),
+    # which is consistent with duration p50/p95 above, and select the latest
+    # execution per review within the window. Retries never inflate the counts;
+    # queued/running/cancelled executions are excluded from the denominator.
+    outcomes = await _execution_outcomes(db, start, end)
+    prev_outcomes = await _execution_outcomes(
+        db, start - (end - start), start
     )
 
-    error_rows = (
-        (
-            await db.execute(
-                select(latest.c.error_message)
-                .join(Review, Review.id == latest.c.review_id)
-                .where(
-                    latest.c.rn == 1,
-                    latest.c.status == "failed",
-                    latest.c.error_message.is_not(None),
-                    windowed,
-                )
-                .limit(500)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    failure_rate = outcomes["failure_rate"]
+    prev_failure_rate = prev_outcomes["failure_rate"]
+    failure_eligible = outcomes["eligible"]
+    prev_failure_eligible = prev_outcomes["eligible"]
+
     category_counts: dict[str, int] = {}
-    for raw_message in error_rows:
+    for raw_message in outcomes["error_rows"]:
         category = _error_category(sanitize_error_message(raw_message))
         category_counts[category] = category_counts.get(category, 0) + 1
     failure_categories = [
@@ -644,9 +826,34 @@ async def overview(
         "failure_rate": {
             "available": True,
             "value": failure_rate,
-            "reason": None,
-            "sample_size": int(latest_total),
+            "reason": (
+                None
+                if failure_rate is not None
+                else "No completed or failed review executions in this period"
+            ),
+            "sample_size": int(failure_eligible),
         },
+        "failure_rate_previous_period": {
+            "available": True,
+            "value": prev_failure_rate,
+            "reason": (
+                None
+                if prev_failure_rate is not None
+                else "No completed or failed review executions in the previous period"
+            ),
+            "sample_size": int(prev_failure_eligible),
+        },
+        "review_execution_outcomes": {
+            "successful": int(outcomes["successful"]),
+            "failed": int(outcomes["failed"]),
+            "cancelled": int(outcomes["cancelled"]),
+            "processing": int(outcomes["processing"]),
+            "other": int(outcomes["other"]),
+            "eligible": int(failure_eligible),
+            "total": int(outcomes["total"]),
+        },
+        "failure_by_provider": outcomes["failure_by_provider"],
+        "failure_by_model": outcomes["failure_by_model"],
         "failure_categories": failure_categories,
         "provider_health": provider_health,
         "maintenance": maintenance,

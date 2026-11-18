@@ -698,11 +698,33 @@ class ReviewPipeline:
         try:
             import re
 
+            # Resolve the execution this verification belongs to so findings
+            # are attributed to a concrete run (nullable for safety).
+            execution_id = None
+            try:
+                import uuid as _uuid
+
+                from app.services.review_execution_service import (
+                    get_latest_execution,
+                )
+
+                rid_uuid = _uuid.UUID(str(review_id))
+                async with AsyncSessionLocal() as db:
+                    latest_exec = await get_latest_execution(db, rid_uuid)
+                    execution_id = latest_exec.id if latest_exec else None
+            except Exception as exc:
+                logger.warning(
+                    f"Could not resolve execution id for verification of {review_id}: {exc}"
+                )
+
             changed_files = list(
                 set(re.findall(r"diff --git a/(.*?) b/", diff_content))
             )
             verified = await verification_engine.verify(
-                ai_response, repo_path, changed_files, context={"review_id": review_id}
+                ai_response,
+                repo_path,
+                changed_files,
+                context={"review_id": review_id, "execution_id": execution_id},
             )
             await emitter.emit("removing_hallucinations", "completed")
             await emitter.emit("deduplicating_findings", "completed")

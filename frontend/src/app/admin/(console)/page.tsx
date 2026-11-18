@@ -292,6 +292,25 @@ export default function AdminOverviewPage() {
       )
     : null;
   const failure = data ? metricReading(data.failure_rate) : null;
+  const outcomes = data?.review_execution_outcomes ?? null;
+  const failureComparison = (() => {
+    if (!data) return null;
+    const current = data.failure_rate.value;
+    const previous = data.failure_rate_previous_period?.value ?? null;
+    const periodLabel =
+      period === '24h' ? 'previous 24h' : period === '30d' ? 'previous 30d' : 'previous 7d';
+    if (current === null || current === undefined) return null;
+    if (previous === null || previous === undefined) {
+      return 'No comparable previous period';
+    }
+    const delta = (current - previous) * 100;
+    const sign = delta > 0 ? '+' : '';
+    return `${sign}${delta.toFixed(1)} pp vs ${periodLabel}`;
+  })();
+  const providerFailureRows =
+    data?.failure_by_provider.filter((row) => row.failed > 0 || row.eligible > 0) ?? [];
+  const modelFailureRows =
+    data?.failure_by_model.filter((row) => row.failed > 0 || row.eligible > 0) ?? [];
 
   return (
     <AdminPage
@@ -383,8 +402,10 @@ export default function AdminOverviewPage() {
                   : `${((data.failure_rate.value ?? 0) * 100).toFixed(1)}%`
               }
               sub={
-                !failure?.unavailable && data.failure_rate.sample_size !== null
-                  ? `${data.failure_rate.sample_size.toLocaleString()} latest executions`
+                outcomes
+                  ? `${outcomes.successful.toLocaleString()} successful · ${outcomes.failed.toLocaleString()} failed · ${outcomes.cancelled.toLocaleString()} cancelled/skipped · ${outcomes.processing.toLocaleString()} processing${
+                      failureComparison ? ` · ${failureComparison}` : ''
+                    }`
                   : undefined
               }
               reason={failure?.reason}
@@ -488,6 +509,93 @@ export default function AdminOverviewPage() {
                   tone="info"
                 />
               </div>
+            </AdminSection>
+          </div>
+
+          <AdminSection
+            title="Review outcomes"
+            subtitle="Latest executions in this period (eligible = completed + failed)"
+          >
+            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-5">
+              <KpiTile
+                label="Successful reviews"
+                value={outcomes ? outcomes.successful.toLocaleString() : '—'}
+                tone="success"
+              />
+              <KpiTile
+                label="Failed reviews"
+                value={outcomes ? outcomes.failed.toLocaleString() : '—'}
+                tone="error"
+              />
+              <KpiTile
+                label="Cancelled / skipped"
+                value={outcomes ? outcomes.cancelled.toLocaleString() : '—'}
+                tone="warning"
+              />
+              <KpiTile
+                label="Processing"
+                value={outcomes ? outcomes.processing.toLocaleString() : '—'}
+                tone="info"
+              />
+              <KpiTile
+                label="Total outcomes"
+                value={outcomes ? outcomes.eligible.toLocaleString() : '—'}
+                sub={outcomes ? `${outcomes.total.toLocaleString()} latest executions` : undefined}
+              />
+            </div>
+          </AdminSection>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <AdminSection
+              title="Failures by provider"
+              subtitle="Latest executions in this period"
+            >
+              {providerFailureRows.length === 0 ? (
+                <InlineEmpty>No provider executions recorded in this period.</InlineEmpty>
+              ) : (
+                <RankedList
+                  tone="error"
+                  items={providerFailureRows.map((row) => ({
+                    key: String(row.provider ?? 'unknown'),
+                    label: row.provider ? providerDisplayName(row.provider) : 'Unrecorded',
+                    secondary: `${row.successful.toLocaleString()} passed · ${row.failed.toLocaleString()} failed${
+                      row.failure_rate !== null
+                        ? ` · ${(row.failure_rate * 100).toFixed(1)}% failure`
+                        : ''
+                    }`,
+                    value: row.failed,
+                    tone: 'error' as const,
+                    leading: <ProviderMark slug={row.provider} size="sm" />,
+                  }))}
+                />
+              )}
+            </AdminSection>
+
+            <AdminSection
+              title="Failures by model"
+              subtitle="Latest executions in this period"
+            >
+              {modelFailureRows.length === 0 ? (
+                <InlineEmpty>No model executions recorded in this period.</InlineEmpty>
+              ) : (
+                <RankedList
+                  tone="error"
+                  items={modelFailureRows.map((row) => ({
+                    key: `${row.provider ?? 'unknown'}-${row.model ?? 'unrecorded'}`,
+                    label: row.model ?? 'Model not recorded',
+                    secondary: `${row.provider ? providerDisplayName(row.provider) : 'Unrecorded provider'} · ${row.successful.toLocaleString()} passed${
+                      row.failure_rate !== null
+                        ? ` · ${(row.failure_rate * 100).toFixed(1)}% failure`
+                        : ''
+                    }`,
+                    value: row.failed,
+                    tone: 'error' as const,
+                    leading: row.provider ? (
+                      <ProviderMark slug={row.provider} size="sm" />
+                    ) : undefined,
+                  }))}
+                />
+              )}
             </AdminSection>
           </div>
 
