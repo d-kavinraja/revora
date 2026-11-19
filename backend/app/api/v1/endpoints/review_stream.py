@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user_for_stream
 from app.db.session import AsyncSessionLocal
 from app.models.review import Review
 from app.models.user import User
@@ -32,7 +32,7 @@ _STREAM_HEADERS = {
 
 @router.get("/stream")
 async def stream_all_review_events(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_stream),
 ):
     """SSE stream of review and PR state updates for the reviews list."""
 
@@ -46,7 +46,7 @@ async def stream_all_review_events(
 @router.get("/{review_id}/stream")
 async def stream_review_events(
     review_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_stream),
 ):
     """SSE stream scoped to a single review and its pull request."""
 

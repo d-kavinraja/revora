@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.auth import create_access_token, get_password_hash
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_current_user_for_stream
 from app.core.deps_admin import ADMIN_SESSION_COOKIE
 from app.db.base import Base
 from app.db.session import get_db
@@ -126,6 +126,10 @@ def client(test_db, mock_user) -> TestClient:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # The SSE endpoints authenticate via a short-lived helper dependency
+    # (get_current_user_for_stream) so the DB session is not pinned for the
+    # lifetime of the stream. Override it the same way in tests.
+    app.dependency_overrides[get_current_user_for_stream] = override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client
@@ -206,12 +210,24 @@ def anon_client(test_db) -> TestClient:
     async def override_get_db():
         yield test_db
 
+    import contextlib
+
+    import app.core.deps as deps_mod
+
+    @contextlib.asynccontextmanager
+    async def _sse_factory():
+        yield test_db
+
+    _orig_factory = deps_mod.stream_auth_session_factory
+    deps_mod.stream_auth_session_factory = lambda: _sse_factory()
+
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
+    deps_mod.stream_auth_session_factory = _orig_factory
 
 
 @pytest.fixture

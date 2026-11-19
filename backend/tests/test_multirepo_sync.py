@@ -240,19 +240,20 @@ def test_worker_query_preserves_per_repo_fifo_with_fairness():
         Path(__file__).parent.parent / "app" / "queue" / "worker.py"
     )
     source = worker_path.read_text()
-    # Step 1: fair repo ordering, no advisory lock inside.
+    # Fairness: prefer repo with fewer running jobs, then least-recently completed.
     assert "GROUP BY j.repo_id" in source
-    assert "ORDER BY last_completed ASC" in source
+    assert "running_count ASC" in source
     assert "MIN(j.created_at) AS oldest" in source
-    # Step 2: per-repo oldest job with both the advisory lock and row lock.
-    assert "pg_try_advisory_xact_lock(hashtext(j.repo_id::text))" in source
+    assert "ORDER BY running_count ASC, last_completed ASC, oldest ASC" in source
+    # Per-repo advisory serialization removed; jobs remain FIFO.
+    assert "pg_try_advisory_xact_lock" not in source
     assert "ORDER BY j.created_at ASC" in source
     assert "FOR UPDATE SKIP LOCKED" in source
-    # Null-repo jobs (no per-repo gate) are still claimable.
+    # Null-repo jobs remain claimable.
     assert "j.repo_id IS NULL" in source
-    # Global single-flight: one RUNNING job across all repositories.
-    assert "WHERE gr.status = 'running'" in source
-    assert "REVIEW_CLAIM_ADVISORY_LOCK_KEY" in source
+    # Global single-flight removed (bounded concurrency via worker slots).
+    assert "WHERE gr.status = 'running'" not in source
+    assert "REVIEW_CLAIM_ADVISORY_LOCK_KEY" not in source
 
     dispatcher_path = (
         Path(__file__).parent.parent / "app" / "queue" / "dispatcher.py"

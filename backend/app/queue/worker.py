@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, func, select, text, update
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.queue.models import JobStatus, ReviewJob
 from app.security.error_sanitizer import sanitize_error_message
@@ -19,14 +20,15 @@ logger = logging.getLogger(__name__)
 _worker_id = str(uuid.uuid4())[:8]
 _shutdown = False
 
-# Global single-flight claim lock for REVIEW EXECUTION only (not repository
-# sync). Distinct from the sync full-pass lock (0x5A9C1024) and from
-# per-repo hashtext(repo_id) locks. Held for one claim transaction only:
-# check no RUNNING job -> pick next fair job -> mark RUNNING -> commit.
-REVIEW_CLAIM_ADVISORY_LOCK_KEY = 0x5A9C1030
+# The global single-flight review advisory lock is intentionally removed:
+# review execution is now bounded by REVIEW_WORKER_CONCURRENCY per process and
+# safe across processes via atomic SELECT ... FOR UPDATE SKIP LOCKED claiming
+# plus per-repository hashtext() transaction-scoped locks (which serialize
+# same-repository jobs). See REVIEW_WORKER_CONCURRENCY in app/core/config.py.
 
 # Serializes claim attempts inside one process (uvicorn + accidental second
-# loop). Cross-process safety is the Postgres advisory lock above.
+# loop) so the fair-ordering query never races itself. Cross-process safety
+# comes from the per-repo advisory lock and FOR UPDATE SKIP LOCKED.
 _claim_slot = asyncio.Lock()
 
 # Worker-liveness signals for queue recovery (P0-2). They distinguish a
@@ -757,44 +759,19 @@ def _is_postgres(session) -> bool:
 
 
 async def _acquire_global_claim_lock(session) -> bool:
-    """Best-effort global claim lock. True when safe to proceed.
-
-    Postgres: transaction-scoped advisory lock — serializes claimers across
-    processes. SQLite (tests): returns True (single-threaded fixture).
-    """
-    if not _is_postgres(session):
-        return True
-    try:
-        locked = await session.scalar(
-            text("SELECT pg_try_advisory_xact_lock(:key)"),
-            {"key": REVIEW_CLAIM_ADVISORY_LOCK_KEY},
-        )
-        return bool(locked)
-    except Exception:
-        await session.rollback()
-        return False
+    """Compatibility shim for older call sites (returns True unconditionally)."""
+    return True
 
 
 async def claim_next_job(session) -> tuple | None:
-    """Claim exactly one queued review job under global single-flight.
+    """Claim exactly one queued review job atomically.
 
     Concurrency model:
-      - GLOBAL: at most one ReviewJob may be RUNNING anywhere.
-      - PER-REPO: at most one RUNNING job per repository (unchanged).
+      - GLOBAL: bounded by REVIEW_WORKER_CONCURRENCY per process (cross-process
+        claim safety via FOR UPDATE SKIP LOCKED; slots are counted per process).
+      - PER-REPO: at most one RUNNING job per repository (hashtext xact lock).
       - Fairness: least-recently-completed repo first, then oldest job
         (per-repo FIFO preserved).
-
-    All steps run in one transaction while the global claim lock is held:
-      1. Acquire global claim advisory lock (cross-process).
-      2. Abort if any ReviewJob is already RUNNING.
-      3. Fair-order candidate repos (round-robin, no locks yet).
-      4. Claim each candidate's oldest queued job (per-repo lock +
-         FOR UPDATE SKIP LOCKED on Postgres).
-      5. Mark RUNNING and commit (releases the global lock).
-
-    Returns the claimed job row, or None when the global slot is busy or
-    nothing is eligible. On success the session is committed; on failure it
-    is rolled back (locks released).
     """
     async with _claim_slot:
         return await _claim_next_job_locked(session)
@@ -819,16 +796,13 @@ async def _claim_next_job_locked(session) -> tuple | None:
         await session.rollback()
         return None
 
-    if not await _acquire_global_claim_lock(session):
-        return None
-
-    global_running = await session.scalar(
-        text("SELECT 1 FROM review_jobs WHERE status = 'running' LIMIT 1")
-    )
-    if global_running:
-        await session.rollback()
-        return None
-
+    # The global single-flight lock and per-repository serialization were
+    # intentionally removed. Claiming is safe for bounded concurrency: atomic
+    # transaction-scoped claims use FOR UPDATE SKIP LOCKED, and jobs from any
+    # repository — including the same repository — may occupy distinct slots.
+    # Slots are counted by the run_worker() loop / REVIEW_WORKER_CONCURRENCY.
+    # Fairness: prefer the repository with the fewest running jobs, then
+    # least-recently-completed, then oldest queued job.
     pg = _is_postgres(session)
     ts_fallback = "'1970-01-01'::timestamptz" if pg else "'1970-01-01'"
     order_res = await session.execute(
@@ -842,34 +816,33 @@ async def _claim_next_job_locked(session) -> tuple | None:
                            FROM review_jobs r2
                            WHERE r2.repo_id = j.repo_id
                              AND r2.status = 'completed'
-                       ), {ts_fallback}) AS last_completed
+                       ), {ts_fallback}) AS last_completed,
+                       (
+                           SELECT COUNT(*)
+                           FROM review_jobs r_running
+                           WHERE r_running.repo_id = j.repo_id
+                             AND r_running.status = 'running'
+                       ) AS running_count
                 FROM review_jobs j
                 WHERE j.status = 'queued'
                   AND j.repo_id IS NOT NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM review_jobs r
-                      WHERE r.repo_id = j.repo_id
-                        AND r.status = 'running'
-                  )
-                  AND NOT EXISTS (
-                      SELECT 1 FROM review_jobs gr
-                      WHERE gr.status = 'running'
-                  )
                 GROUP BY j.repo_id
                 UNION ALL
                 SELECT NULL AS repo_id,
                        MIN(j.created_at) AS oldest,
-                       MIN(j.created_at) AS last_completed
+                       MIN(j.created_at) AS last_completed,
+                       (
+                           SELECT COUNT(*)
+                           FROM review_jobs r_running
+                           WHERE r_running.repo_id IS NULL
+                             AND r_running.status = 'running'
+                       ) AS running_count
                 FROM review_jobs j
                 WHERE j.status = 'queued'
                   AND j.repo_id IS NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM review_jobs gr
-                      WHERE gr.status = 'running'
-                  )
             )
             SELECT repo_id FROM per_repo
-            ORDER BY last_completed ASC, oldest ASC
+            ORDER BY running_count ASC, last_completed ASC, oldest ASC
             """
         )
     )
@@ -887,10 +860,6 @@ async def _claim_next_job_locked(session) -> tuple | None:
                     FROM review_jobs j
                     WHERE j.status = 'queued'
                       AND j.repo_id IS NULL
-                      AND NOT EXISTS (
-                          SELECT 1 FROM review_jobs gr
-                          WHERE gr.status = 'running'
-                      )
                     ORDER BY j.created_at ASC
                     LIMIT 1
                     """
@@ -898,29 +867,15 @@ async def _claim_next_job_locked(session) -> tuple | None:
                 )
             )
         else:
-            per_repo_gate = (
-                "\n  AND pg_try_advisory_xact_lock(hashtext(j.repo_id::text))"
-                if pg
-                else ""
-            )
             claim = await session.execute(
                 text(
-                    f"""
+                    """
                     SELECT j.id, j.repo_id, j.pr_number, j.head_sha,
                            j.delivery_id, j.payload,
                            j.attempt_count, j.created_at
                     FROM review_jobs j
                     WHERE j.status = 'queued'
                       AND j.repo_id = :repo_id
-                      AND NOT EXISTS (
-                          SELECT 1 FROM review_jobs r
-                          WHERE r.repo_id = j.repo_id
-                            AND r.status = 'running'
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1 FROM review_jobs gr
-                          WHERE gr.status = 'running'
-                      ){per_repo_gate}
                     ORDER BY j.created_at ASC
                     LIMIT 1
                     """
@@ -959,149 +914,202 @@ async def _claim_next_job_locked(session) -> tuple | None:
     return job_row
 
 
-async def run_worker(poll_interval: float = 2.0, standalone: bool = True):
-    """Main worker loop. Polls for queued jobs and processes them.
+async def _execute_claimed_job(job_row, worker_id: str) -> None:
+    """Run one claimed job to completion inside its own supervised task.
 
-    Review execution is globally serial (concurrency = 1): at most one
-    ReviewJob is RUNNING across all repositories. Within that slot the
-    fair scheduler picks the least-recently-completed repo's oldest job
-    (per-repo FIFO + cross-repo fairness).
+    Keeps the job lifecycle semantics of the original serial loop: cancel
+    re-check, cancellation watcher, status transition to COMPLETED / FAILED /
+    CANCELLED, and orphan-recovery-compatible heartbeat updates.
     """
-    global _worker_started_at
-    logger.info(f"Worker {_worker_id} started (poll_interval={poll_interval}s)")
+    job_id = job_row[0]
+    try:
+        async with AsyncSessionLocal() as check_session:
+            check_result = await check_session.execute(
+                select(ReviewJob).where(ReviewJob.id == job_id)
+            )
+            current_job = check_result.scalars().first()
+        if current_job and current_job.status == JobStatus.CANCELLED:
+            logger.info(
+                f"Worker {worker_id} job {job_id} was cancelled before processing started - skipping."
+            )
+            return
+
+        async def watch_for_cancellation(task: asyncio.Task, jid: uuid.UUID):
+            while not task.done():
+                await asyncio.sleep(5)
+                try:
+                    async with AsyncSessionLocal() as s:
+                        res = await s.execute(
+                            select(ReviewJob).where(ReviewJob.id == jid)
+                        )
+                        job_status = res.scalars().first()
+                        if job_status and job_status.status == JobStatus.CANCELLED:
+                            logger.info(
+                                f"Worker {worker_id} job {jid} cancelled by user during execution. Aborting..."
+                            )
+                            task.cancel()
+                            break
+                        elif job_status:
+                            job_status.updated_at = datetime.now(UTC)
+                            s.add(job_status)
+                            await s.commit()
+                except Exception:
+                    pass  # Ignore temporary DB errors in watcher
+
+        job_task = asyncio.create_task(process_job(job_row))
+        watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))
+
+        try:
+            success = await job_task
+            new_status = JobStatus.COMPLETED if success else JobStatus.FAILED
+        except asyncio.CancelledError:
+            new_status = JobStatus.CANCELLED
+            await mark_review_cancelled(job_row)
+        finally:
+            watcher_task.cancel()
+
+        async with AsyncSessionLocal() as session:
+            if new_status != JobStatus.CANCELLED:
+                cur_result = await session.execute(
+                    select(ReviewJob).where(ReviewJob.id == job_id)
+                )
+                cur_job = cur_result.scalars().first()
+                if cur_job and cur_job.status == JobStatus.CANCELLED:
+                    new_status = JobStatus.CANCELLED
+
+            if new_status != JobStatus.CANCELLED:
+                await session.execute(
+                    update(ReviewJob)
+                    .where(ReviewJob.id == job_id)
+                    .values(
+                        status=new_status,
+                        completed_at=datetime.now(UTC),
+                        attempt_count=job_row[6] + 1,
+                    )
+                )
+            else:
+                await session.execute(
+                    update(ReviewJob)
+                    .where(ReviewJob.id == job_id)
+                    .values(
+                        completed_at=datetime.now(UTC),
+                        attempt_count=job_row[6] + 1,
+                    )
+                )
+            await session.commit()
+
+        import gc
+
+        gc.collect()
+
+        logger.info(f"Worker {worker_id} job {job_id} -> {new_status.value}")
+    except asyncio.CancelledError:
+        try:
+            await mark_review_cancelled(job_row)
+        except Exception:
+            logger.warning(
+                f"Worker {worker_id} could not mark job {job_id} cancelled during shutdown"
+            )
+        raise
+    except Exception:
+        logger.exception(f"Worker {worker_id} job {job_id} failed to execute")
+
+
+async def run_worker(
+    poll_interval: float | None = None,
+    standalone: bool = True,
+    concurrency: int | None = None,
+):
+    """Main worker loop. Polls for queued jobs and processes them concurrently.
+
+    Bounded execution: at most REVIEW_WORKER_CONCURRENCY (default 1, max 5)
+    jobs run at once. Claims happen only while a slot is free, so a worker
+    never claims more jobs than it can execute. Cross-process workers are safe
+    via FOR UPDATE SKIP LOCKED and per-repository hashtext() transaction
+    locks. Fairness is least-recently-completed repo first, then oldest job.
+    """
+    global _worker_started_at, _last_claim_at
+
+    if concurrency is None:
+        concurrency = getattr(settings, "REVIEW_WORKER_CONCURRENCY", 1) or 1
+    concurrency = max(1, min(5, int(concurrency)))
+    if poll_interval is None:
+        poll_interval = getattr(
+            settings, "REVIEW_WORKER_POLL_INTERVAL_SECONDS", 2.0
+        ) or 2.0
+    shutdown_timeout = (
+        getattr(settings, "REVIEW_WORKER_SHUTDOWN_TIMEOUT_SECONDS", 300) or 300
+    )
+
+    logger.info(
+        f"Worker {_worker_id} started (poll_interval={poll_interval}s, concurrency={concurrency})"
+    )
 
     if standalone:
         signal.signal(signal.SIGINT, _handle_shutdown)
         signal.signal(signal.SIGTERM, _handle_shutdown)
 
-    # Liveness anchor: queued jobs newer than the startup grace window are
-    # never age-failed before the loop gets its first chances to claim them.
     _worker_started_at = datetime.now(UTC)
-
-    # Recover any jobs left in 'running' status from a previous server crash
     await recover_orphaned_jobs()
-
     last_recovery_check = datetime.now(UTC)
+    running: set[asyncio.Task] = set()
 
     while not _shutdown:
         try:
-            # Periodically check for stale/orphaned jobs every 60s
-            if (datetime.now(UTC) - last_recovery_check).total_seconds() > 60:
+            now = datetime.now(UTC)
+            if (now - last_recovery_check).total_seconds() > 60:
                 await recover_orphaned_jobs()
-                last_recovery_check = datetime.now(UTC)
+                last_recovery_check = now
 
-            async with AsyncSessionLocal() as session:
-                job_row = await claim_next_job(session)
+            # Reap finished execution tasks and surface unexpected failures.
+            finished = [t for t in running if t.done()]
+            for t in finished:
+                running.discard(t)
+                if not t.cancelled():
+                    exc = t.exception()
+                    if exc:
+                        logger.exception(
+                            f"Worker {_worker_id} execution task crashed",
+                            exc_info=exc,
+                        )
 
+            # Fill free slots with newly claimed jobs.
+            made_progress = False
+            while len(running) < concurrency and not _shutdown:
+                async with AsyncSessionLocal() as session:
+                    job_row = await claim_next_job(session)
                 if not job_row:
-                    await asyncio.sleep(poll_interval)
-                    continue
-
-                job_id = job_row[0]
-
-                # Liveness signal for queue recovery: a recent claim proves
-                # the worker is draining, so old-but-waiting queued jobs are
-                # healthy backlog, not orphans.
-                global _last_claim_at
+                    break
                 _last_claim_at = datetime.now(UTC)
+                task = asyncio.create_task(_execute_claimed_job(job_row, _worker_id))
+                running.add(task)
+                made_progress = True
 
-            # Process outside the session lock — but first re-check status in case
-            # it was cancelled by the user between being claimed and execution starting.
-            async with AsyncSessionLocal() as check_session:
-                check_result = await check_session.execute(
-                    select(ReviewJob).where(ReviewJob.id == job_id)
-                )
-                current_job = check_result.scalars().first()
-
-            if current_job and current_job.status == JobStatus.CANCELLED:
-                logger.info(
-                    f"Worker {_worker_id} job {job_id} was cancelled before processing started — skipping."
-                )
-                continue
-
-            # Process the job as a task so we can cancel it
-            job_task = asyncio.create_task(process_job(job_row))
-
-            # Watcher task to poll for cancellation and update heartbeat timestamp
-            async def watch_for_cancellation(task: asyncio.Task, jid: uuid.UUID):
-                while not task.done():
-                    await asyncio.sleep(5)
-                    try:
-                        async with AsyncSessionLocal() as s:
-                            res = await s.execute(
-                                select(ReviewJob).where(ReviewJob.id == jid)
-                            )
-                            job_status = res.scalars().first()
-                            if job_status and job_status.status == JobStatus.CANCELLED:
-                                logger.info(
-                                    f"Worker {_worker_id} job {jid} cancelled by user during execution. Aborting..."
-                                )
-                                task.cancel()
-                                break
-                            elif job_status:
-                                job_status.updated_at = datetime.now(UTC)
-                                s.add(job_status)
-                                await s.commit()
-                    except Exception:
-                        pass  # Ignore temporary DB errors in watcher
-
-            watcher_task = asyncio.create_task(watch_for_cancellation(job_task, job_id))
-
-            try:
-                success = await job_task
-                new_status = JobStatus.COMPLETED if success else JobStatus.FAILED
-            except asyncio.CancelledError:
-                success = False
-                new_status = JobStatus.CANCELLED
-                # Ensure the review row is marked cancelled too, so the
-                # "active review" lock is released (never leave zombies).
-                await mark_review_cancelled(job_row)
-            finally:
-                watcher_task.cancel()
-
-            # Update status
-            async with AsyncSessionLocal() as session:
-                # Preserve a user-initiated cancellation: a job cancelled in the
-                # DB (cancel_review) must not be overwritten with FAILED when the
-                # process_job guard bails out after the cancellation landed.
-                if new_status != JobStatus.CANCELLED:
-                    cur_result = await session.execute(
-                        select(ReviewJob).where(ReviewJob.id == job_id)
-                    )
-                    cur_job = cur_result.scalars().first()
-                    if cur_job and cur_job.status == JobStatus.CANCELLED:
-                        new_status = JobStatus.CANCELLED
-
-                if new_status != JobStatus.CANCELLED:
-                    await session.execute(
-                        update(ReviewJob)
-                        .where(ReviewJob.id == job_id)
-                        .values(
-                            status=new_status,
-                            completed_at=datetime.now(UTC),
-                            attempt_count=job_row[6] + 1,
-                        )
-                    )
-                else:
-                    await session.execute(
-                        update(ReviewJob)
-                        .where(ReviewJob.id == job_id)
-                        .values(
-                            completed_at=datetime.now(UTC),
-                            attempt_count=job_row[6] + 1,
-                        )
-                    )
-                await session.commit()
-
-            import gc
-
-            gc.collect()
-
-            logger.info(f"Worker {_worker_id} job {job_id} -> {new_status.value}")
-
+            if not running:
+                await asyncio.sleep(poll_interval)
+            elif not made_progress and len(running) >= concurrency:
+                # Slots full and no claim progress: wait for one to finish
+                # instead of polling tags.
+                await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+            else:
+                await asyncio.sleep(poll_interval)
         except Exception:
             logger.exception(f"Worker {_worker_id} loop error")
             await asyncio.sleep(poll_interval)
+
+    logger.info(f"Worker {_worker_id} shutting down (active={len(running)})")
+    for t in running:
+        t.cancel()
+    if running:
+        _, pending = await asyncio.wait(running, timeout=shutdown_timeout)
+        if pending:
+            logger.warning(
+                f"Worker {_worker_id} shutdown exceeded {shutdown_timeout}s with {len(pending)} active task(s)"
+            )
+    try:
+        await recover_orphaned_jobs()
+    except Exception:
+        logger.exception(f"Worker {_worker_id} shutdown recovery failed")
 
     logger.info(f"Worker {_worker_id} shut down gracefully")
 

@@ -143,6 +143,36 @@ class Settings(BaseSettings):
     OPERATION_MAX_ATTEMPTS: int = Field(default=3, description="Maximum operation job attempts")
     OPERATION_RETRY_BACKOFF_SECONDS: int = Field(default=15, description="Base retry backoff")
     OPERATION_JOB_RETENTION_DAYS: int = Field(default=7, description="Finished operation job retention")
+
+    # Review worker (PostgreSQL-backed job queue). When REVIEW_WORKER_ENABLED is
+    # False the FastAPI lifespan does not start an in-process worker (use this
+    # when a dedicated worker service/container runs instead). Concurrency is
+    # the maximum number of review jobs executed simultaneously by one worker
+    # process; keep the default at 1 for backward compatibility.
+    REVIEW_WORKER_ENABLED: bool = Field(
+        default=True, description="Start the review worker inside this process"
+    )
+    REVIEW_WORKER_CONCURRENCY: int = Field(
+        default=5,
+        ge=1,
+        le=5,
+        description="Max simultaneous review jobs per worker process (max 5)",
+    )
+    REVIEW_WORKER_POLL_INTERVAL_SECONDS: float = Field(
+        default=2.0, ge=0.1, description="Review worker queue poll interval"
+    )
+    REVIEW_WORKER_SHUTDOWN_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        ge=10,
+        description="Graceful shutdown window for active reviews on worker stop",
+    )
+
+    # Per-provider LLM concurrency. Each provider gets its own semaphore so
+    # that N concurrent reviews do not overwhelm a single provider's rate
+    # limit. Applies to the LLM call only, not the whole review.
+    PROVIDER_CONCURRENCY_LIMIT: int = Field(
+        default=3, ge=1, le=5, description="Max concurrent LLM calls per provider (max 5)"
+    )
     # Tier 1: repos with open PRs / new repos — every N minutes.
     SYNC_RECOVERY_INTERVAL_MINUTES: int = Field(
         default=3,

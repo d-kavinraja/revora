@@ -7,8 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import SESSION_COOKIE_NAME, decode_access_token
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal, get_db
 from app.models.user import User
+
+# Default session factory used by the SSE authentication helper. It is a
+# module-level (not FastAPI) dependency so the helper can open and close its
+# own short-lived session *before* the long-lived StreamingResponse begins,
+# instead of pinning a pooled connection for the lifetime of the stream.
+# Overridable in tests (see backend/tests/conftest.py).
+stream_auth_session_factory = AsyncSessionLocal
 
 # auto_error=False: the cookie reader below provides the fallback so
 # cookie-authenticated browsers (no Authorization header) are accepted.
@@ -79,11 +86,18 @@ async def get_optional_session(
     return user, payload
 
 
-async def get_current_user(
+async def _resolve_current_user(
     request: Request,
-    header_token: str | None = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    header_token: str | None,
+    db: AsyncSession,
 ) -> User:
+    """Core authentication logic shared by normal and SSE auth paths.
+
+    Takes an already-open session so callers control its lifetime. Returns the
+    authenticated ``User`` or raises an ``HTTPException``. Performs the same
+    checks as the historical ``get_current_user`` (token decode, existence,
+    active status, token version, throttled activity touch).
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -124,9 +138,6 @@ async def get_current_user(
     # Activity tracking (phase 7, §3.4): throttled `last_active_at` touch
     # (max one write per user per 5 minutes). Fail-open — analytics writes
     # must never break an authenticated request.
-    # Activity tracking (phase 7, §3.4): throttled `last_active_at` touch
-    # (max one write per user per 5 minutes). Fail-open — analytics writes
-    # must never break an authenticated request.
     now = datetime.now(UTC)
     if _activity_touch_due(user.last_active_at, now):
         try:
@@ -137,3 +148,28 @@ async def get_current_user(
         except Exception:
             await db.rollback()
     return user
+
+
+async def get_current_user(
+    request: Request,
+    header_token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    # Normal API path: reuse the request-scoped session (unchanged behaviour).
+    return await _resolve_current_user(request, header_token, db)
+
+
+async def get_current_user_for_stream(
+    request: Request,
+    header_token: str | None = Depends(oauth2_scheme),
+) -> User:
+    """Authenticate an SSE connection WITHOUT holding a DB session for the
+    lifetime of the stream.
+
+    Opens a short-lived session, authenticates, and closes it (returning the
+    connection to the pool) *before* the long-lived StreamingResponse starts.
+    This prevents SSE streams from pinning pooled PostgreSQL connections and
+    starving the in-process review worker (see production incident).
+    """
+    async with stream_auth_session_factory() as db:
+        return await _resolve_current_user(request, header_token, db)

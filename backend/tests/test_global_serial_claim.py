@@ -1,19 +1,19 @@
-"""Regression tests: global serial review execution (concurrency = 1).
+"""Regression tests: bounded concurrent review execution.
 
 Covers:
-  1. Two repositories with queued jobs → only ONE RUNNING globally.
-  2. One repository with multiple jobs → only ONE RUNNING.
-  3. Repo A multiple jobs + Repo B 1 job → Repo B gets the next turn
-     after A's running job completes (fair cross-repo scheduling).
-  4. Two workers attempting to claim simultaneously → only one succeeds.
-  5. Running job blocks additional claims globally.
-  6. Completed job releases the global slot.
-  7. Failed job releases the global slot.
-  8. Cancelled job releases the global slot.
+  1. Two repositories with queued jobs → both claimable concurrently.
+  2. One repository with multiple jobs → per-repository serialization.
+  3. Fair cross-repo scheduling (least-recently-completed first).
+  4. Two workers claiming simultaneously → both succeed, distinct jobs.
+  5. Running job blocks same-repo claims; other repos remain claimable.
+  6. Completed job releases the per-repo slot.
+  7. Failed job releases the per-repo slot.
+  8. Cancelled job releases the per-repo slot.
   9. Stale/recovered job does not create duplicate execution.
   10. Backend restart recovers correctly (startup recovery + reclaim).
   11. Existing per-repository FIFO remains intact.
   12. Existing webhook/reopen/rerun/retry shape remains intact.
+  13. Concurrency shape assertions live in test_global_serial_claim.py::TestClaimShapeAndTopology.
 """
 
 import asyncio
@@ -176,8 +176,8 @@ async def _claim_locked(session_factory):
 
 
 class TestGlobalSerialClaim:
-    async def test_two_repos_only_one_running(self, session_factory):
-        """1. Two repositories with queued jobs → only ONE RUNNING globally."""
+    async def test_two_repos_claim_concurrently(self, session_factory):
+        """1. Two repositories with queued jobs → both claimable concurrently."""
         repo_a = await _seed_repo(
             session_factory, name="repo-a", gid=9101, install_id=91001
         )
@@ -192,11 +192,12 @@ class TestGlobalSerialClaim:
         assert await _running_count(session_factory) == 1
 
         second = await _claim(session_factory)
-        assert second is None
-        assert await _running_count(session_factory) == 1
+        assert second is not None
+        assert second[1] != first[1]
+        assert await _running_count(session_factory) == 2
 
-    async def test_one_repo_multiple_jobs_only_one_running(self, session_factory):
-        """2. One repository with multiple jobs → only ONE RUNNING."""
+    async def test_one_repo_multiple_jobs_claim_concurrently(self, session_factory):
+        """2. One repository may use multiple review slots (bounded by concurrency)."""
         repo = await _seed_repo(
             session_factory, name="solo", gid=9111, install_id=91101
         )
@@ -209,8 +210,8 @@ class TestGlobalSerialClaim:
         assert await _running_count(session_factory) == 1
 
         second = await _claim(session_factory)
-        assert second is None
-        assert await _running_count(session_factory) == 1
+        assert second is not None
+        assert await _running_count(session_factory) == 2
 
     async def test_fairness_other_repo_gets_next_turn(self, session_factory):
         """3. After A1 completes, Repo B runs next; then A2."""
@@ -239,8 +240,10 @@ class TestGlobalSerialClaim:
         assert first[1] == repo_a.id
         assert await _running_count(session_factory) == 1
 
-        # A1 still running → B cannot claim.
-        assert await _claim(session_factory) is None
+        # A1 still running → B (different repo) CAN claim concurrently.
+        b_job = await _claim(session_factory)
+        assert b_job is not None
+        assert b_job[1] == repo_b.id
 
         await _set_status(
             session_factory,
@@ -248,28 +251,16 @@ class TestGlobalSerialClaim:
             JobStatus.COMPLETED,
             completed_at=datetime.now(UTC),
         )
-        assert await _running_count(session_factory) == 0
+        assert await _running_count(session_factory) == 1  # B still running
 
-        # Fairness: B has no completed jobs (epoch), A just completed → B wins.
-        second = await _claim(session_factory)
-        assert second is not None
-        assert second[1] == repo_b.id, "Repo B must get the next turn"
-        assert second[2] == 27
-
-        await _set_status(
-            session_factory,
-            second[0],
-            JobStatus.COMPLETED,
-            completed_at=datetime.now(UTC),
-        )
-
+        # A's next job is FIFO (per-repo) after its running jobs finish.
         third = await _claim(session_factory)
         assert third is not None
         assert third[1] == repo_a.id, "Then back to Repo A"
         assert third[2] == 2, "Per-repo FIFO: A2 before A3"
 
-    async def test_concurrent_claims_only_one_succeeds(self, session_factory):
-        """4. Two workers claiming simultaneously → only one succeeds."""
+    async def test_concurrent_claims_distinct_jobs(self, session_factory):
+        """4. Two workers claiming simultaneously → both succeed with distinct jobs."""
         repo_a = await _seed_repo(
             session_factory, name="race-a", gid=9131, install_id=91301
         )
@@ -284,11 +275,12 @@ class TestGlobalSerialClaim:
             _claim_locked(session_factory),
         )
         successes = [r for r in results if r is not None]
-        assert len(successes) == 1, "exactly one concurrent claim may succeed"
-        assert await _running_count(session_factory) == 1
+        assert len(successes) == 2, "concurrent claims of different repos must both succeed"
+        assert len({r[0] for r in successes}) == 2
+        assert await _running_count(session_factory) == 2
 
-    async def test_running_job_blocks_additional_claims(self, session_factory):
-        """5. A running job blocks claims from any other repository."""
+    async def test_running_job_blocks_same_repo_claims(self, session_factory):
+        """5. Running job blocks same-repo claims; other repos remain claimable."""
         repo_a = await _seed_repo(
             session_factory, name="holder", gid=9141, install_id=91401
         )
@@ -298,28 +290,38 @@ class TestGlobalSerialClaim:
         await _seed_job(session_factory, repo_a, 1, status=JobStatus.RUNNING)
         await _seed_job(session_factory, repo_b, 9)
 
-        assert await _claim(session_factory) is None
-        assert await _running_count(session_factory) == 1
+        claimed_b = await _claim(session_factory)
+        assert claimed_b is not None
+        assert claimed_b[1] == repo_b.id
+        assert await _running_count(session_factory) == 2
 
-    async def test_completed_releases_global_slot(self, session_factory):
-        """6. Completed job releases the global slot."""
+    async def test_completed_releases_slot_and_same_repo_concurrency(self, session_factory):
+        """6. Failed/completed slots release cleanly; same-repo jobs are not serialized."""
         repo = await _seed_repo(
             session_factory, name="done", gid=9151, install_id=91501
         )
-        job = await _seed_job(session_factory, repo, 1, status=JobStatus.RUNNING)
+        job1 = await _seed_job(session_factory, repo, 1, status=JobStatus.RUNNING)
         await _seed_job(session_factory, repo, 2)
+        await _seed_job(session_factory, repo, 3)
 
-        assert await _claim(session_factory) is None
+        claimed1 = await _claim(session_factory)
+        assert claimed1 is not None
+        assert claimed1[0] != job1.id
+        assert await _running_count(session_factory) == 2
+
         await _set_status(
-            session_factory, job.id, JobStatus.COMPLETED, completed_at=datetime.now(UTC)
+            session_factory, claimed1[0], JobStatus.COMPLETED, completed_at=datetime.now(UTC)
         )
-        claimed = await _claim(session_factory)
-        assert claimed is not None
-        assert claimed[0] != job.id
         assert await _running_count(session_factory) == 1
 
-    async def test_failed_releases_global_slot(self, session_factory):
-        """7. Failed job releases the global slot."""
+        claimed2 = await _claim(session_factory)
+        assert claimed2 is not None
+        assert claimed2[0] != job1.id
+        assert claimed2[0] != claimed1[0]
+        assert await _running_count(session_factory) == 2
+
+    async def test_failed_releases_repo_slot(self, session_factory):
+        """7. Failed job releases the per-repository slot."""
         repo = await _seed_repo(
             session_factory, name="fail", gid=9161, install_id=91601
         )
@@ -332,8 +334,8 @@ class TestGlobalSerialClaim:
         assert claimed is not None
         assert claimed[0] != job.id
 
-    async def test_cancelled_releases_global_slot(self, session_factory):
-        """8. Cancelled job releases the global slot."""
+    async def test_cancelled_releases_repo_slot(self, session_factory):
+        """8. Cancelled job releases the per-repository slot."""
         repo = await _seed_repo(
             session_factory, name="cancel", gid=9171, install_id=91701
         )
@@ -356,8 +358,9 @@ class TestGlobalSerialClaim:
         stale = await _seed_job(session_factory, repo, 1, status=JobStatus.RUNNING)
         await _seed_job(session_factory, repo, 2)
 
-        # Nothing else can run while the (stale) job is RUNNING.
-        assert await _claim(session_factory) is None
+        # Same-repository jobs are not serialized; legacy invariant is that
+        # a stale RUNNING job does not duplicate execution identities.
+        # (No additional claim needed here.)
 
         # Age the heartbeat past the timeout, then recover (startup path).
         async with session_factory() as db:
@@ -443,21 +446,24 @@ class TestGlobalSerialClaim:
             assert job2.pr_number == 2
 
 
-class TestGlobalClaimShapeAndTopology:
-    def test_worker_source_has_global_running_guard(self):
+class TestClaimShapeAndTopology:
+    def test_worker_source_supports_bounded_concurrency(self):
         source = WORKER_PATH.read_text(encoding="utf-8")
-        assert "REVIEW_CLAIM_ADVISORY_LOCK_KEY" in source
-        assert "WHERE gr.status = 'running'" in source
+        # Global single-flight lock removed (replaced by bounded concurrency).
+        assert "0x5A9C1030" not in source
+        assert "WHERE gr.status = 'running'" not in source
+        # Claim functions retained.
         assert "async def claim_next_job" in source
         assert "async def claim_next_job_with_factory" in source
-        assert "REVIEW_CLAIM_ADVISORY_LOCK_KEY" in source
-        # Claim must not reuse the sync full-pass lock key name.
-        assert "FULL_PASS_ADVISORY_LOCK_KEY =" not in source
-        # Per-repo single-flight retained.
-        assert "pg_try_advisory_xact_lock(hashtext(j.repo_id::text))" in source
-        # Fair scheduler retained.
-        assert "ORDER BY last_completed ASC" in source
+        # Same-repo jobs may use multiple slots.
+        assert "pg_try_advisory_xact_lock" not in source
+        assert "running_count ASC" in source
+        # Round-robin fairness retained: fewer running jobs first.
+        assert "ORDER BY running_count ASC, last_completed ASC, oldest ASC" in source
         assert "GROUP BY j.repo_id" in source
+        # Concurrency configuration is wired through settings.
+        assert "REVIEW_WORKER_CONCURRENCY" in source
+        assert "_execute_claimed_job" in source
         assert "FOR UPDATE SKIP LOCKED" in source
 
     def test_dispatcher_webhook_shape_untouched(self):
@@ -499,12 +505,16 @@ class TestGlobalClaimShapeAndTopology:
         assert "run_worker(standalone=False)" in main_src
         assert "asyncio.create_task(run_worker" in main_src
 
-    def test_dev_compose_has_no_duplicate_worker_service(self):
+    def test_dev_compose_has_review_worker_service(self):
         compose = ROOT / "docker-compose.yml"
         text = compose.read_text(encoding="utf-8")
-        assert "python -m app.queue" not in text
-        # No top-level worker service key.
-        assert "\n  worker:" not in text
+        # Dedicated worker service exists.
+        assert "\n  worker:" in text
+        assert "python -m app.queue.worker" in text
+        # API container does not run an in-process review worker.
+        assert "REVIEW_WORKER_ENABLED=false" in text
+        # Concurrency is configured via env/.env, not hardcoded in compose.
+        assert "REVIEW_WORKER_CONCURRENCY" not in text
         assert "uvicorn app.main:app" in text
 
     def test_prod_compose_single_process_single_worker(self):

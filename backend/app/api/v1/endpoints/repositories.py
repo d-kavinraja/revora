@@ -613,12 +613,34 @@ async def _background_single_repo_sync(
                     ),
                 )
             finally:
+                # Release the session-level advisory lock. On PostgreSQL an
+                # aborted transaction makes pg_advisory_unlock fail, so roll
+                # back first and retry once; shield the unlock from
+                # cancellation; log failures loudly instead of swallowing.
+                # SQLite ignores rollback since it doesn't support advisory
+                # locks and its tests still need the session intact.
                 try:
-                    await db.execute(
-                        text(f"SELECT pg_advisory_unlock({repo_lock_key})"),
+                    await asyncio.shield(
+                        db.execute(text(f"SELECT pg_advisory_unlock({repo_lock_key})"))
                     )
-                except Exception:
-                    pass
+                except Exception as unlock_exc:
+                    if getattr(getattr(db, "bind", None), "dialect", None).name == "postgresql":
+                        try:
+                            await db.rollback()
+                        except Exception as rb_exc:
+                            logger.warning(f"Per-repo sync rollback before lock release failed: {rb_exc}")
+                        try:
+                            await asyncio.shield(
+                                db.execute(text(f"SELECT pg_advisory_unlock({repo_lock_key})"))
+                            )
+                        except Exception as retry_exc:
+                            logger.warning(
+                                f"Per-repo advisory lock release failed for repo {repo_id}: {retry_exc}"
+                            )
+                    else:
+                        logger.warning(
+                            f"Per-repo advisory lock unlock not supported or failed for repo {repo_id}: {unlock_exc}"
+                        )
     except Exception as e:
         logger.error(
             f"Background repository sync failed for {repo_id}: {e}", exc_info=True

@@ -3,6 +3,7 @@ import logging
 import time
 import uuid
 
+from app.core.config import settings
 from app.ai.llm import llm_service
 from app.orchestrator.models import (
     CONFIG_SOURCE_REPO,
@@ -44,6 +45,18 @@ class LLMOrchestrator:
 
     def __init__(self):
         self.usage_history: list[UsageStats] = []
+        # Per-provider concurrency semaphores (created lazily). Bounds the
+        # number of in-flight LLM calls per provider so a burst of parallel
+        # reviews does not overwhelm a provider's rate limit.
+        self._provider_semaphores: dict[str, asyncio.Semaphore] = {}
+        self._provider_limit = max(1, getattr(settings, "PROVIDER_CONCURRENCY_LIMIT", 3))
+
+    def _provider_semaphore(self, provider: str) -> asyncio.Semaphore:
+        sem = self._provider_semaphores.get(provider)
+        if sem is None:
+            sem = asyncio.Semaphore(self._provider_limit)
+            self._provider_semaphores[provider] = sem
+        return sem
 
     async def complete(
         self,
@@ -109,15 +122,16 @@ class LLMOrchestrator:
                     )
                     await callback("sending_request_to_llm", "running")
 
-                response_text, real_input_tokens, real_output_tokens = (
-                    await llm_service.get_completion(
-                        user_id=user_uuid,
-                        provider=preferred_provider,
-                        messages=prompt.get_user_messages(),
-                        model=preferred_model,
-                        api_key_id=api_key_id,
+                async with self._provider_semaphore(preferred_provider):
+                    response_text, real_input_tokens, real_output_tokens = (
+                        await llm_service.get_completion(
+                            user_id=user_uuid,
+                            provider=preferred_provider,
+                            messages=prompt.get_user_messages(),
+                            model=preferred_model,
+                            api_key_id=api_key_id,
+                        )
                     )
-                )
 
                 input_tokens = (
                     real_input_tokens
