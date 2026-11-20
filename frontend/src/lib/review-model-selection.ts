@@ -15,6 +15,8 @@ export interface ModelSelectionView {
   actualModel: string | null;
   actualLabel: string;
   executed: boolean;
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -29,6 +31,38 @@ const MAPPING_LABELS: Record<string, string> = {
   not_mapped: 'Not mapped',
   unknown: 'Unknown',
 };
+
+/**
+ * Provider display-name normalization for review metadata.
+ *
+ * The managed provider's internal slug is always `kllm`, but the visible name
+ * is standardized to `kLLM` everywhere review runs are displayed (live or
+ * stored), regardless of any legacy parenthetical suffix a backend row may
+ * carry. The internal slug remains `kllm` for routing and persistence.
+ */
+export function normalizeKllmProviderLabel(
+  slug?: string | null,
+  name?: string | null,
+): string | null {
+  const normalizedSlug = (slug ?? '').trim().toLowerCase();
+  const normalizedName = (name ?? '').trim();
+  if (
+    normalizedSlug === 'kllm' ||
+    normalizedName.toLowerCase() === 'kllm' ||
+    normalizedName.toLowerCase().startsWith('kllm')
+  ) {
+    return 'kLLM';
+  }
+  return null;
+}
+
+function displayProviderLabel(
+  slug?: string | null,
+  name?: string | null,
+  fallback = '',
+): string {
+  return normalizeKllmProviderLabel(slug, name) ?? (name || slug || fallback);
+}
 
 export type ModelSelectionInput = {
   [K in keyof ReviewSelection]?: ReviewSelection[K] | null;
@@ -48,10 +82,11 @@ export function modelSelectionView(
     null
   )?.toLowerCase() ?? null;
   const providerLabel =
-    selection?.selected_provider_name ||
-    selection?.selected_provider ||
-    selection?.selected_provider_slug ||
-    'AI model';
+    displayProviderLabel(
+      providerSlug,
+      selection?.selected_provider_name,
+      selection?.selected_provider ?? selection?.selected_provider_slug ?? '',
+    ) || 'AI model';
   const model = selection?.selected_model ?? null;
   const hasSelection = Boolean(providerSlug && model);
 
@@ -63,10 +98,16 @@ export function modelSelectionView(
     selection?.execution_started && (actualProvider || actualModel),
   );
   const executionStatus = selection?.execution_status || null;
+  const fallbackUsed = Boolean(selection?.fallback_used);
 
   let actualLabel: string;
   if (executed) {
-    actualLabel = [actualProvider, actualModel].filter(Boolean).join(' · ');
+    actualLabel = [
+      displayProviderLabel(actualProvider),
+      actualModel,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   } else if (executionStatus === 'running') {
     actualLabel = 'Running · not recorded yet';
   } else if (executionStatus === 'queued' || executionStatus === 'pending') {
@@ -94,5 +135,7 @@ export function modelSelectionView(
     actualModel,
     actualLabel,
     executed,
+    fallbackUsed,
+    fallbackReason: selection?.fallback_reason ?? null,
   };
 }

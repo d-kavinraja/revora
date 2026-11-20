@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
-import { api, Repository, ApiKey, ModelMetadata, RepoGithubStats } from '@/lib/api';
+import { api, Repository, ApiKey, ModelMetadata, RepoGithubStats, Provider } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon, CircleCheckIcon } from '@animateicons/react/lucide';
 import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, Power, GitFork, CircleDot, Users, Eye, ExternalLink } from 'lucide-react';
@@ -11,6 +11,7 @@ import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { providerDisplayName } from '@/components/ui/provider-brand';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 const LANG_COLORS: Record<string, string> = {
@@ -161,14 +162,16 @@ function ConfigModal({
   repo,
   availableModels,
   apiKeys,
+  managedProviders,
   onClose,
   onSave,
 }: {
   repo: Repository;
   availableModels: Record<string, ModelMetadata[]>;
   apiKeys: ApiKey[];
+  managedProviders: string[];
   onClose: () => void;
-  onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => Promise<void>;
+  onSave: (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean; fallback_enabled?: boolean }) => Promise<void>;
 }) {
   const providers = Object.keys(availableModels);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -183,6 +186,12 @@ function ConfigModal({
     const norm2 = (p2 || '').toLowerCase().replace('_nim', '');
     return norm1 === norm2;
   };
+
+  // Managed providers (kLLM) are server-owned: no user key exists, and the
+  // catalogue only contains models kLLM currently reports as ready.
+  const isManagedProvider =
+    selectedProvider === 'kllm' ||
+    managedProviders.some((p) => matchProvider(p, selectedProvider));
 
   const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
 
@@ -211,6 +220,9 @@ function ConfigModal({
   });
 
   const [reviewsEnabled, setReviewsEnabled] = useState(repo.reviews_enabled);
+  const [fallbackEnabled, setFallbackEnabled] = useState(
+    Boolean(repo.settings?.fallback_enabled ?? repo.fallback_enabled ?? false),
+  );
   const [saving, setSaving] = useState(false);
   const settingsRef = useRef<any>(null);
   const { toast } = useToast();
@@ -260,8 +272,10 @@ function ConfigModal({
       await onSave({
         assigned_provider: selectedProvider || undefined,
         assigned_model: selectedModel || undefined,
-        assigned_key_id: selectedKeyId || undefined,
+        // A managed provider is server-owned; never send a key id.
+        assigned_key_id: isManagedProvider ? undefined : (selectedKeyId || undefined),
         reviews_enabled: reviewsEnabled,
+        fallback_enabled: fallbackEnabled,
       });
       onClose(); // Only close on success
     } catch (err: any) {
@@ -338,7 +352,7 @@ function ConfigModal({
                   className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:border-brand/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {providers.map((p) => {
-                    const labelName = (p === 'nvidia' || p === 'nvidia_nim') ? 'NVIDIA NIM' : p.charAt(0).toUpperCase() + p.slice(1);
+                    const labelName = (p === 'nvidia' || p === 'nvidia_nim') ? 'NVIDIA NIM' : providerDisplayName(p);
                     return (
                       <option key={p} value={p}>{labelName}</option>
                     );
@@ -348,7 +362,13 @@ function ConfigModal({
             </div>
 
             {/* API Key Selector */}
-            {providerKeys.length > 0 ? (
+            {isManagedProvider ? (
+              <div className="p-3 rounded-lg bg-brand/10 border border-brand/20 text-xs text-foreground/80 leading-relaxed">
+                <strong className="text-foreground">Managed provider.</strong> Revora
+                runs this model on the local kLLM server. No API key is required
+                and none is stored for your account.
+              </div>
+            ) : providerKeys.length > 0 ? (
               <div>
                 <label htmlFor="key-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
                 <select
@@ -375,17 +395,21 @@ function ConfigModal({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
-                <div className="flex gap-2">
-                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
-                    <input type="checkbox" checked={showPreview} disabled={isReviewActive} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
-                    <input type="checkbox" checked={showDeprecated} disabled={isReviewActive} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
-                    <input type="checkbox" checked={showUnavailable} disabled={isReviewActive} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
-                  </label>
-                </div>
+                {isManagedProvider ? (
+                  <span className="text-[11px] text-muted-foreground">Loaded models only</span>
+                ) : (
+                  <div className="flex gap-2">
+                    <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
+                      <input type="checkbox" checked={showPreview} disabled={isReviewActive} onChange={(e) => setShowPreview(e.target.checked)} className="accent-brand rounded-sm" /> Preview
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
+                      <input type="checkbox" checked={showDeprecated} disabled={isReviewActive} onChange={(e) => setShowDeprecated(e.target.checked)} className="accent-brand rounded-sm" /> Deprecated
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer text-[11px] text-muted-foreground">
+                      <input type="checkbox" checked={showUnavailable} disabled={isReviewActive} onChange={(e) => setShowUnavailable(e.target.checked)} className="accent-brand rounded-sm" /> Unavailable
+                    </label>
+                  </div>
+                )}
               </div>
               <div className="relative flex items-center">
                 <div className="absolute left-3 pointer-events-none flex items-center justify-center">
@@ -416,6 +440,14 @@ function ConfigModal({
                   })}
                 </select>
               </div>
+
+              {isManagedProvider && models.length === 0 && (
+                <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500 leading-relaxed">
+                  No kLLM models are loaded right now. An administrator can load one
+                  from Settings &rarr; kLLM, then reopen this dialog. The existing
+                  mapping is kept until you change it.
+                </div>
+              )}
 
               {/* Dynamic Model Status Banner */}
               {selectedModel && (!isReviewActive) && (() => {
@@ -456,6 +488,28 @@ function ConfigModal({
                 className={`relative w-10 h-5 rounded-full transition-colors ${isReviewActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${reviewsEnabled ? 'bg-brand' : 'bg-muted'}`}
               >
                 <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${reviewsEnabled ? 'left-5.5 translate-x-0' : 'left-0.5'}`} />
+              </button>
+            </div>
+
+            {/* Fallback Toggle */}
+            <div className="flex items-start justify-between py-2 gap-3">
+              <div className="min-w-0">
+                <label id="fallback-label" className="text-sm font-medium text-foreground">Allow automatic fallback</label>
+                <p className="text-xs text-muted-foreground">
+                  When the mapped model is unavailable or fails, Revora may use your
+                  configured routing preferences to pick an eligible alternative.
+                  Disabling means the mapped model must be available for the review.
+                </p>
+              </div>
+              <button
+                role="switch"
+                disabled={isReviewActive}
+                aria-checked={fallbackEnabled}
+                aria-labelledby="fallback-label"
+                onClick={() => !isReviewActive && setFallbackEnabled(!fallbackEnabled)}
+                className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${isReviewActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${fallbackEnabled ? 'bg-brand' : 'bg-muted'}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${fallbackEnabled ? 'left-5.5 translate-x-0' : 'left-0.5'}`} />
               </button>
             </div>
 
@@ -756,6 +810,7 @@ export default function RepositoriesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [configRepo, setConfigRepo] = useState<Repository | null>(null);
   const [availableModels, setAvailableModels] = useState<Record<string, ModelMetadata[]>>({});
+  const [managedProviders, setManagedProviders] = useState<string[]>([]);
   
   const activeQuery = useQuery({
     queryKey: ['repositories', 'active'],
@@ -781,8 +836,16 @@ export default function RepositoriesPage() {
   const handleConfigure = async (repo: Repository) => {
     setConfiguringRepoId(repo.id);
     try {
-      const models = await api.getAvailableModels();
+      const [models, providers] = await Promise.all([
+        api.getAvailableModels(),
+        api.getProviders().catch(() => [] as Provider[]),
+      ]);
       setAvailableModels(models);
+      setManagedProviders(
+        providers
+          .filter((p) => p.is_managed)
+          .flatMap((p) => [p.name, p.slug].filter(Boolean)),
+      );
       setConfigRepo(repo);
     } catch (err: any) {
       toast({
@@ -795,7 +858,7 @@ export default function RepositoriesPage() {
     }
   };
 
-  const handleSaveConfig = async (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) => {
+  const handleSaveConfig = async (config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean; fallback_enabled?: boolean }) => {
     if (!configRepo) return;
     await api.updateRepositoryConfig(configRepo.id, config);
     queryClient.invalidateQueries({ queryKey: ['repositories'] });
@@ -1066,6 +1129,7 @@ export default function RepositoriesPage() {
           repo={configRepo}
           availableModels={availableModels}
           apiKeys={apiKeys}
+          managedProviders={managedProviders}
           onClose={() => setConfigRepo(null)}
           onSave={handleSaveConfig}
         />

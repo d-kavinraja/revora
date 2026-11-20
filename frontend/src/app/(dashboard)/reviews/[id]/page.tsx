@@ -377,6 +377,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             <span className={`text-sm font-semibold truncate ${selection.executed ? 'text-foreground' : 'text-muted-foreground'}`}>
               {selection.actualLabel}
             </span>
+            {selection.fallbackUsed && (
+              <span className="ml-2 inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+                Fallback used
+              </span>
+            )}
           </div>
         </div>
       </div>

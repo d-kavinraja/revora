@@ -70,6 +70,8 @@ class ReviewPipeline:
         token: str | None = None,
         api_key_id: str | None = None,
         config_source: str = CONFIG_SOURCE_ROUTING,
+        fallback_routes: list | None = None,
+        cancel_check=None,
     ) -> dict:
         """Execute the full review pipeline.
 
@@ -88,6 +90,11 @@ class ReviewPipeline:
             model: Optional model override.
             clone_url: Optional clone URL for the repository.
             token: Optional GitHub token for cloning.
+            fallback_routes: Optional ranked alternatives from ModelRouter,
+                used only when the repository opted into fallback. The saved
+                repository mapping is never changed.
+            cancel_check: Optional async callable returning True when the review
+                has been cancelled; checked before each LLM attempt.
 
         Returns:
             Dict with status and metrics.
@@ -254,9 +261,17 @@ class ReviewPipeline:
                     metrics={"model": model, "provider": provider},
                 )
 
-            # Stage 8: LLM call — immutable execution context
+            # Stage 8: LLM call — primary first, then eligible fallbacks
             llm_response = await self._stage_llm(
-                emitter, prompt, user_id, provider, model, api_key_id, config_source
+                emitter,
+                prompt,
+                user_id,
+                provider,
+                model,
+                api_key_id,
+                config_source,
+                fallback_routes=fallback_routes,
+                cancel_check=cancel_check,
             )
             metrics.update(
                 {
@@ -292,6 +307,7 @@ class ReviewPipeline:
                 llm_response,
                 start,
                 review_id=review_id,
+                cancel_check=cancel_check,
             )
 
             # Save to DB
@@ -653,8 +669,10 @@ class ReviewPipeline:
         model,
         api_key_id=None,
         config_source="user_routing",
+        fallback_routes=None,
+        cancel_check=None,
     ):
-        """Stage: LLM call — uses exactly the configured provider/model/key."""
+        """Stage: LLM call — primary first, then repository-approved fallbacks."""
         await emitter.emit("sending_request_to_llm", "running", EventType.STAGE_START)
 
         try:
@@ -666,6 +684,8 @@ class ReviewPipeline:
                 preferred_model=model,
                 api_key_id=api_key_id,
                 callback=emitter.emit,
+                fallback_routes=fallback_routes,
+                cancel_check=cancel_check,
             )
             await emitter.emit(
                 "receiving_ai_response",
@@ -833,6 +853,7 @@ class ReviewPipeline:
         llm_response,
         start,
         review_id=None,
+        cancel_check=None,
     ):
         """Stage: Generate and publish review.
 
@@ -878,10 +899,26 @@ class ReviewPipeline:
         ]
 
         # Publish to GitHub
+        # Cancellation checkpoint before publishing begins.
+        if cancel_check is not None:
+            try:
+                if await cancel_check():
+                    await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before publishing")
+                    return None
+            except Exception:
+                pass
         await emitter.emit("publishing_review", "running", EventType.STAGE_START)
         try:
             # 1. Upsert the single top-level summary comment (create-or-update).
             #    Editing a stored comment ID prevents duplicate Revora comments.
+            # Cancellation checkpoint before summary comment upsert.
+            if cancel_check is not None:
+                try:
+                    if await cancel_check():
+                        await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before summary comment")
+                        return None
+                except Exception:
+                    pass
             await self._upsert_summary_comment(
                 installation_id=installation_id,
                 owner=owner,
@@ -902,6 +939,9 @@ class ReviewPipeline:
             publish_ok = True
             publish_error = ""
             try:
+                if cancel_check is not None and await cancel_check():
+                    await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before PR review")
+                    return None
                 await self._publish_or_update_pr_review(
                     installation_id=installation_id,
                     owner=owner,
@@ -1110,6 +1150,41 @@ class ReviewPipeline:
                             )
                         input_tok = llm_response.input_tokens or 0
                         output_tok = llm_response.output_tokens or 0
+                        fallback_used = bool(getattr(llm_response, "is_fallback", False))
+
+                        # Record inference-time fallback on the execution snapshot
+                        # so the UI can distinguish a primary run from a fallback
+                        # run without inventing a new status.
+                        try:
+                            from app.services.review_execution_service import (
+                                get_latest_execution,
+                            )
+                            from app.services.review_selection import (
+                                SELECTION_SNAPSHOT_KEY,
+                            )
+
+                            execution = await get_latest_execution(db, review_id)
+                            if execution is not None and fallback_used:
+                                snapshot = dict(execution.configuration_snapshot or {})
+                                selection = dict(
+                                    snapshot.get(SELECTION_SNAPSHOT_KEY) or {}
+                                )
+                                selection["fallback_used"] = True
+                                selection["fallback_provider"] = selection.get(
+                                    "selected_provider"
+                                )
+                                selection["fallback_model"] = selection.get(
+                                    "selected_model"
+                                )
+                                selection["fallback_reason"] = "primary_inference_failed"
+                                snapshot[SELECTION_SNAPSHOT_KEY] = selection
+                                execution.configuration_snapshot = snapshot
+                                db.add(execution)
+                        except Exception as snap_e:
+                            logger.warning(
+                                f"Failed to record fallback metadata for review {review_id}: {snap_e}"
+                            )
+
                         await mark_execution_final(
                             db,
                             review_id,
@@ -1126,6 +1201,10 @@ class ReviewPipeline:
                             stats={
                                 "provider": llm_response.provider,
                                 "model": llm_response.model,
+                                "fallback_used": fallback_used,
+                                "fallback_reason": (
+                                    "primary_inference_failed" if fallback_used else None
+                                ),
                                 "verified_findings": verified.verified_count,
                                 "rejected_findings": verified.rejected_count,
                                 **metrics,

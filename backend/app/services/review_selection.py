@@ -11,6 +11,7 @@ JSON column, so no schema migration is required.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,7 +31,12 @@ from app.services.provider_registry import (
     provider_registry_service,
 )
 
+logger = logging.getLogger(__name__)
+
 SELECTION_SNAPSHOT_KEY = "selection"
+
+#: Repository setting that opts a mapped primary into automatic fallback.
+FALLBACK_ENABLED_KEY = "fallback_enabled"
 
 _API_SOURCE = {
     CONFIG_SOURCE_REPO: "repository_mapping",
@@ -56,10 +62,46 @@ class ResolvedSelection:
     resolved_at: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat()
     )
+    #: True when the mapped primary was unavailable and an alternative was
+    #: selected from the existing routing candidate list.
+    fallback_used: bool = False
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_reason: str | None = None
 
     @property
     def is_resolved(self) -> bool:
         return bool(self.provider and self.model)
+
+
+async def _select_fallback_route(
+    db: AsyncSession,
+    user_id: str,
+    repo_provider: str,
+    repo_model: str,
+):
+    """Pick the next eligible route from the existing ModelRouter.
+
+    Reuses ``ModelRouter.route`` (provider availability, key validity, managed
+    readiness, feature requirements, admin overrides) and only excludes the
+    failed primary pair. Returns ``None`` when no alternative is eligible.
+    """
+    try:
+        from app.services.model_router import model_router
+
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (ValueError, TypeError):
+            user_uuid = user_id
+        return await model_router.route_excluding(
+            db,
+            user_uuid,
+            "code_review",
+            exclude={(repo_provider, repo_model)},
+        )
+    except Exception as exc:  # noqa: BLE001 - never fail resolution on fallback
+        logger.warning("Fallback route selection failed: %s", type(exc).__name__)
+        return None
 
 
 async def resolve_selection(
@@ -73,6 +115,10 @@ async def resolve_selection(
     snapshot/canonicalisation layer is new. A blocked provider does not raise
     here: the selection records ``error`` so the review can be shown as a
     configuration failure instead of silently falling back to another model.
+
+    When the repository has ``fallback_enabled`` and the mapped primary is
+    unavailable, the existing :class:`ModelRouter` candidate list is consulted
+    for an eligible alternative. The saved primary mapping is never changed.
     """
     from app.github.shared import resolve_provider_config
 
@@ -80,18 +126,47 @@ async def resolve_selection(
     repo_provider = repo_settings.get("assigned_provider")
     repo_model = repo_settings.get("assigned_model")
     mapping_status = "mapped" if repo_provider and repo_model else "not_mapped"
+    fallback_enabled = bool(repo_settings.get(FALLBACK_ENABLED_KEY, False))
 
+    provider: str | None = None
+    model: str | None = None
+    api_key_id: str | None = None
+    source = CONFIG_SOURCE_NONE
     error: str | None = None
+    fallback_used = False
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    fallback_reason: str | None = None
+
     try:
         provider, model, api_key_id, source = await resolve_provider_config(
             db, user_id, db_repo
         )
     except ProviderUnavailableError as exc:
-        provider = None
-        model = None
-        api_key_id = None
-        source = CONFIG_SOURCE_NONE
         error = exc.message
+        # Repository-level fallback: only when a mapped primary exists and the
+        # repository explicitly opted in. Never substitute when disabled.
+        if mapping_status == "mapped" and fallback_enabled:
+            route = await _select_fallback_route(
+                db, user_id, repo_provider or "", repo_model or ""
+            )
+            if route is not None:
+                provider = route.provider
+                model = route.model
+                api_key_id = route.api_key_id
+                source = CONFIG_SOURCE_ROUTING
+                error = None
+                fallback_used = True
+                fallback_provider = repo_provider
+                fallback_model = repo_model
+                fallback_reason = "primary_unavailable"
+                logger.info(
+                    "Repository fallback: %s/%s unavailable; using %s/%s",
+                    repo_provider,
+                    repo_model,
+                    provider,
+                    model,
+                )
 
     provider_slug = None
     provider_name = None
@@ -115,7 +190,35 @@ async def resolve_selection(
         repository_provider=repo_provider,
         repository_model=repo_model,
         error=error,
+        fallback_used=fallback_used,
+        fallback_provider=fallback_provider,
+        fallback_model=fallback_model,
+        fallback_reason=fallback_reason,
     )
+
+
+async def validate_selection(
+    db: AsyncSession, selection: ResolvedSelection
+) -> None:
+    """Re-check a resolved selection before execution.
+
+    Raises :class:`ProviderUnavailableError` when the provider is blocked or a
+    managed (kLLM) model is no longer ready. Callers may then re-resolve with
+    the repository's fallback preference applied.
+    """
+    if not selection.is_resolved:
+        return
+    await provider_registry_service.ensure_usable(db, selection.provider or "")
+    row = await provider_registry_service.get_by_identifier(
+        db, selection.provider or ""
+    )
+    if row is not None and row.is_managed:
+        from app.services.kllm_service import KllmError, ensure_model_ready
+
+        try:
+            await ensure_model_ready(db, selection.model or "")
+        except KllmError as exc:
+            raise ProviderUnavailableError(selection.provider or "", exc.message) from exc
 
 
 def selection_snapshot(selection: ResolvedSelection) -> dict[str, Any]:
@@ -132,6 +235,10 @@ def selection_snapshot(selection: ResolvedSelection) -> dict[str, Any]:
         "selected_api_key_id": selection.api_key_id,
         "error": selection.error,
         "resolved_at": selection.resolved_at,
+        "fallback_used": selection.fallback_used,
+        "fallback_provider": selection.fallback_provider,
+        "fallback_model": selection.fallback_model,
+        "fallback_reason": selection.fallback_reason,
     }
 
 
@@ -178,6 +285,10 @@ def selection_from_snapshot(
         error=snapshot.get("error"),
         resolved_at=snapshot.get("resolved_at")
         or datetime.now(UTC).isoformat(),
+        fallback_used=bool(snapshot.get("fallback_used")),
+        fallback_provider=snapshot.get("fallback_provider"),
+        fallback_model=snapshot.get("fallback_model"),
+        fallback_reason=snapshot.get("fallback_reason"),
     )
 
 
@@ -211,6 +322,19 @@ def _api_source(source: str | None) -> str:
     if source in _API_SOURCE:
         return _API_SOURCE[source]
     return "unknown"
+
+
+def _normalize_provider_name(
+    slug: str | None, name: str | None
+) -> str | None:
+    """Standardize visible provider labels: the managed kLLM provider is
+    always displayed as ``kLLM`` (no parenthetical suffixes), while the
+    underlying slug/key stays ``kllm``."""
+    s = (slug or "").strip().lower()
+    n = (name or "").strip()
+    if s == "kllm" or n.lower().startswith("kllm"):
+        return "kLLM"
+    return name
 
 
 def selection_api_fields(execution: ReviewExecution | None) -> dict[str, Any]:
@@ -277,6 +401,16 @@ def selection_api_fields_from_values(
         actual_provider = provider
         actual_model = model
 
+    # Fallback metadata: resolution-time fallback lives in the snapshot;
+    # inference-time fallback is recorded in stats by the pipeline.
+    fallback_used = bool(snapshot.get("fallback_used")) if snapshot else False
+    if stats.get("fallback_used"):
+        fallback_used = True
+    fallback_reason = (
+        (snapshot.get("fallback_reason") if snapshot else None)
+        or stats.get("fallback_reason")
+    )
+
     return {
         "repository_mapping_status": mapping_status,
         "repository_provider": repository_provider,
@@ -284,10 +418,16 @@ def selection_api_fields_from_values(
         "selection_source": source,
         "selected_provider": selected_provider,
         "selected_provider_slug": selected_provider_slug,
-        "selected_provider_name": selected_provider_name,
+        "selected_provider_name": _normalize_provider_name(
+            selected_provider_slug or selected_provider, selected_provider_name
+        ),
         "selected_model": selected_model,
-        "actual_execution_provider": actual_provider,
+        "actual_execution_provider": _normalize_provider_name(
+            actual_provider, actual_provider
+        ),
         "actual_execution_model": actual_model,
         "execution_status": status,
         "execution_started": execution_started,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
     }

@@ -252,42 +252,28 @@ async def process_job(job_row) -> bool:
             mark_execution_running,
         )
         from app.services.review_selection import (
-            ResolvedSelection,
             apply_selection_to_execution,
             read_selection_snapshot,
             resolve_selection,
             selection_from_snapshot,
+            validate_selection,
         )
-        from app.services.provider_registry import (
-            ProviderUnavailableError,
-            provider_registry_service,
-        )
+        from app.services.provider_registry import ProviderUnavailableError
 
+        fallback_routes = None
         async with AsyncSessionLocal() as db:
             current_execution = await get_latest_execution(db, db_review.id)
             snapshot = read_selection_snapshot(current_execution)
             if snapshot and current_execution is not None:
-                selection = selection_from_snapshot(current_execution, snapshot)
+                selection = await resolve_selection(db, user_id, db_repo)
                 if selection.is_resolved:
                     try:
-                        await provider_registry_service.ensure_usable(
-                            db, selection.provider
-                        )
-                    except ProviderUnavailableError as exc:
-                        selection = ResolvedSelection(
-                            provider=None,
-                            provider_slug=None,
-                            provider_name=None,
-                            model=None,
-                            api_key_id=None,
-                            source=selection.source,
-                            repository_mapping_status=(
-                                selection.repository_mapping_status
-                            ),
-                            repository_provider=selection.repository_provider,
-                            repository_model=selection.repository_model,
-                            error=exc.message,
-                        )
+                        await validate_selection(db, selection)
+                    except ProviderUnavailableError:
+                        # The saved primary became unavailable after enqueue.
+                        # Re-resolve primary-first; the repository's fallback
+                        # preference is applied inside resolve_selection.
+                        selection = await resolve_selection(db, user_id, db_repo)
                         apply_selection_to_execution(current_execution, selection)
                         db.add(current_execution)
                 if not selection.is_resolved:
@@ -299,6 +285,36 @@ async def process_job(job_row) -> bool:
                 if current_execution is not None:
                     apply_selection_to_execution(current_execution, selection)
                     db.add(current_execution)
+
+            # Repository fallback: when the repository opted in, prepare the
+            # existing ModelRouter's ranked alternatives (excluding the primary)
+            # for inference-time fallback. MODE 2 (no repo mapping) keeps its
+            # historical same-provider retry behavior.
+            if selection.is_resolved and db_repo is not None:
+                repo_settings = dict(db_repo.settings or {})
+                if repo_settings.get("fallback_enabled"):
+                    try:
+                        from app.orchestrator.models import FallbackRoute
+                        from app.services.model_router import model_router
+
+                        routes = await model_router.route(
+                            db, uuid.UUID(str(user_id)), "code_review"
+                        )
+                        fallback_routes = [
+                            FallbackRoute(
+                                provider=r.provider,
+                                model=r.model,
+                                api_key_id=r.api_key_id,
+                            )
+                            for r in routes
+                            if (r.provider, r.model)
+                            != (selection.provider, selection.model)
+                        ][:2]
+                    except Exception as route_e:
+                        logger.warning(
+                            f"Fallback route discovery failed for review {db_review.id}: {route_e}"
+                        )
+                        fallback_routes = None
             await db.commit()
 
         provider = selection.provider
@@ -395,6 +411,30 @@ async def process_job(job_row) -> bool:
         }.get(config_source, "UNKNOWN")
         logger.info(f"Execution mode: {mode_label} — {provider}/{model}")
 
+        # Explicit cancellation check used before each LLM/fallback attempt so a
+        # cancelled review can never start another inference. The worker task
+        # watcher remains the primary cancellation mechanism.
+        async def _is_cancelled() -> bool:
+            try:
+                async with AsyncSessionLocal() as _cdb:
+                    from app.models.review import Review
+
+                    _res = await _cdb.execute(
+                        select(Review).where(Review.id == db_review.id)
+                    )
+                    _review = _res.scalars().first()
+                    if _review is not None and _review.status == "cancelled":
+                        return True
+                    _jres = await _cdb.execute(
+                        select(ReviewJob).where(ReviewJob.id == job_id)
+                    )
+                    _job = _jres.scalars().first()
+                    if _job is not None and _job.status == JobStatus.CANCELLED:
+                        return True
+            except Exception:
+                pass
+            return False
+
         # Execute the full pipeline with immutable execution context
         result = await review_pipeline.execute(
             review_id=db_review.id,
@@ -413,6 +453,8 @@ async def process_job(job_row) -> bool:
             token=token,
             api_key_id=api_key_id,
             config_source=config_source,
+            fallback_routes=fallback_routes,
+            cancel_check=_is_cancelled,
         )
 
         return result.get("status") == "success"

@@ -270,6 +270,8 @@ export interface ReviewSelection {
   actual_execution_model: string | null;
   execution_status: string | null;
   execution_started: boolean;
+  fallback_used?: boolean;
+  fallback_reason?: string | null;
 }
 
 export interface Review extends ReviewSelection {
@@ -359,7 +361,9 @@ export interface Repository {
     assigned_provider?: string;
     assigned_model?: string;
     assigned_key_id?: string;
+    fallback_enabled?: boolean;
   };
+  fallback_enabled?: boolean;
 }
 
 export interface SyncRun {
@@ -469,8 +473,140 @@ export interface Provider {
   status_message: string | null;
   status_expires_at: string | null;
   allow_key_addition: boolean;
+  /** Server-owned provider (kLLM): no user key, no key UI. */
+  is_managed?: boolean;
   created_at: string | null;
   updated_at: string | null;
+}
+
+// Managed local kLLM provider (server-owned; the frontend never calls kLLM).
+export interface KllmModel {
+  key: string;
+  status: 'loaded' | 'loading' | 'unloaded' | 'failed' | string;
+  loaded: boolean;
+  ready: boolean;
+  context_window: number | null;
+  vision: boolean;
+  tags: string[];
+  backend_count: number;
+}
+
+export interface KllmBackend {
+  id: string;
+  model: string | null;
+  healthy: boolean;
+  state: 'running' | 'draining' | 'retiring' | 'unhealthy' | string;
+  up_s: number | null;
+  left_s: number | null;
+  draining: boolean;
+  replaced_by: string | null;
+  sessions: number | null;
+  inflight: number | null;
+  idle_s: number | null;
+  errors_5m: number;
+  pinned: boolean;
+  rpm: number | null;
+  quota_used_h: number | null;
+  quota_limit_h: number | null;
+  gpu: {
+    count: number;
+    used_mib: number | null;
+    total_mib: number | null;
+    util: number | null;
+    age_s: number | null;
+    status: string | null;
+  } | null;
+}
+
+export interface KllmPending {
+  id: string;
+  model: string | null;
+  phase: string;
+  failed: boolean;
+  age_s: number | null;
+}
+
+export interface KllmSummary {
+  backends: number;
+  healthy_backends: number;
+  running_backends: number;
+  draining_backends: number;
+  pinned_backends: number;
+  sessions: number;
+  inflight: number;
+  loaded_models: number;
+  ready_models: number;
+  loading_models: number;
+  failed_models: number;
+  pending_backends: number;
+}
+
+export interface KllmStatus {
+  enabled: boolean;
+  configured: boolean;
+  reachable: boolean;
+  stale: boolean;
+  generated_at: string;
+  age_seconds: number;
+  error: string | null;
+  relay_health: { ok: boolean; inflight: number };
+  summary: KllmSummary;
+  models: KllmModel[];
+  backends: KllmBackend[];
+  pending: KllmPending[];
+  clients: Array<{ kind: string; sessions: number; rpm: number | null }>;
+  traffic: { rpm: number | null; ttft_p50: number | null };
+  supervisor: boolean;
+  autoscale: boolean;
+  can_manage: boolean;
+}
+
+export interface KllmTelemetry {
+  available: boolean;
+  stale: boolean;
+  generated_at: string;
+  age_seconds: number;
+  error: string | null;
+  reason: string | null;
+  gpus: Array<{
+    index: number | null;
+    used_mib: number | null;
+    total_mib: number | null;
+    util: number | null;
+    temp: number | null;
+  }>;
+  backends: Array<{
+    id: string;
+    model: string | null;
+    gpu_used_mib: number | null;
+    gpu_total_mib: number | null;
+    gpu_util: number | null;
+    sessions: number;
+    inflight: number;
+    rpm: number | null;
+  }>;
+  totals: {
+    gpu_used_mib: number;
+    gpu_total_mib: number;
+    gpu_util: number | null;
+    backends: number;
+    sessions: number;
+    inflight: number;
+    rpm: number;
+  };
+}
+
+export interface KllmActivityItem {
+  id: string;
+  status: string;
+  model: string | null;
+  repository_full_name: string | null;
+  pr_number: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  total_tokens: number | null;
+  has_error: boolean;
 }
 
 export interface DiscoveredModel {
@@ -746,7 +882,7 @@ export const api = {
       // keep a generous cap so a stuck request can't spin forever.
       { timeout: 90_000 },
     ).then((r) => r.data),
-  updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean }) =>
+  updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean; fallback_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
   getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
 
@@ -783,6 +919,47 @@ export const api = {
     apiClient.post<DiscoveredModel[]>(`/providers/${slug}/sync-models`).then((r) => r.data),
   getProviderModels: (slug: string) =>
     apiClient.get<DiscoveredModel[]>(`/providers/${slug}/models`).then((r) => r.data),
+
+  // Managed local kLLM (server-owned; proxied through the Revora backend)
+  getKllmStatus: (refresh = false, signal?: AbortSignal) =>
+    apiClient
+      .get<KllmStatus>('/kllm/status', {
+        params: refresh ? { refresh: true } : undefined,
+        signal,
+      })
+      .then((r) => r.data),
+  getKllmReadyModels: () =>
+    apiClient.get<KllmModel[]>('/kllm/models').then((r) => r.data),
+  getKllmTelemetry: (signal?: AbortSignal) =>
+    apiClient.get<KllmTelemetry>('/kllm/telemetry', { signal }).then((r) => r.data),
+  getKllmActivity: (limit = 20, signal?: AbortSignal) =>
+    apiClient
+      .get<{ enabled: boolean; items: KllmActivityItem[] }>('/kllm/activity', {
+        params: { limit },
+        signal,
+      })
+      .then((r) => r.data),
+  kllmRefresh: () => apiClient.post<KllmStatus>('/kllm/admin/refresh').then((r) => r.data),
+  kllmLoadModel: (model: string, confirm: boolean) =>
+    apiClient
+      .post<{ status: string; model?: string }>('/kllm/admin/models/load', { model, confirm })
+      .then((r) => r.data),
+  kllmStopBackend: (id: string, confirm: boolean) =>
+    apiClient
+      .post<{ status: string; models_affected?: string[] }>(`/kllm/admin/backends/${id}/stop`, { confirm })
+      .then((r) => r.data),
+  kllmRotateBackend: (id: string, confirm: boolean) =>
+    apiClient
+      .post<{ status: string; model?: string }>(`/kllm/admin/backends/${id}/rotate`, { confirm })
+      .then((r) => r.data),
+  kllmPinBackend: (id: string, pinned: boolean) =>
+    apiClient
+      .post<{ status: string }>(`/kllm/admin/backends/${id}/pin`, { pinned })
+      .then((r) => r.data),
+  kllmSetKeep: (size: number, confirm: boolean) =>
+    apiClient
+      .post<{ status: string; size?: number }>('/kllm/admin/keep', { size, confirm })
+      .then((r) => r.data),
 
   // Usage
   getUsageSummary: (period = 'month', filters?: UsageFilters) =>
@@ -1403,6 +1580,8 @@ export interface AdminReviewItem {
   actual_execution_model: string | null;
   execution_status: string | null;
   execution_started: boolean;
+  fallback_used?: boolean;
+  fallback_reason?: string | null;
   duration_ms: number | null;
   error: string | null;
 }

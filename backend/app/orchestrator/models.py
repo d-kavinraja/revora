@@ -45,6 +45,18 @@ class ProviderConfig:
 
 
 @dataclass
+class FallbackRoute:
+    """An eligible alternative provider/model for repository fallback.
+
+    Selected from the existing ModelRouter candidate list; never invented.
+    """
+
+    provider: str
+    model: str
+    api_key_id: str | None = None
+
+
+@dataclass
 class UsageStats:
     provider: str
     model: str
