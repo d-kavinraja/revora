@@ -72,6 +72,32 @@ class Settings(BaseSettings):
         description="Allow HTTP for self-hosted providers like Ollama. Set to true only for local development.",
     )
 
+    # kLLM managed local inference (server-owned provider).
+    # Disabled by default: every routing, mapping, execution and dashboard
+    # path stays gated until an operator opts in. The seeded `kllm` provider
+    # row is also disabled, so enabling requires BOTH this flag and an admin
+    # enabling the provider (never a half-enabled state).
+    KLLM_ENABLED: bool = Field(
+        default=False,
+        description="Enable the managed local kLLM provider and dashboard",
+    )
+    KLLM_SERVER_URL: str = Field(
+        default="http://127.0.0.1:8080",
+        description="Server-side base URL of the kLLM relay (never sent to clients)",
+    )
+    # Optional server-side gateway key for non-loopback kLLM deployments.
+    # Local (127.0.0.1) requests need no key. Never exposed by the API.
+    KLLM_GATEWAY_API_KEY: str | None = Field(
+        default=None,
+        description="Optional server-side kLLM gateway key (never exposed)",
+    )
+    KLLM_STATE_TIMEOUT_S: float = Field(
+        default=8.0, ge=1.0, description="Timeout for kLLM state/backends reads"
+    )
+    KLLM_TELEMETRY_TIMEOUT_S: float = Field(
+        default=5.0, ge=1.0, description="Timeout for kLLM telemetry reads"
+    )
+
     # Redis (optional)
     REDIS_URL: str | None = Field(
         default=None, description="Redis connection string for caching and queues"

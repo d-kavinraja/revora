@@ -423,6 +423,7 @@ class AdminProviderRead(BaseModel):
     status_message: str | None
     status_expires_at: datetime | None
     allow_key_addition: bool
+    is_managed: bool = False
     supports_streaming: bool
     supports_vision: bool
     supports_function_calling: bool

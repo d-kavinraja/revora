@@ -13,6 +13,7 @@ import uuid
 from litellm import acompletion
 
 from app.ai.model_registry import canonical_registry
+from app.core.config import settings
 from app.core.constants import LLM_DEFAULT_TIMEOUT
 from app.db.session import AsyncSessionLocal
 from app.services.api_key_service import api_key_service
@@ -52,24 +53,35 @@ class LLMService:
         if not model:
             raise ValueError(f"Model must be specified for provider '{provider}'")
 
-        api_key = await self._resolve_api_key(user_id, provider, api_key_id)
-        if not api_key:
-            raise ValueError(
-                f"No valid API key found for provider '{provider}'. "
-                f"Please add an API key in Settings > API Keys."
-            )
+        managed = await self._is_managed(provider)
+        if managed:
+            # Server-owned provider: no user key, and readiness is validated
+            # against live kLLM state immediately before the call.
+            await self._ensure_managed_ready(model)
+            api_key = settings.KLLM_GATEWAY_API_KEY or "sk-kllm-local"
+        else:
+            api_key = await self._resolve_api_key(user_id, provider, api_key_id)
+            if not api_key:
+                raise ValueError(
+                    f"No valid API key found for provider '{provider}'. "
+                    f"Please add an API key in Settings > API Keys."
+                )
 
         model_to_use, _ = self._resolve_model(provider, model)
 
         display_model = model
         if model_to_use.startswith("nvidia_nim/"):
             display_model = model_to_use[len("nvidia_nim/") :]
-        elif model_to_use.startswith("openai/") and provider == "ollama_cloud":
+        elif model_to_use.startswith("openai/") and (
+            provider == "ollama_cloud" or managed
+        ):
             display_model = model_to_use[len("openai/") :]
 
         # Determine custom base URL for cloud providers
         api_base = None
-        if provider == "ollama_cloud":
+        if managed:
+            api_base = f"{settings.KLLM_SERVER_URL.rstrip('/')}/v1"
+        elif provider == "ollama_cloud":
             api_base = "https://ollama.com/v1"
 
         try:
@@ -80,7 +92,7 @@ class LLMService:
                 messages=messages,
                 api_key=api_key,
                 api_base=api_base,
-                num_retries=2,
+                num_retries=1 if managed else 2,
                 timeout=None,  # Disable LiteLLM's internal timeout
             )
 
@@ -114,6 +126,43 @@ class LLMService:
             )
         except Exception as e:
             error_str = str(e).lower()
+            if managed:
+                # Never surface raw kLLM payloads, account names or URLs.
+                if "401" in error_str or "403" in error_str or "unauthorized" in error_str:
+                    raise RuntimeError(
+                        "kLLM rejected the server credentials. "
+                        "Check KLLM_GATEWAY_API_KEY in the backend environment."
+                    ) from e
+                if "404" in error_str or "not found" in error_str:
+                    raise RuntimeError(
+                        f"Model '{display_model}' was not found in kLLM. "
+                        "Refresh the dashboard and select a loaded model."
+                    ) from e
+                if (
+                    "overloaded" in error_str
+                    or "503" in error_str
+                    or "busy" in error_str
+                    or "capacity" in error_str
+                    or "429" in error_str
+                    or "rate" in error_str
+                ):
+                    raise RuntimeError(
+                        f"kLLM is busy or at capacity for '{display_model}'. "
+                        "Please try again in a moment."
+                    ) from e
+                if "timeout" in error_str or "timed out" in error_str:
+                    raise RuntimeError(
+                        f"kLLM timed out while serving '{display_model}'."
+                    ) from e
+                if "connection" in error_str or "connect" in error_str:
+                    raise RuntimeError(
+                        "Unable to connect to kLLM. Ensure the kLLM relay is "
+                        "running and KLLM_SERVER_URL is correct."
+                    ) from e
+                raise RuntimeError(
+                    f"kLLM error while serving '{display_model}'. "
+                    "Please try again later."
+                ) from e
             if (
                 "overloaded" in error_str
                 or "503" in error_str
@@ -168,6 +217,29 @@ class LLMService:
                 raise RuntimeError(
                     f"AI provider error for '{display_model}'. Please try again later."
                 ) from e
+
+    async def _is_managed(self, provider: str) -> bool:
+        """True for server-owned providers (kLLM), which never use user keys."""
+        try:
+            async with AsyncSessionLocal() as db:
+                from app.services.provider_registry import provider_registry_service
+
+                row = await provider_registry_service.get_by_identifier(db, provider)
+                if row is not None:
+                    return bool(row.is_managed)
+        except Exception as exc:  # noqa: BLE001 - fail safe, never leak details
+            logger.warning("Managed-provider lookup failed: %s", type(exc).__name__)
+        return provider.lower() == "kllm"
+
+    async def _ensure_managed_ready(self, model: str) -> None:
+        """Validate live kLLM readiness immediately before inference."""
+        from app.services.kllm_service import KllmError, ensure_model_ready
+
+        try:
+            async with AsyncSessionLocal() as db:
+                await ensure_model_ready(db, model)
+        except KllmError as exc:
+            raise RuntimeError(exc.message) from exc
 
     async def _resolve_api_key(
         self,
@@ -272,6 +344,11 @@ class LLMService:
         canonical_model = canonical_registry.resolve(provider, model)
         if canonical_model:
             return canonical_model.litellm_model_name, canonical_model
+
+        # kLLM is OpenAI-compatible (`/v1`), so LiteLLM uses the openai
+        # adapter with an explicit api_base.
+        if provider.lower() == "kllm":
+            return f"openai/{model.removeprefix('openai/')}", None
 
         if provider == "anthropic" and not model.startswith("anthropic/"):
             model = f"anthropic/{model}"

@@ -21,6 +21,7 @@ from app.orchestrator.models import (
 )
 from app.services.api_key_service import api_key_service
 from app.services.provider_registry import (
+    ProviderUnavailableError,
     provider_registry_service,
 )
 
@@ -56,6 +57,23 @@ async def resolve_provider_config(
         model = db_repo.settings.get("assigned_model")
         api_key_id = db_repo.settings.get("assigned_key_id")
         if provider and model:
+            # Server-owned provider (kLLM): no user key exists. Validate the
+            # live readiness snapshot at execution time and fail fast — never
+            # substitute another provider or clear the mapping.
+            provider_row = await provider_registry_service.get_by_identifier(
+                db_session, provider
+            )
+            if provider_row is not None and provider_row.is_managed:
+                from app.services.kllm_service import KllmError, ensure_model_ready
+
+                try:
+                    await ensure_model_ready(db_session, model)
+                except KllmError as exc:
+                    raise ProviderUnavailableError(provider, exc.message) from exc
+                config_source = CONFIG_SOURCE_REPO
+                logger.info(f"MODE 1 (managed repo config): {provider}/{model}")
+                return provider, model, None, config_source
+
             # Verify the referenced API key still exists before committing to MODE 1
             key_valid = False
             if api_key_id:
@@ -114,6 +132,23 @@ async def resolve_provider_config(
             if pref_provider and pref_model:
                 provider = pref_provider
                 model = pref_model
+                provider_row = await provider_registry_service.get_by_identifier(
+                    db_session, provider
+                )
+                if provider_row is not None and provider_row.is_managed:
+                    from app.services.kllm_service import (
+                        KllmError,
+                        ensure_model_ready,
+                    )
+
+                    try:
+                        await ensure_model_ready(db_session, model)
+                    except KllmError as exc:
+                        raise ProviderUnavailableError(provider, exc.message) from exc
+                    config_source = CONFIG_SOURCE_ROUTING
+                    logger.info(f"MODE 2 (managed routing): {provider}/{model}")
+                    return provider, model, None, config_source
+
                 user_keys = await api_key_service.get_all_usable_keys(
                     db_session, user_uuid
                 )
@@ -153,6 +188,26 @@ async def build_available_providers_for_user(
 
     available = []
     for provider in providers:
+        if provider.is_managed:
+            # Server-owned provider: usable without a user key, but only when
+            # at least one model is loaded and ready right now.
+            from app.core.config import settings
+
+            if not settings.KLLM_ENABLED:
+                continue
+            from app.services.kllm_service import get_ready_models
+
+            ready = await get_ready_models(db_session)
+            if not ready:
+                continue
+            ready_keys = {m.key for m in ready}
+            model = (
+                provider.default_model
+                if provider.default_model in ready_keys
+                else ready[0].key
+            )
+            available.append((provider.name, model, ""))
+            continue
         if provider.name in user_keys:
             key = user_keys[provider.name]
             available.append((provider.name, provider.default_model, str(key.id)))

@@ -88,7 +88,38 @@ async def get_models_per_provider(
             for provider_name, key in user_keys.items()
         )
     )
-    return dict(probe_results)
+    grouped = dict(probe_results)
+
+    # Managed providers (kLLM) expose only live, loaded/ready models and need
+    # no user key.
+    from app.core.config import settings as _settings
+
+    if _settings.KLLM_ENABLED:
+        from app.services import kllm_service
+
+        for provider in await provider_registry_service.get_usable(db):
+            if not provider.is_managed:
+                continue
+            if provider.name in user_keys:
+                continue
+            try:
+                models = await kllm_service.build_available_models(db)
+            except Exception:  # noqa: BLE001 - never leak kLLM details
+                grouped[provider.name] = []
+                continue
+            blocked = disabled_overrides.get(provider.name, set()) | (
+                disabled_overrides.get(provider.slug, set())
+            )
+            grouped[provider.name] = [
+                {
+                    "model": m["canonical_model_name"],
+                    "litellm_model": f"{provider.litellm_provider}/{m['canonical_model_name']}",
+                }
+                for m in models
+                if m["canonical_model_name"] not in blocked
+            ]
+
+    return grouped
 
 
 @router.get("/recommend/{feature}")
@@ -157,6 +188,23 @@ async def update_routing_preferences(
                     else f"Provider '{pref_provider}' is not available for new routing preferences."
                 )
                 raise HTTPException(status_code=400, detail=detail)
+
+            # Managed providers are only selectable while the requested model
+            # is loaded and ready in kLLM. Never substitute another model.
+            if provider_row is not None and provider_row.is_managed:
+                pref_model = feature_pref.get("model")
+                if pref_model:
+                    from app.services.kllm_service import (
+                        KllmError,
+                        ensure_model_ready,
+                    )
+
+                    try:
+                        await ensure_model_ready(db, pref_model)
+                    except KllmError as exc:
+                        raise HTTPException(
+                            status_code=400, detail=exc.message
+                        ) from exc
 
         # Update model_routing
         user.settings["model_routing"] = data.routing

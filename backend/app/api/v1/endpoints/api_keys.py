@@ -179,8 +179,10 @@ async def create_api_key(
     # A provider missing from the registry keeps its legacy behavior.
     _, provider_row = await provider_registry_service.usability(db, provider)
     if provider_row is not None:
+        # Managed providers are server-owned and never accept user keys.
         blocked = (
-            not provider_row.is_enabled
+            provider_row.is_managed
+            or not provider_row.is_enabled
             or provider_row.status in ("disabled", "unavailable", "coming_soon")
             or not provider_row.allow_key_addition
         )

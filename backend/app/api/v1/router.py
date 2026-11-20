@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     cost,
     dashboard,
     health,
+    kllm,
     llm,
     models,
     mouthmap,
@@ -57,6 +58,7 @@ api_router.include_router(
     analytics.router, prefix="/platform-analytics", tags=["analytics"]
 )
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
+api_router.include_router(kllm.router, prefix="/kllm", tags=["kllm"])
 api_router.include_router(mouthmap.router, prefix="/mouthmap", tags=["mouthmap"])
 api_router.include_router(botaniq.router, prefix="/botaniq", tags=["botaniq"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])

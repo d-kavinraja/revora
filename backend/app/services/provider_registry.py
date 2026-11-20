@@ -49,6 +49,21 @@ class ProviderRegistryService:
         )
         return list(result.scalars().all())
 
+    async def get_managed(self, db: AsyncSession) -> list[ProviderRegistry]:
+        """Server-owned providers (kLLM). They never accept user API keys."""
+        result = await db.execute(
+            select(ProviderRegistry)
+            .where(ProviderRegistry.is_managed == True)
+            .order_by(ProviderRegistry.priority)
+        )
+        return list(result.scalars().all())
+
+    async def is_managed_identifier(
+        self, db: AsyncSession, identifier: str
+    ) -> bool:
+        provider = await self.get_by_identifier(db, identifier)
+        return bool(provider and provider.is_managed)
+
     async def get_by_slug(self, db: AsyncSession, slug: str) -> ProviderRegistry | None:
         result = await db.execute(
             select(ProviderRegistry).where(ProviderRegistry.slug == slug)

@@ -50,3 +50,10 @@ class ProviderRegistry(Base):
     allow_key_addition: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+
+    # Server-owned provider (kLLM). Managed providers never accept user API
+    # keys: routing/execution resolves credentials and the base URL on the
+    # server, and the key UI is hidden for them.
+    is_managed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )

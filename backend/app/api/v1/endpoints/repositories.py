@@ -835,6 +835,7 @@ class RepoConfigUpdate(BaseModel):
     assigned_model: str | None = None
     assigned_key_id: str | None = None
     reviews_enabled: bool | None = None
+    fallback_enabled: bool | None = None
 
 
 # PROVIDER_MODELS is now dynamically queried via ModelDiscoveryEngine.
@@ -935,6 +936,33 @@ async def get_available_models(
         provider: models for provider, models in probe_results if models is not None
     }
 
+    # Managed providers (kLLM) have no user key: their catalogue comes from the
+    # server-side readiness snapshot, so only loaded/ready models are offered.
+    from app.core.config import settings as _settings
+
+    if _settings.KLLM_ENABLED:
+        from app.services import kllm_service
+
+        for provider in await provider_registry_service.get_usable(db):
+            if not provider.is_managed:
+                continue
+            try:
+                managed_models = await kllm_service.build_available_models(db)
+            except Exception as exc:  # noqa: BLE001 - never leak kLLM details
+                logger.warning(
+                    "kLLM catalogue unavailable: %s", type(exc).__name__
+                )
+                continue
+            blocked = disabled_overrides.get(provider.name, set()) | (
+                disabled_overrides.get(provider.slug, set())
+            )
+            for model in managed_models:
+                model["admin_disabled"] = model["model_name"] in blocked
+            if managed_models:
+                available[provider.name] = sorted(
+                    managed_models, key=lambda x: x["model_name"]
+                )
+
     return available
 
 
@@ -990,6 +1018,7 @@ async def update_repository_config(
     # Phase 4: blocked providers cannot be mapped (additive — zero-state
     # flows unchanged); checked before model discovery so no provider API
     # call is made for a disabled provider.
+    provider_row = None
     if config.assigned_provider is not None:
         usable, provider_row = await provider_registry_service.usability(
             db, config.assigned_provider
@@ -1001,9 +1030,30 @@ async def update_repository_config(
                 else f"Provider '{config.assigned_provider}' is not available for new mappings."
             )
             raise HTTPException(status_code=400, detail=detail)
+    else:
+        # Partial update (model only): resolve the currently mapped provider so
+        # a managed mapping is validated the same way.
+        current_provider = (repo.settings or {}).get("assigned_provider")
+        if current_provider:
+            _, provider_row = await provider_registry_service.usability(
+                db, current_provider
+            )
+
+    is_managed = bool(provider_row is not None and provider_row.is_managed)
+
+    if is_managed:
+        # Managed providers never use a user key. Validate against live kLLM
+        # readiness at save time and never substitute another model.
+        if config.assigned_model is not None:
+            from app.services.kllm_service import KllmError, ensure_model_ready
+
+            try:
+                await ensure_model_ready(db, config.assigned_model)
+            except KllmError as exc:
+                raise HTTPException(status_code=400, detail=exc.message) from exc
 
     # Validate model if assigned_model and assigned_key_id are provided
-    if config.assigned_provider and config.assigned_model and config.assigned_key_id:
+    elif config.assigned_provider and config.assigned_model and config.assigned_key_id:
         from app.ai.discovery.engine import discovery_engine
         from app.core.security import encryption_service
         from app.services.model_discovery import model_discovery_engine
@@ -1088,6 +1138,11 @@ async def update_repository_config(
         settings["assigned_model"] = config.assigned_model
     if config.assigned_key_id is not None:
         settings["assigned_key_id"] = config.assigned_key_id
+    if is_managed:
+        # A managed mapping has no user key; drop any stale reference.
+        settings["assigned_key_id"] = None
+    if config.fallback_enabled is not None:
+        settings["fallback_enabled"] = bool(config.fallback_enabled)
     repo.settings = settings
 
     db.add(repo)
@@ -1114,6 +1169,7 @@ async def update_repository_config(
         "language": repo.language,
         "is_private": repo.is_private,
         "reviews_enabled": repo.reviews_enabled,
+        "fallback_enabled": bool((repo.settings or {}).get("fallback_enabled", False)),
         "total_reviews": total_reviews,
         "last_synced_at": (
             repo.last_synced_at.isoformat() if repo.last_synced_at else None

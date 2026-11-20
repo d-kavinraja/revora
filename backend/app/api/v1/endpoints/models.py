@@ -68,4 +68,20 @@ async def list_models(
         except Exception:
             all_models[prov_name] = []
 
+    # Managed providers (kLLM): live loaded/ready models, no user key.
+    from app.core.config import settings as _settings
+
+    if _settings.KLLM_ENABLED:
+        from app.services import kllm_service
+
+        for prov in await provider_registry_service.get_usable(db):
+            if not prov.is_managed:
+                continue
+            if provider and prov.name != provider:
+                continue
+            try:
+                all_models[prov.name] = await kllm_service.build_available_models(db)
+            except Exception:  # noqa: BLE001 - never leak kLLM details
+                all_models[prov.name] = []
+
     return all_models

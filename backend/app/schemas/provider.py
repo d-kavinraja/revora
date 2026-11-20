@@ -29,6 +29,7 @@ class ProviderRegistryRead(BaseModel):
     status_message: str | None = None
     status_expires_at: datetime | None = None
     allow_key_addition: bool = True
+    is_managed: bool = False
     extra_config: dict[str, Any] = {}
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -65,6 +66,7 @@ class ProviderRegistryPublic(BaseModel):
     status_message: str | None = None
     status_expires_at: datetime | None = None
     allow_key_addition: bool = True
+    is_managed: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

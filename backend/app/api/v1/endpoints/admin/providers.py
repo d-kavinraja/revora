@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps_admin import get_current_admin
 from app.db.session import get_db
 from app.middleware.rate_limit import limiter
@@ -119,6 +120,7 @@ def _to_read(
         status_message=provider.status_message,
         status_expires_at=provider.status_expires_at,
         allow_key_addition=provider.allow_key_addition,
+        is_managed=provider.is_managed,
         supports_streaming=provider.supports_streaming,
         supports_vision=provider.supports_vision,
         supports_function_calling=provider.supports_function_calling,
@@ -166,6 +168,24 @@ async def update_admin_provider(
         raise HTTPException(status_code=404, detail="Provider not found")
 
     changes = data.model_dump(exclude_unset=True)
+
+    # Managed providers require the runtime flag as well. Refuse to create a
+    # half-enabled state: the DB row can only be turned on when the operator
+    # has opted in through KLLM_ENABLED (environment, restart required).
+    if provider.is_managed and not settings.KLLM_ENABLED:
+        wants_on = changes.get("is_enabled") is True or changes.get("status") in (
+            "available",
+            "under_testing",
+        )
+        if wants_on:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "kLLM is not enabled in the backend environment. Set "
+                    "KLLM_ENABLED=true in backend/.env and restart the backend "
+                    "before enabling the managed provider."
+                ),
+            )
 
     if changes.get("status") is not None and changes["status"] not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid provider status")

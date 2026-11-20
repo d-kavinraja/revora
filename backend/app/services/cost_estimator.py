@@ -18,6 +18,8 @@ PROVIDER_COST_TABLE = {
     "ollama_cloud": {"input": 0.0, "output": 0.0},  # Cloud free tier, no token cost
     "cohere": {"input": 0.0015, "output": 0.002},  # Command R+
     "mistral": {"input": 0.002, "output": 0.006},  # Mistral Large
+    # Managed local kLLM: server-owned GPU capacity, zero marginal cost.
+    "kllm": {"input": 0.0, "output": 0.0},
 }
 
 

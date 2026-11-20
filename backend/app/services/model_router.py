@@ -2,6 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.health import ModelRoute
 from app.services.api_key_service import api_key_service
@@ -52,9 +53,17 @@ class ModelRouter:
         # Get feature requirements
         reqs = FEATURE_REQUIREMENTS.get(feature, {})
 
+        # Managed providers (kLLM) need no user key; they only need live
+        # readiness. Load that once so the loop stays O(1) per provider.
+        managed_ready: set[str] = set()
+        if settings.KLLM_ENABLED and any(p.is_managed for p in providers):
+            from app.services.kllm_service import get_ready_models
+
+            managed_ready = {m.key for m in await get_ready_models(db)}
+
         routes = []
         for provider in providers:
-            if provider.name not in user_keys:
+            if not provider.is_managed and provider.name not in user_keys:
                 continue
 
             # Apply feature requirements filtering
@@ -70,12 +79,30 @@ class ModelRouter:
             if reqs.get("supports_reasoning") and not provider.supports_reasoning:
                 continue
 
-            key = user_keys[provider.name]
-            model = (
-                preferred_model
-                if (preferred_provider == provider.name and preferred_model)
-                else provider.default_model
-            )
+            if provider.is_managed:
+                # Never silently substitute: an explicitly requested managed
+                # model must be ready, otherwise the provider is skipped and
+                # the caller fails fast downstream.
+                if preferred_provider == provider.name and preferred_model:
+                    if preferred_model not in managed_ready:
+                        continue
+                    model = preferred_model
+                else:
+                    if provider.default_model in managed_ready:
+                        model = provider.default_model
+                    elif managed_ready:
+                        model = sorted(managed_ready)[0]
+                    else:
+                        continue
+                key_id = None
+            else:
+                key = user_keys[provider.name]
+                model = (
+                    preferred_model
+                    if (preferred_provider == provider.name and preferred_model)
+                    else provider.default_model
+                )
+                key_id = str(key.id)
 
             if model in disabled_overrides.get(provider.name, ()):
                 continue
@@ -87,7 +114,7 @@ class ModelRouter:
                     provider=provider.name,
                     model=model,
                     litellm_model=f"{provider.litellm_provider}/{model}",
-                    api_key_id=str(key.id),
+                    api_key_id=key_id,
                     estimated_cost_per_1k=cost,
                 )
             )
@@ -111,6 +138,27 @@ class ModelRouter:
         feature: str,
     ) -> list[ModelRoute]:
         return await self.route(db, user_id, feature)
+
+    async def route_excluding(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        feature: str,
+        *,
+        exclude: set[tuple[str, str]] | None = None,
+    ) -> ModelRoute | None:
+        """Return the first eligible route that is not in ``exclude``.
+
+        Used by repository fallback: the existing ranked candidate list stays
+        authoritative, only the failed primary pair is skipped.
+        """
+        routes = await self.route(db, user_id, feature)
+        excluded = exclude or set()
+        for route in routes:
+            if (route.provider, route.model) in excluded:
+                continue
+            return route
+        return None
 
     def get_feature_requirements(self, feature: str) -> dict:
         return FEATURE_REQUIREMENTS.get(feature, {})
