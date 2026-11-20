@@ -8,6 +8,7 @@ in-memory test database.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -315,3 +316,55 @@ def test_no_per_model_unload_route_exists(client):
         "/api/v1/kllm/admin/models/unload", json={"model": "qwen3.8-27b"}
     )
     assert response.status_code in (404, 405)
+
+
+def test_non_loopback_relay_with_gateway_key_is_allowed(monkeypatch):
+    """A server-side gateway key authorizes a non-loopback relay URL."""
+    monkeypatch.setattr(
+        config_module.settings,
+        "KLLM_SERVER_URL",
+        "http://172.18.0.1:18080",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config_module.settings,
+        "KLLM_GATEWAY_API_KEY",
+        "server-only-key",
+        raising=False,
+    )
+    monkeypatch.setattr(ks, "_raw_cache", None, raising=False)
+    fetched: list[str] = []
+
+    async def fake_fetch(path, *, timeout):
+        fetched.append(path)
+        if path == "/chat-ui/v1/models":
+            return {"data": []}, None
+        if path == "/admin/api/backends":
+            return {"backends": []}, None
+        return {"ok": True}, None
+
+    monkeypatch.setattr(ks, "_fetch_json", fake_fetch)
+    state = asyncio.run(ks._read_raw_state(force=True))
+    assert state.reachable is True
+    assert state.error is None
+    assert fetched == [
+        "/chat-ui/v1/models",
+        "/admin/api/backends",
+        "/__relay/health",
+    ]
+
+
+def test_non_loopback_without_gateway_key_is_still_local_only(monkeypatch):
+    monkeypatch.setattr(
+        config_module.settings,
+        "KLLM_SERVER_URL",
+        "http://172.18.0.1:18080",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config_module.settings, "KLLM_GATEWAY_API_KEY", None, raising=False
+    )
+    monkeypatch.setattr(ks, "_raw_cache", None, raising=False)
+    state = asyncio.run(ks._read_raw_state(force=True))
+    assert state.reachable is False
+    assert state.error and "local-only" in state.error

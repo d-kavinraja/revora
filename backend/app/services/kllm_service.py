@@ -280,9 +280,19 @@ def _base_url() -> str:
     return settings.KLLM_SERVER_URL.rstrip("/")
 
 
-def _is_loopback() -> bool:
+def _is_management_access_allowed() -> bool:
+    """Whether the configured kLLM endpoint is trusted for management reads.
+
+    Loopback is always trusted (the default kLLM deployment). A non-loopback
+    URL is trusted only when a server-side gateway key is configured: that key
+    is explicitly documented for non-loopback deployments (e.g. Revora in a
+    container reaching the host through a relay that rewrites ``Host`` to
+    loopback). The key is never exposed to clients.
+    """
     host = (urlparse(_base_url()).hostname or "").lower()
-    return host in {"127.0.0.1", "localhost", "::1"}
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        return True
+    return bool(settings.KLLM_GATEWAY_API_KEY)
 
 
 def _headers() -> dict[str, str]:
@@ -442,7 +452,7 @@ async def _read_raw_state(force: bool = False) -> _RawState:
     if not force and _raw_cache is not None and now - _raw_cache.fetched_at < STATE_TTL_SECONDS:
         return _raw_cache
 
-    if not _is_loopback():
+    if not _is_management_access_allowed():
         previous = _raw_cache
         error = (
             "kLLM management endpoints are local-only. Run Revora on the "
@@ -851,7 +861,7 @@ async def get_telemetry(db: AsyncSession, *, force: bool = False) -> dict[str, A
     ):
         return _telemetry_cache
 
-    if not _is_loopback():
+    if not _is_management_access_allowed():
         return {
             "available": False,
             "stale": False,
