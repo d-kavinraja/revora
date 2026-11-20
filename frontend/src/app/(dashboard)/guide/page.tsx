@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
-import { StackedCards } from '@/components/ui/glass-cards';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
+import { OnboardingTour } from '@/components/onboarding/onboarding-tour';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 export default function SetupGuidePage() {
@@ -17,13 +16,9 @@ export default function SetupGuidePage() {
     );
   }
 
-  // Transparent on purpose: the (dashboard) layout already provides the
-  // standard Revora page treatment (theme-aware bg-background shell plus
-  // the shared DotGrid), exactly like the review/repositories/profile
-  // pages. Do not add an opaque background here or it will cover it.
   return (
-    <div className="w-full min-h-[calc(100dvh-var(--revora-announcement-height,0px))]">
-      <StackedCards />
+    <div className="w-full min-h-[calc(100dvh-var(--revora-announcement-height,0px))] p-4 md:p-6 lg:p-8">
+      <OnboardingTour open={true} onClose={() => {}} mode="page" />
     </div>
   );
 }

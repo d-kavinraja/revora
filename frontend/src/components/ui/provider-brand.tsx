@@ -12,6 +12,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   google_gemini: 'Google Gemini',
   grok: 'Grok',
   groq: 'Groq',
+  kllm: 'kLLM',
   mistral: 'Mistral AI',
   mistralai: 'Mistral AI',
   nvidia: 'NVIDIA NIM',
@@ -94,6 +95,9 @@ export function providerDisplayName(
   const normalized = (slug ?? '').trim().toLowerCase();
   const cleanLabel = (label ?? '').trim();
 
+  // Managed server-owned provider: always display as plain "kLLM", regardless
+  // of any legacy/label suffix returned by the backend.
+  if (normalized === 'kllm') return 'kLLM';
   if (cleanLabel && cleanLabel.toLowerCase() !== normalized) return cleanLabel;
   if (normalized && PROVIDER_LABELS[normalized]) {
     return PROVIDER_LABELS[normalized];

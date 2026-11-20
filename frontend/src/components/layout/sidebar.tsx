@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon } from '@animateicons/react/lucide';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon, ZapIcon } from '@animateicons/react/lucide';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useRef, useState, useEffect } from 'react';
 import { usePlatformFeatures, isFeatureEnabled } from '@/lib/use-platform-features';
@@ -31,6 +31,7 @@ const navLinks: NavLink[] = [
 const bottomLinks: NavLink[] = [
   { href: '/settings/api-keys', label: 'API Keys', icon: KeyIcon },
   { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
+  { href: '/settings/kllm', label: 'kLLM', icon: ZapIcon },
   { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
   { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
   { href: '/settings/health', label: 'Health', icon: ActivityIcon },

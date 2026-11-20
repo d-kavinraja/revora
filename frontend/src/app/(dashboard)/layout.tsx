@@ -12,6 +12,8 @@ import { claimWakeRedirect } from '@/lib/wake-guard';
 import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
 import { FeatureNoticeBanner } from '@/components/shared/feature-notice-banner';
 import { usePlatformFeatures } from '@/lib/use-platform-features';
+import { useOnboarding } from '@/hooks/use-onboarding';
+import { OnboardingTour, OnboardingHelpButton } from '@/components/onboarding/onboarding-tour';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme } = useThemeStore();
@@ -19,6 +21,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, sessionChecked, restoreReason, logout } = useAuthStore();
+  const { open: tourOpen, openTour, closeTour } = useOnboarding(
+    sessionChecked && isAuthenticated,
+  );
 
   // Warm the public feature-flag query once per dashboard mount (§11.1);
   // the sidebar and gated pages share the same React Query cache entry.
@@ -105,6 +110,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <FeatureNoticeBanner />
         {children}
       </main>
+      <OnboardingHelpButton onClick={openTour} />
+      <OnboardingTour open={tourOpen} onClose={closeTour} mode="modal" />
     </div>
   );
 }

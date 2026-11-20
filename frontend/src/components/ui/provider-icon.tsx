@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 import { GlobeIcon } from 'lucide-react';
 import {
   Azure,
@@ -54,6 +56,17 @@ export function ProviderIcon({ slug, size = 24, className = '' }: { slug?: strin
     case 'azure':
     case 'azure_openai':
       return <Azure.Color size={size} className={className} />;
+    case 'kllm':
+      // Official kLLM logo (served from /assets/kllm.svg).
+      return (
+        <Image
+          src="/assets/kllm.svg"
+          alt=""
+          width={size}
+          height={size}
+          className={cn('inline-flex rounded-md', className)}
+        />
+      );
     default:
       return <GlobeIcon size={size} className={cn('text-muted-foreground', className)} />;
   }
