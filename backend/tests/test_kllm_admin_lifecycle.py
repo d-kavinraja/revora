@@ -335,7 +335,7 @@ async def test_load_requests_the_exact_canonical_model(test_db, gateway_enabled,
     result = await ks.request_model_load(test_db, "qwen")
     assert result["status"] == "loading"
     assert result["model"] == MODEL
-    assert posts == [("/chat-ui/models/load", {"model": MODEL})]
+    assert posts == [("/admin/api/backends/launch", {"model": MODEL})]
 
 
 async def test_failed_model_is_never_reloaded(test_db, gateway_enabled, monkeypatch):

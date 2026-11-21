@@ -1260,7 +1260,14 @@ async def request_model_load(db: AsyncSession, model: str) -> dict[str, Any]:
             f"Model '{canonical}' is paused after a failed load in kLLM."
         )
 
-    await _post_json("/chat-ui/models/load", {"model": canonical})
+    # kLLM's ``/chat-ui/models/load`` endpoint is a no-op: since 2026-11-10 it
+    # merely acknowledges a model pick and never launches a kernel (a model
+    # starts on its first message via autoscale, or through this admin endpoint).
+    # The only server-side endpoint that actually starts a backend is
+    # ``/admin/api/backends/launch``, which takes the exact model key and lets
+    # kLLM choose the next free account. It is a guarded admin route, so the
+    # same panel header/credentials used by the other admin POSTs are sent.
+    await _post_json("/admin/api/backends/launch", {"model": canonical})
     invalidate_cache()
     return {"status": "loading", "model": canonical}
 
