@@ -19,12 +19,15 @@ import {
   Users,
   Wrench,
   X,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
+import { QueryError } from '@/components/admin/states';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAdminThemeStore } from '@/store/useAdminThemeStore';
+import { isDefinitiveSessionRejection } from '@/lib/auth-session';
 
 interface NavItem {
   href: string;
@@ -75,6 +78,7 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<NavItem> }
         exact: false,
       },
       { href: '/admin/models', label: 'Models', icon: Boxes, exact: false },
+      { href: '/admin/kllm', label: 'kLLM', icon: Zap, exact: false },
       { href: '/admin/features', label: 'Features', icon: Flag, exact: false },
       {
         href: '/admin/maintenance',
@@ -102,6 +106,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/reviews': 'Reviews',
   '/admin/providers': 'Providers',
   '/admin/models': 'Models',
+  '/admin/kllm': 'kLLM',
   '/admin/features': 'Features',
   '/admin/maintenance': 'Maintenance',
   '/admin/announcements': 'Announcements',
@@ -143,18 +148,25 @@ export default function AdminConsoleLayout({
     data: session,
     isPending,
     isError,
+    error,
+    refetch,
   } = useQuery({
     queryKey: ['admin', 'session'],
     queryFn: adminApi.session,
-    retry: false,
+    // A transport/5xx failure does not prove the persisted session is
+    // invalid. Retry transient failures, but never retry an explicit 401/403.
+    retry: (failureCount, queryError) =>
+      !isDefinitiveSessionRejection(queryError) && failureCount < 2,
     staleTime: 60_000,
   });
 
+  const sessionRejected = isError && isDefinitiveSessionRejection(error);
+
   useEffect(() => {
-    if (isError) {
+    if (sessionRejected) {
       router.replace('/admin/login');
     }
-  }, [isError, router]);
+  }, [sessionRejected, router]);
 
   useEffect(() => {
     // The drawer is route-scoped UI: close it whenever the route changes.
@@ -214,10 +226,22 @@ export default function AdminConsoleLayout({
     }
   };
 
-  if (isPending || isError || !session) {
+  if (isPending || sessionRejected || (!isError && !session)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <LoaderIcon size={24} className="text-brand" animate />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <QueryError
+          message="The admin session could not be confirmed because the authentication service is temporarily unreachable. Your session has not been discarded."
+          onRetry={() => void refetch()}
+          className="w-full max-w-lg"
+        />
       </div>
     );
   }

@@ -159,6 +159,36 @@ async def get_current_user(
     return await _resolve_current_user(request, header_token, db)
 
 
+async def get_current_session(
+    request: Request,
+    header_token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> tuple[User, dict]:
+    """Authenticate and also return the decoded JWT payload.
+
+    Presence needs ``jti``/``exp`` from the same credential that authorized the
+    request. Identity and revocation still come from ``_resolve_current_user``;
+    this dependency never introduces an alternative authentication path.
+    """
+    user = await _resolve_current_user(request, header_token, db)
+    token = await _token_from_request(request, header_token)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = decode_access_token(token)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return user, payload
+
+
 async def get_current_user_for_stream(
     request: Request,
     header_token: str | None = Depends(oauth2_scheme),

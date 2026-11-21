@@ -3,10 +3,12 @@
 Retrying must never create duplicate rows, and a final failure must be visible
 (structured log + counter) rather than silently dropped.
 """
+import json
 import uuid
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -25,6 +27,17 @@ async def isolated_db(monkeypatch):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+        # SQLite disables FK enforcement by default; without this, orphan
+        # verification_metrics rows would silently pass in tests.
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(
@@ -39,6 +52,18 @@ async def isolated_db(monkeypatch):
 async def review_id(isolated_db):
     async with isolated_db() as db:
         from app.models.github import Installation, PullRequest, Repository
+        from app.models.user import User
+
+        # With FK enforcement on, the installation must reference a real user.
+        user = User(
+            id=uuid.uuid4(),
+            name="Verification Fixture User",
+            email=f"verify-{uuid.uuid4().hex[:8]}@example.com",
+            role="user",
+            is_verified=True,
+        )
+        db.add(user)
+        await db.flush()
 
         installation = Installation(
             id=uuid.uuid4(),
@@ -46,7 +71,7 @@ async def review_id(isolated_db):
             account_id=77,
             account_login="retry-acct",
             account_type="User",
-            user_id=uuid.uuid4(),
+            user_id=user.id,
             repository_selection="all",
             permissions={},
             events={},
@@ -338,3 +363,232 @@ async def test_recover_pending_files_no_dir(isolated_db, monkeypatch, tmp_path):
 
     result = await engine.recover_pending_files()
     assert result == {"recovered": 0, "failed": 0}
+
+
+# --- permanent-error classification and poison-file recovery ---------------
+
+
+async def test_sqlite_fk_enforcement_rejects_orphan_metrics(isolated_db):
+    """The isolated fixture must enforce FKs so orphan inserts fail."""
+    async with isolated_db() as db:
+        db.add(
+            VerificationMetricModel(
+                review_id=uuid.uuid4(),
+                total_findings=0,
+                verified_findings=0,
+                rejected_findings=0,
+                hallucinations_detected=0,
+                false_positives_filtered=0,
+                avg_confidence=0.0,
+                verification_duration_ms=0,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await db.commit()
+
+
+async def test_missing_review_parent_is_permanent_and_not_retried(
+    isolated_db, monkeypatch, tmp_path
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    monkeypatch.setattr(eng_mod, "PENDING_VERIFICATION_DIR", tmp_path / "pending")
+    eng_mod.VERIFICATION_PERSIST_FAILURES = 0
+    missing_id = uuid.uuid4()
+
+    calls = {"n": 0}
+    original = engine._persist_to_db
+
+    async def counting(*args, **kwargs):
+        calls["n"] += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(engine, "_persist_to_db", counting)
+
+    outcome = await engine._persist_with_retry_detailed(
+        missing_id, [_finding()], _metrics()
+    )
+    assert outcome.persisted is False
+    assert outcome.permanent is True
+    assert outcome.missing_review is True
+    assert outcome.attempts == 1
+    assert calls["n"] == 1  # deterministic error is never retried
+    assert eng_mod.VERIFICATION_PERSIST_FAILURES == 1
+
+    async with isolated_db() as db:
+        metrics = (await db.execute(select(func.count(VerificationMetricModel.id)))).scalar_one()
+    assert metrics == 0
+
+
+async def test_integrity_error_is_classified_permanent_without_retry(
+    isolated_db, monkeypatch
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    eng_mod.VERIFICATION_PERSIST_FAILURES = 0
+    calls = {"n": 0}
+
+    async def always_integrity(*args, **kwargs):
+        calls["n"] += 1
+        raise IntegrityError("INSERT INTO verification_metrics", {}, Exception("FK"))
+
+    monkeypatch.setattr(engine, "_persist_to_db", always_integrity)
+
+    outcome = await engine._persist_with_retry_detailed(
+        uuid.uuid4(), [_finding()], _metrics()
+    )
+    assert outcome.permanent is True
+    assert outcome.persisted is False
+    assert calls["n"] == 1
+    assert eng_mod.VERIFICATION_PERSIST_FAILURES == 1
+
+
+async def test_transient_failure_keeps_bounded_retry_and_exhaustion(
+    isolated_db, monkeypatch
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    eng_mod.VERIFICATION_PERSIST_FAILURES = 0
+    calls = {"n": 0}
+
+    async def always_transient(*args, **kwargs):
+        calls["n"] += 1
+        raise RuntimeError("temporary database outage")
+
+    monkeypatch.setattr(engine, "_persist_to_db", always_transient)
+
+    outcome = await engine._persist_with_retry_detailed(
+        uuid.uuid4(), [_finding()], _metrics()
+    )
+    assert outcome.persisted is False
+    assert outcome.permanent is False
+    assert outcome.attempts == 3
+    assert calls["n"] == 3
+    assert eng_mod.VERIFICATION_PERSIST_FAILURES == 1
+
+
+async def test_verify_missing_parent_writes_no_pending_file(
+    isolated_db, monkeypatch, tmp_path
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    pending_dir = tmp_path / "pending"
+    monkeypatch.setattr(eng_mod, "PENDING_VERIFICATION_DIR", pending_dir)
+    eng_mod.VERIFICATION_PERSIST_FAILURES = 0
+
+    class _FakePipeline:
+        async def process(self, findings, repo_path, context):
+            return [_finding()], _metrics()
+
+    monkeypatch.setattr(eng_mod, "pipeline", _FakePipeline())
+
+    result = await engine.verify(
+        '[{"id": "f1", "title": "t", "description": "d"}]',
+        repo_path=".",
+        context={"review_id": str(uuid.uuid4())},
+    )
+    assert result is not None
+    assert not pending_dir.exists() or not list(pending_dir.glob("*.json"))
+    assert eng_mod.VERIFICATION_PERSIST_FAILURES == 1
+
+
+async def test_recover_quarantines_missing_parent_file_without_replaying(
+    isolated_db, monkeypatch, tmp_path
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    pending_dir = tmp_path / "pending"
+    monkeypatch.setattr(eng_mod, "PENDING_VERIFICATION_DIR", pending_dir)
+    eng_mod.VERIFICATION_PERSIST_FAILURES = 0
+    pending_dir.mkdir(parents=True, exist_ok=True)
+
+    missing_id = uuid.uuid4()
+    filename = f"{missing_id}.json"
+    (pending_dir / filename).write_text(
+        json.dumps(
+            {
+                "review_id": str(missing_id),
+                "verified_findings": [_finding()],
+                "metrics": _metrics(),
+                "timestamp": "2026-01-01T00:00:00+00:00",
+            }
+        )
+    )
+
+    first = await engine.recover_pending_files()
+    assert first == {"recovered": 0, "failed": 1}
+    quarantined = pending_dir / "errors" / filename
+    assert quarantined.exists()
+    assert not (pending_dir / filename).exists()
+
+    second = await engine.recover_pending_files()
+    assert second == {"recovered": 0, "failed": 0}  # not replayed
+    assert quarantined.exists()  # data preserved, not deleted
+
+
+async def test_recover_transient_failure_keeps_retryable_file(
+    isolated_db, review_id, monkeypatch, tmp_path
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    pending_dir = tmp_path / "pending"
+    monkeypatch.setattr(eng_mod, "PENDING_VERIFICATION_DIR", pending_dir)
+
+    async def always_transient(*args, **kwargs):
+        raise RuntimeError("temporary database outage")
+
+    monkeypatch.setattr(engine, "_persist_to_db", always_transient)
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{review_id}.json"
+    (pending_dir / filename).write_text(
+        json.dumps(
+            {
+                "review_id": str(review_id),
+                "verified_findings": [_finding()],
+                "metrics": _metrics(),
+            }
+        )
+    )
+
+    result = await engine.recover_pending_files()
+    assert result == {"recovered": 0, "failed": 1}
+    assert (pending_dir / filename).exists()  # kept for a later startup
+    assert not (pending_dir / "errors" / filename).exists()
+
+
+async def test_recover_zero_findings_metrics_only_is_idempotent(
+    isolated_db, review_id, monkeypatch, tmp_path
+):
+    engine = VerificationEngine()
+    import app.verification.engine as eng_mod
+
+    # A zero-findings verification writes only a metrics row.
+    await engine._persist_to_db(review_id, [], _metrics())
+
+    pending_dir = tmp_path / "pending"
+    monkeypatch.setattr(eng_mod, "PENDING_VERIFICATION_DIR", pending_dir)
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{review_id}.json"
+    (pending_dir / filename).write_text(
+        json.dumps(
+            {
+                "review_id": str(review_id),
+                "verified_findings": [],
+                "metrics": _metrics(),
+            }
+        )
+    )
+
+    result = await engine.recover_pending_files()
+    assert result == {"recovered": 1, "failed": 0}
+    assert not (pending_dir / filename).exists()
+    async with isolated_db() as db:
+        metrics = (await db.execute(select(func.count(VerificationMetricModel.id)))).scalar_one()
+    assert metrics == 1  # no duplicate metrics row
+

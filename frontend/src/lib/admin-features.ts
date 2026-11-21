@@ -46,6 +46,11 @@ export const FEATURE_META: Record<string, { label: string; description: string }
     label: 'Setup Guide',
     description: 'The onboarding setup guide page.',
   },
+  kllm_page: {
+    label: 'kLLM Dashboard',
+    description:
+      'The kLLM dashboard view and its real-time data visualization. Backend execution, background PR reviews and repository routing are not affected by this flag.',
+  },
 };
 
 export const FEATURE_STATUS_OPTIONS = [

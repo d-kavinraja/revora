@@ -120,6 +120,16 @@ def _sqlstate(exc: BaseException | None) -> str | None:
     return None
 
 
+def get_sqlstate(exc: BaseException | None) -> str | None:
+    """Public accessor for the shared SQLSTATE extraction helper.
+
+    Reused by database error handlers that need to distinguish permanent
+    integrity failures from transient connection/serialization failures
+    without duplicating the exception-chain walk above.
+    """
+    return _sqlstate(exc)
+
+
 def _get_correlation_id() -> str | None:
     try:
         from app.middleware.correlation import get_correlation_id

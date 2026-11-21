@@ -9,12 +9,14 @@ BYOK Architecture:
 - No provider fallback, no key cycling, no model switching.
 """
 
+import asyncio
 import logging
 import time
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+import httpx
+from sqlalchemy import select, update
 
 from app.ai.git_utils import GitService
 from app.services.platform_settings import platform_settings_service
@@ -35,11 +37,27 @@ from app.retrieval.init import initialize_retrieval_engine
 from app.retrieval.models import RetrievalConfig
 from app.security.content_guard import neutralize_untrusted, sanitize_input
 from app.security.error_sanitizer import sanitize_error_message
+from app.services.review_selection import KLLM_READINESS_KEY
 from app.sse.emitter import SSEEmitter
 from app.sse.events import EventType
 from app.verification.engine import verification_engine
 
 logger = logging.getLogger(__name__)
+
+# Reason codes that must survive to the review execution snapshot instead of
+# being replaced by a later best-effort readiness refresh.
+_AUTHORITATIVE_KLLM_REASONS = {
+    "load_timeout",
+    "manual_unload",
+    "admin_disabled",
+    "model_failed",
+    "idle_unloaded",
+    "review_autoload_disabled",
+    "lifecycle_lock_busy",
+    "lifecycle_lock_unavailable",
+    "global_load_limit_busy",
+    "global_load_gate_unavailable",
+}
 
 # Initialize the retrieval engine with all retrievers, scorers, and strategies
 initialize_retrieval_engine()
@@ -366,8 +384,14 @@ class ReviewPipeline:
             safe_error = sanitize_error_message(e)
             await emitter.emit_error("pipeline", safe_error)
 
-            # Mark review as failed
-            await self._save_failed(review_id, safe_error)
+            # Preserve structured lifecycle reasons (e.g. load_timeout) so a
+            # later best-effort readiness refresh cannot replace them.
+            reason_code = getattr(e, "reason_code", None)
+            if not isinstance(reason_code, str) or (
+                reason_code not in _AUTHORITATIVE_KLLM_REASONS
+            ):
+                reason_code = None
+            await self._save_failed(review_id, safe_error, reason_code=reason_code)
 
             if check_run_id:
                 try:
@@ -904,7 +928,7 @@ class ReviewPipeline:
             try:
                 if await cancel_check():
                     await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before publishing")
-                    return None
+                    raise asyncio.CancelledError()
             except Exception:
                 pass
         await emitter.emit("publishing_review", "running", EventType.STAGE_START)
@@ -916,7 +940,7 @@ class ReviewPipeline:
                 try:
                     if await cancel_check():
                         await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before summary comment")
-                        return None
+                        raise asyncio.CancelledError()
                 except Exception:
                     pass
             await self._upsert_summary_comment(
@@ -941,7 +965,7 @@ class ReviewPipeline:
             try:
                 if cancel_check is not None and await cancel_check():
                     await emitter.emit("publishing_review", "cancelled", EventType.STAGE_FAILED, message="Cancelled before PR review")
-                    return None
+                    raise asyncio.CancelledError()
                 await self._publish_or_update_pr_review(
                     installation_id=installation_id,
                     owner=owner,
@@ -1059,7 +1083,10 @@ class ReviewPipeline:
                         if prev:
                             prev_comment_id = prev.github_comment_id
         except Exception as e:
+            # Without a reliable previous-comment lookup, creating a new
+            # comment could duplicate an existing one. Fail the publish stage.
             logger.warning(f"Failed to look up previous Revora comment: {e}")
+            raise
 
         comment_id = None
         try:
@@ -1076,13 +1103,37 @@ class ReviewPipeline:
                     logger.info(
                         f"Updated existing Revora comment {prev_comment_id} on PR #{pr_number}"
                     )
-                except Exception as e:
-                    # The previous comment may have been deleted on GitHub —
-                    # fall through and create a fresh comment so the PR always
-                    # has exactly one current Revora summary comment.
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        # Confirmed missing: a replacement keeps exactly one
+                        # current Revora summary comment on the PR.
+                        logger.info(
+                            "Previous Revora comment %s no longer exists; "
+                            "creating a replacement",
+                            prev_comment_id,
+                        )
+                    else:
+                        # Transient, permission or rate-limit failures must not
+                        # create a duplicate summary comment.
+                        logger.warning(
+                            "Failed to update Revora comment %s (HTTP %s); "
+                            "not creating a duplicate",
+                            prev_comment_id,
+                            e.response.status_code,
+                        )
+                        raise
+                except httpx.TimeoutException:
                     logger.warning(
-                        f"Failed to update existing Revora comment {prev_comment_id}, creating new: {e}"
+                        "Timed out updating Revora comment %s; not creating a duplicate",
+                        prev_comment_id,
                     )
+                    raise
+                except Exception:
+                    logger.warning(
+                        "Ambiguous result updating Revora comment %s; not creating a duplicate",
+                        prev_comment_id,
+                    )
+                    raise
 
             if not comment_id:
                 created = await github_client.create_issue_comment(
@@ -1127,94 +1178,103 @@ class ReviewPipeline:
         # --- 1. Save review status (own session) ---
         try:
             async with AsyncSessionLocal() as db:
-                res = await db.execute(select(Review).where(Review.id == review_id))
-                db_review = res.scalars().first()
-                if db_review:
-                    db_review.status = "completed"
-                    db_review.completed_at = datetime.now(UTC)
-                    await db.commit()
+                started_at = await db.scalar(
+                    select(Review.started_at).where(Review.id == review_id)
+                )
+                completed_at = datetime.now(UTC)
+                # Atomic guard: a cancellation committed between the read and
+                # this write makes the UPDATE affect zero rows, so a stale
+                # pipeline result can never overwrite a confirmed cancellation.
+                result = await db.execute(
+                    update(Review)
+                    .where(Review.id == review_id, Review.status != "cancelled")
+                    .values(status="completed", completed_at=completed_at)
+                )
+                if result.rowcount == 0:
+                    return
+                await db.commit()
 
-                    # Mark this run's execution as completed
+                # Mark this run's execution as completed
+                try:
+                    from app.services.review_execution_service import (
+                        mark_execution_final,
+                    )
+
+                    duration_ms = None
+                    if started_at and completed_at:
+                        started = started_at
+                        if started.tzinfo is None:
+                            started = started.replace(tzinfo=UTC)
+                        duration_ms = int(
+                            (completed_at - started).total_seconds() * 1000
+                        )
+                    input_tok = llm_response.input_tokens or 0
+                    output_tok = llm_response.output_tokens or 0
+                    fallback_used = bool(getattr(llm_response, "is_fallback", False))
+
+                    # Record inference-time fallback on the execution snapshot
+                    # so the UI can distinguish a primary run from a fallback
+                    # run without inventing a new status.
                     try:
                         from app.services.review_execution_service import (
-                            mark_execution_final,
+                            get_latest_execution,
+                        )
+                        from app.services.review_selection import (
+                            SELECTION_SNAPSHOT_KEY,
                         )
 
-                        duration_ms = None
-                        if db_review.started_at and db_review.completed_at:
-                            duration_ms = int(
-                                (
-                                    db_review.completed_at - db_review.started_at
-                                ).total_seconds()
-                                * 1000
+                        execution = await get_latest_execution(db, review_id)
+                        if execution is not None and fallback_used:
+                            snapshot = dict(execution.configuration_snapshot or {})
+                            selection = dict(
+                                snapshot.get(SELECTION_SNAPSHOT_KEY) or {}
                             )
-                        input_tok = llm_response.input_tokens or 0
-                        output_tok = llm_response.output_tokens or 0
-                        fallback_used = bool(getattr(llm_response, "is_fallback", False))
-
-                        # Record inference-time fallback on the execution snapshot
-                        # so the UI can distinguish a primary run from a fallback
-                        # run without inventing a new status.
-                        try:
-                            from app.services.review_execution_service import (
-                                get_latest_execution,
+                            selection["fallback_used"] = True
+                            selection["fallback_provider"] = selection.get(
+                                "selected_provider"
                             )
-                            from app.services.review_selection import (
-                                SELECTION_SNAPSHOT_KEY,
+                            selection["fallback_model"] = selection.get(
+                                "selected_model"
                             )
-
-                            execution = await get_latest_execution(db, review_id)
-                            if execution is not None and fallback_used:
-                                snapshot = dict(execution.configuration_snapshot or {})
-                                selection = dict(
-                                    snapshot.get(SELECTION_SNAPSHOT_KEY) or {}
-                                )
-                                selection["fallback_used"] = True
-                                selection["fallback_provider"] = selection.get(
-                                    "selected_provider"
-                                )
-                                selection["fallback_model"] = selection.get(
-                                    "selected_model"
-                                )
-                                selection["fallback_reason"] = "primary_inference_failed"
-                                snapshot[SELECTION_SNAPSHOT_KEY] = selection
-                                execution.configuration_snapshot = snapshot
-                                db.add(execution)
-                        except Exception as snap_e:
-                            logger.warning(
-                                f"Failed to record fallback metadata for review {review_id}: {snap_e}"
-                            )
-
-                        await mark_execution_final(
-                            db,
-                            review_id,
-                            "completed",
-                            duration_ms=duration_ms,
-                            model=llm_response.model,
-                            provider=llm_response.provider,
-                            tokens={
-                                "input": input_tok,
-                                "output": output_tok,
-                                "total": input_tok + output_tok,
-                            },
-                            summary=review_summary_body,
-                            stats={
-                                "provider": llm_response.provider,
-                                "model": llm_response.model,
-                                "fallback_used": fallback_used,
-                                "fallback_reason": (
-                                    "primary_inference_failed" if fallback_used else None
-                                ),
-                                "verified_findings": verified.verified_count,
-                                "rejected_findings": verified.rejected_count,
-                                **metrics,
-                            }
-                        )
-                        await db.commit()
-                    except Exception as e:
+                            selection["fallback_reason"] = "primary_inference_failed"
+                            snapshot[SELECTION_SNAPSHOT_KEY] = selection
+                            execution.configuration_snapshot = snapshot
+                            db.add(execution)
+                    except Exception as snap_e:
                         logger.warning(
-                            f"Failed to mark execution completed for review {review_id}: {e}"
+                            f"Failed to record fallback metadata for review {review_id}: {snap_e}"
                         )
+
+                    await mark_execution_final(
+                        db,
+                        review_id,
+                        "completed",
+                        duration_ms=duration_ms,
+                        model=llm_response.model,
+                        provider=llm_response.provider,
+                        tokens={
+                            "input": input_tok,
+                            "output": output_tok,
+                            "total": input_tok + output_tok,
+                        },
+                        summary=review_summary_body,
+                        stats={
+                            "provider": llm_response.provider,
+                            "model": llm_response.model,
+                            "fallback_used": fallback_used,
+                            "fallback_reason": (
+                                "primary_inference_failed" if fallback_used else None
+                            ),
+                            "verified_findings": verified.verified_count,
+                            "rejected_findings": verified.rejected_count,
+                            **metrics,
+                        }
+                    )
+                    await db.commit()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to mark execution completed for review {review_id}: {e}"
+                    )
 
         except Exception as e:
             logger.error(f"Failed to save review status: {e}")
@@ -1308,28 +1368,50 @@ class ReviewPipeline:
                 "[usage] USAGE_ANALYTICS_ENABLED=False, skipping usage recording"
             )
 
-    async def _save_failed(self, review_id, error_message):
-        """Save failed review to database."""
+    async def _save_failed(
+        self, review_id, error_message, *, reason_code: str | None = None
+    ):
+        """Save failed review to database, preserving authoritative reasons."""
         error_message = sanitize_error_message(error_message)
         try:
             async with AsyncSessionLocal() as db:
-                res = await db.execute(select(Review).where(Review.id == review_id))
-                db_review = res.scalars().first()
-                if db_review:
-                    db_review.status = "failed"
-                    db_review.completed_at = datetime.now(UTC)
-                    await db.commit()
-                    try:
-                        from app.services.review_execution_service import (
-                            mark_execution_final,
-                        )
+                # Atomic guard: never overwrite a confirmed cancellation with
+                # a failure projection from a stale pipeline result.
+                result = await db.execute(
+                    update(Review)
+                    .where(Review.id == review_id, Review.status != "cancelled")
+                    .values(status="failed", completed_at=datetime.now(UTC))
+                )
+                if result.rowcount == 0:
+                    return
+                await db.commit()
+                try:
+                    from app.services.review_execution_service import (
+                        get_latest_execution,
+                        mark_execution_final,
+                    )
 
-                        await mark_execution_final(db, review_id, "failed", error_message=error_message)
-                        await db.commit()
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to mark execution failed for review {review_id}: {e}"
-                        )
+                    if reason_code:
+                        execution = await get_latest_execution(db, review_id)
+                        if execution is not None:
+                            snapshot = dict(
+                                execution.configuration_snapshot or {}
+                            )
+                            snapshot[KLLM_READINESS_KEY] = {
+                                "model": execution.model or "",
+                                "state": "unavailable",
+                                "reason_code": reason_code,
+                                "checked_at": datetime.now(UTC).isoformat(),
+                            }
+                            execution.configuration_snapshot = snapshot
+                            db.add(execution)
+
+                    await mark_execution_final(db, review_id, "failed", error_message=error_message)
+                    await db.commit()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to mark execution failed for review {review_id}: {e}"
+                    )
         except Exception as e:
             logger.error(f"Failed to save failed review: {e}")
 

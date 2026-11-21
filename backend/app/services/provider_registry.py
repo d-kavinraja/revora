@@ -14,8 +14,15 @@ class ProviderUnavailableError(Exception):
     The mapping is never cleared and no other provider is substituted.
     """
 
-    def __init__(self, provider: str, message: str | None = None):
+    def __init__(
+        self,
+        provider: str,
+        message: str | None = None,
+        *,
+        definitive: bool = True,
+    ):
         self.provider = provider
+        self.definitive = bool(definitive)
         self.message = message or (
             f"Provider '{provider}' is not available for new reviews."
         )

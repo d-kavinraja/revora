@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
@@ -9,9 +10,11 @@ import { adminApi } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAdminThemeStore } from '@/store/useAdminThemeStore';
+import { isDefinitiveSessionRejection } from '@/lib/auth-session';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
   const adminTheme = useAdminThemeStore((s) => s.theme);
   const toggleAdminTheme = useAdminThemeStore((s) => s.toggleTheme);
@@ -19,20 +22,39 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginEstablished, setLoginEstablished] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
     setError(null);
     setSubmitting(true);
+    let established = loginEstablished;
     try {
-      await adminApi.login({ username, password });
+      if (!established) {
+        await adminApi.login({ username, password });
+        established = true;
+        setLoginEstablished(true);
+      }
+      // Never treat the credential response alone as authenticated. Confirm
+      // that the first-party opaque cookie resolves to the persisted session.
+      const session = await adminApi.session();
+      queryClient.setQueryData(['admin', 'session'], session);
       router.replace('/admin');
     } catch (err) {
-      const detail =
-        axios.isAxiosError(err) && typeof err.response?.data?.detail === 'string'
-          ? err.response.data.detail
-          : 'Unable to sign in. Please try again.';
+      let detail: string;
+      if (established) {
+        const rejected = isDefinitiveSessionRejection(err);
+        if (rejected) setLoginEstablished(false);
+        detail = rejected
+          ? 'Signed in, but the admin session could not be confirmed. Please sign in again.'
+          : 'Signed in, but the authentication service is temporarily unreachable. Retry session confirmation.';
+      } else {
+        detail =
+          axios.isAxiosError(err) && typeof err.response?.data?.detail === 'string'
+            ? err.response.data.detail
+            : 'Unable to sign in. Please try again.';
+      }
       setError(detail);
       setSubmitting(false);
     }
@@ -84,7 +106,7 @@ export default function AdminLoginPage() {
               required
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              disabled={submitting}
+              disabled={submitting || loginEstablished}
               className="w-full h-11 rounded-lg border border-border bg-surface-2 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1 disabled:opacity-60"
               placeholder="admin"
             />
@@ -105,7 +127,7 @@ export default function AdminLoginPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              disabled={submitting}
+              disabled={submitting || loginEstablished}
               className="w-full h-11 rounded-lg border border-border bg-surface-2 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1 disabled:opacity-60"
               placeholder="••••••••"
             />
@@ -123,16 +145,18 @@ export default function AdminLoginPage() {
 
           <button
             type="submit"
-            disabled={submitting || !username || !password}
+            disabled={
+              submitting || (!loginEstablished && (!username || !password))
+            }
             className="w-full h-11 rounded-lg bg-brand text-brand-foreground text-sm font-semibold cursor-pointer transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
                 <LoaderIcon size={16} animate />
-                Signing in…
+                {loginEstablished ? 'Confirming session…' : 'Signing in…'}
               </>
             ) : (
-              'Sign in'
+              loginEstablished ? 'Retry session confirmation' : 'Sign in'
             )}
           </button>
         </form>

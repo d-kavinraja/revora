@@ -47,6 +47,9 @@ FEATURE_FLAG_KEYS = (
     "usage",
     "analytics",
     "guide",
+    # UI/visualization gate for the kLLM dashboard view only. Enforced
+    # exclusively in the frontend; the kLLM user API surface stays open.
+    "kllm_page",
 )
 
 #: Per-model override statuses (§11.2). `available` means "no override" —

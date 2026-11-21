@@ -101,7 +101,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
+      # Browser uses the same-origin /api/v1 proxy; the Next server reaches
+      # the backend over the Docker network. The internal service name is
+      # never emitted to the browser.
+      - NEXT_PUBLIC_USE_API_PROXY=true
+      - BACKEND_ORIGIN=http://backend:8000
+      - NEXT_PUBLIC_API_URL=/api/v1
     depends_on:
       - backend
     deploy:

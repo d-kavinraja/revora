@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/safe-redirect.test.mjs"
+    "test": "node --test src/lib/safe-redirect.test.mjs src/lib/kllm-presence.test.mjs src/lib/kllm-heartbeat-queue.test.mjs src/lib/review-model-selection.test.mjs src/lib/api-transport.test.mjs"
   },
   "dependencies": {
     "@animateicons/react": "^0.3.4",

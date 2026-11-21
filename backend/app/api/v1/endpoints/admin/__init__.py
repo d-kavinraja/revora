@@ -14,6 +14,7 @@ from app.api.v1.endpoints.admin import (
     features,
     installations,
     keys,
+    kllm,
     maintenance,
     models,
     overview,
@@ -33,6 +34,7 @@ router.include_router(reviews.router, tags=["admin"])
 router.include_router(providers.router, tags=["admin"])
 router.include_router(keys.router, tags=["admin"])
 router.include_router(models.router, tags=["admin"])
+router.include_router(kllm.router, prefix="/kllm", tags=["admin"])
 router.include_router(features.router, tags=["admin"])
 router.include_router(installations.router, tags=["admin"])
 router.include_router(maintenance.router, tags=["admin"])

@@ -937,7 +937,8 @@ async def get_available_models(
     }
 
     # Managed providers (kLLM) have no user key: their catalogue comes from the
-    # server-side readiness snapshot, so only loaded/ready models are offered.
+    # server-side readiness projection and includes administrator-approved
+    # unloaded models marked as "loads on demand".
     from app.core.config import settings as _settings
 
     if _settings.KLLM_ENABLED:
@@ -947,7 +948,7 @@ async def get_available_models(
             if not provider.is_managed:
                 continue
             try:
-                managed_models = await kllm_service.build_available_models(db)
+                managed_models = await kllm_service.get_model_options(db)
             except Exception as exc:  # noqa: BLE001 - never leak kLLM details
                 logger.warning(
                     "kLLM catalogue unavailable: %s", type(exc).__name__
@@ -1042,13 +1043,15 @@ async def update_repository_config(
     is_managed = bool(provider_row is not None and provider_row.is_managed)
 
     if is_managed:
-        # Managed providers never use a user key. Validate against live kLLM
-        # readiness at save time and never substitute another model.
+        # Managed providers never use a user key. Validate availability at save
+        # time: ready models always pass; an unloaded model passes only when an
+        # administrator approved it for review-demand loading. Never substitute
+        # another model.
         if config.assigned_model is not None:
-            from app.services.kllm_service import KllmError, ensure_model_ready
+            from app.services.kllm_service import KllmError, ensure_model_selectable
 
             try:
-                await ensure_model_ready(db, config.assigned_model)
+                await ensure_model_selectable(db, config.assigned_model)
             except KllmError as exc:
                 raise HTTPException(status_code=400, detail=exc.message) from exc
 

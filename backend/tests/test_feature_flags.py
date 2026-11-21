@@ -358,7 +358,23 @@ def test_public_features_default_shape(anon_client):
             assert body[key]["message"] is None
 
 
-async def test_public_features_reflect_admin_changes(admin_client, anon_client):
+async def test_kllm_page_flag_exposed_publicly_and_in_admin(anon_client, admin_client):
+    """`kllm_page` (kLLM dashboard UI-access gate) is visible to both surfaces."""
+    public = anon_client.get("/api/v1/platform/features").json()
+    assert public["kllm_page"] == {"status": "enabled", "message": None}
+
+    rows = {
+        row["key"]: row
+        for row in admin_client.get("/api/v1/admin/features").json()
+    }
+    assert rows["kllm_page"] == {
+        "key": "kllm_page",
+        "status": "enabled",
+        "message": None,
+    }
+
+
+def test_public_features_reflect_admin_changes(admin_client, anon_client):
     update = admin_client.put(
         "/api/v1/admin/features/mouthmap",
         json={"status": "coming_soon", "message": "Almost there"},

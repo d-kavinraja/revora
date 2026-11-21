@@ -32,6 +32,12 @@ class User(Base):
         JSON_TYPE, default=dict, server_default="{}"
     )
 
+    # Onboarding tour state. Persisted server-side so dismissal/completion
+    # survives clearing browser storage, new devices, and app/server restarts.
+    onboarding_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+
     # Admin control plane (schema migrated in adm1n_sch3ma; behavior wired in
     # phases 3 and 7 — status enforcement, login/activity instrumentation).
     status: Mapped[str] = mapped_column(

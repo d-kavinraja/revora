@@ -34,6 +34,7 @@ from app.services.provider_registry import (
 logger = logging.getLogger(__name__)
 
 SELECTION_SNAPSHOT_KEY = "selection"
+KLLM_READINESS_KEY = "kllm_readiness"
 
 #: Repository setting that opts a mapped primary into automatic fallback.
 FALLBACK_ENABLED_KEY = "fallback_enabled"
@@ -144,9 +145,14 @@ async def resolve_selection(
         )
     except ProviderUnavailableError as exc:
         error = exc.message
-        # Repository-level fallback: only when a mapped primary exists and the
-        # repository explicitly opted in. Never substitute when disabled.
-        if mapping_status == "mapped" and fallback_enabled:
+        # Repository-level fallback: only when a mapped primary exists, the
+        # repository explicitly opted in, AND the failure is definitive. A
+        # transient kLLM read must fail closed rather than silently switch.
+        if (
+            mapping_status == "mapped"
+            and fallback_enabled
+            and bool(getattr(exc, "definitive", False))
+        ):
             route = await _select_fallback_route(
                 db, user_id, repo_provider or "", repo_model or ""
             )
@@ -203,8 +209,10 @@ async def validate_selection(
     """Re-check a resolved selection before execution.
 
     Raises :class:`ProviderUnavailableError` when the provider is blocked or a
-    managed (kLLM) model is no longer ready. Callers may then re-resolve with
-    the repository's fallback preference applied.
+    managed (kLLM) model is no longer available. An unloaded model remains
+    *available*: automatic review-demand loading is decided later, using the
+    administrator policy and the exact mapped model. Callers may re-resolve
+    with the repository's fallback preference only on definitive failure.
     """
     if not selection.is_resolved:
         return
@@ -213,12 +221,16 @@ async def validate_selection(
         db, selection.provider or ""
     )
     if row is not None and row.is_managed:
-        from app.services.kllm_service import KllmError, ensure_model_ready
+        from app.services.kllm_service import KllmError, ensure_model_selectable
 
         try:
-            await ensure_model_ready(db, selection.model or "")
+            await ensure_model_selectable(db, selection.model or "")
         except KllmError as exc:
-            raise ProviderUnavailableError(selection.provider or "", exc.message) from exc
+            raise ProviderUnavailableError(
+                selection.provider or "",
+                exc.message,
+                definitive=bool(getattr(exc, "definitive", False)),
+            ) from exc
 
 
 def selection_snapshot(selection: ResolvedSelection) -> dict[str, Any]:
@@ -365,10 +377,28 @@ def selection_api_fields_from_values(
     stats: dict[str, Any] | None,
 ) -> dict[str, Any]:
     snapshot = None
+    kllm_readiness = None
     if isinstance(configuration_snapshot, dict):
         value = configuration_snapshot.get(SELECTION_SNAPSHOT_KEY)
         if isinstance(value, dict):
             snapshot = value
+        readiness = configuration_snapshot.get(KLLM_READINESS_KEY)
+        if isinstance(readiness, dict):
+            model = readiness.get("model")
+            state = readiness.get("state")
+            reason_code = readiness.get("reason_code")
+            checked_at = readiness.get("checked_at")
+            if isinstance(model, str) and isinstance(state, str):
+                kllm_readiness = {
+                    "model": model[:200],
+                    "state": state[:40],
+                    "reason_code": (
+                        str(reason_code)[:80] if reason_code is not None else "unknown"
+                    ),
+                    "checked_at": (
+                        str(checked_at)[:80] if checked_at is not None else None
+                    ),
+                }
 
     if snapshot:
         selected_provider = snapshot.get("selected_provider")
@@ -430,4 +460,5 @@ def selection_api_fields_from_values(
         "execution_started": execution_started,
         "fallback_used": fallback_used,
         "fallback_reason": fallback_reason,
+        "kllm_readiness": kllm_readiness,
     }

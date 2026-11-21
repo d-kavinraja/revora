@@ -147,11 +147,28 @@ def test_status_is_gated_when_disabled(client, monkeypatch):
     assert body["reachable"] is False
     assert body["models"] == []
     assert body["backends"] == []
-    assert body["can_manage"] is False
+    # Ordinary users never receive a lifecycle-control capability flag.
+    assert "can_manage" not in body
 
     # Model selection and telemetry are hard-gated.
     assert client.get("/api/v1/kllm/models").status_code == 503
     assert client.get("/api/v1/kllm/telemetry").status_code == 503
+
+    # The "kLLM is off" details are user-facing: they must never leak the
+    # backend/.env path, the env var name or restart steps.
+    for path in ("/api/v1/kllm/models", "/api/v1/kllm/telemetry"):
+        detail = client.get(path).json().get("detail", "")
+        assert "KLLM_ENABLED" not in detail
+        assert "backend/.env" not in detail
+        assert "restart" not in detail
+
+
+def test_disabled_message_is_user_facing_clean():
+    """The kLLM-off 503 copy carries no developer-facing instructions."""
+    assert ks.DISABLED_MESSAGE
+    assert "KLLM_ENABLED" not in ks.DISABLED_MESSAGE
+    assert ".env" not in ks.DISABLED_MESSAGE
+    assert "restart" not in ks.DISABLED_MESSAGE
 
 
 def test_activity_is_gated_when_disabled(client, monkeypatch):
@@ -161,22 +178,34 @@ def test_activity_is_gated_when_disabled(client, monkeypatch):
     assert response.json() == {"enabled": False, "items": []}
 
 
-def test_admin_routes_reject_non_admin(client):
-    assert client.post("/api/v1/kllm/admin/refresh").status_code == 403
+def test_user_namespace_has_no_lifecycle_routes(client):
+    """Lifecycle mutations live only in the isolated admin namespace.
+
+    The old `/api/v1/kllm/admin/*` surface is removed: the user namespace
+    fails closed with 404 instead of doing an in-handler role check.
+    """
+    assert client.post("/api/v1/kllm/admin/refresh").status_code == 404
     assert (
         client.post(
             "/api/v1/kllm/admin/models/load",
             json={"model": "qwen3.8-27b", "confirm": True},
         ).status_code
-        == 403
+        == 404
     )
-    assert client.post("/api/v1/kllm/admin/keep", json={"size": 0}).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/kllm/admin/models/unload",
+            json={"model": "qwen3.8-27b", "confirm": True},
+        ).status_code
+        == 404
+    )
+    assert client.post("/api/v1/kllm/admin/keep", json={"size": 0}).status_code == 404
     assert (
         client.post(
             f"/api/v1/kllm/admin/backends/{uuid.uuid4()}/stop",
             json={"confirm": True},
         ).status_code
-        == 403
+        == 404
     )
 
 
@@ -195,14 +224,8 @@ async def _make_admin(test_db) -> User:
 
 
 async def test_admin_load_requires_confirmation_and_is_audited(
-    client, test_db, monkeypatch
+    admin_client, test_db, monkeypatch
 ):
-    admin_user = await _make_admin(test_db)
-
-    async def override_current_user():
-        return admin_user
-
-    app.dependency_overrides[get_current_user] = override_current_user
     monkeypatch.setattr(config_module.settings, "KLLM_ENABLED", True, raising=False)
 
     async def fake_load(db, model, *, confirm=False):
@@ -212,14 +235,14 @@ async def test_admin_load_requires_confirmation_and_is_audited(
 
     monkeypatch.setattr(ks, "load_model", fake_load)
 
-    denied = client.post(
-        "/api/v1/kllm/admin/models/load",
+    denied = admin_client.post(
+        "/api/v1/admin/kllm/models/load",
         json={"model": "qwen3.8-27b", "confirm": False},
     )
     assert denied.status_code == 409
 
-    ok = client.post(
-        "/api/v1/kllm/admin/models/load",
+    ok = admin_client.post(
+        "/api/v1/admin/kllm/models/load",
         json={"model": "qwen3.8-27b", "confirm": True},
     )
     assert ok.status_code == 200
@@ -310,8 +333,9 @@ async def test_build_available_models_returns_only_ready(monkeypatch):
     assert rows[0]["provider"] == "kllm"
 
 
-def test_no_per_model_unload_route_exists(client):
-    # kLLM's /chat-ui/models/unload is a no-op; Revora must not expose it.
+def test_no_per_model_unload_route_in_user_namespace(client):
+    # kLLM's /chat-ui/models/unload is a no-op; Revora must not expose it in
+    # the user namespace. The admin namespace exposes a composed unload.
     response = client.post(
         "/api/v1/kllm/admin/models/unload", json={"model": "qwen3.8-27b"}
     )

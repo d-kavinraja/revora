@@ -31,6 +31,7 @@ FLAG_KEYS = (
     "usage",
     "analytics",
     "guide",
+    "kllm_page",
 )
 
 

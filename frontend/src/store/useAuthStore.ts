@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { endBrowserPresence, getBrowserSessionId } from '@/lib/kllm-presence';
 
 export interface User {
   id: string;
@@ -9,6 +10,7 @@ export interface User {
   image?: string;
   /** GitHub login handle from OAuth (non-secret identity field). */
   github_username?: string;
+  onboarding_completed?: boolean;
 }
 
 /**
@@ -24,6 +26,7 @@ export interface RawUserProfile {
   image?: string | null;
   avatar_url?: string | null;
   github_username?: string | null;
+  onboarding_completed?: boolean | null;
 }
 
 /**
@@ -61,6 +64,7 @@ export function normalizeUserProfile(raw: RawUserProfile): User {
     role: raw.role,
     image: pickAvatarUrl(raw.avatar_url, raw.image),
     github_username: raw.github_username ?? undefined,
+    onboarding_completed: Boolean(raw.onboarding_completed ?? false),
   };
 }
 
@@ -78,6 +82,7 @@ interface AuthState {
   restoreReason: null | 'unauthorized' | 'unreachable' | 'disabled';
   setAuth: (token: string, user: User) => void;
   markSessionChecked: () => void;
+  markOnboardingComplete: () => void;
   logout: (opts?: { revoke?: boolean }) => Promise<void>;
 }
 
@@ -96,6 +101,12 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, user) =>
         set({ token, user: normalizeUserProfile(user), isAuthenticated: true }),
       markSessionChecked: () => set({ sessionChecked: true }),
+      markOnboardingComplete: () =>
+        set((state) => ({
+          user: state.user
+            ? { ...state.user, onboarding_completed: true }
+            : state.user,
+        })),
       logout: (opts) => {
         if (logoutInFlight) return logoutInFlight;
         // revoke=false clears local state + the frontend cookie WITHOUT
@@ -104,6 +115,10 @@ export const useAuthStore = create<AuthState>()(
         // Only an explicit user sign-out passes revoke (the default).
         const revoke = opts?.revoke !== false;
         logoutInFlight = (async () => {
+          // End advisory kLLM presence before revoking the JWT. Logout is
+          // account-wide on the server, so the backend also removes every
+          // presence row for this user.
+          await endBrowserPresence(getBrowserSessionId(), null);
           // Server-side revocation (bumps token_version) + cookie deletion,
           // both routed through the same-origin BFF so the browser actually
           // processes the Set-Cookie (first-party, SameSite=Lax in dev).

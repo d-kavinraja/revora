@@ -3,10 +3,15 @@ import logging
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.db.session import AsyncSessionLocal
+from sqlalchemy import select as sa_select
+from sqlalchemy.exc import IntegrityError
+
+from app.db.session import AsyncSessionLocal, get_sqlstate
+from app.models.review import Review
 from app.models.verification import (
     FalsePositiveReportModel,
     HallucinationReportModel,
@@ -29,6 +34,54 @@ VERIFICATION_PERSIST_FAILURES = 0
 # when all DB persistence attempts fail.  They are NOT durable (ephemeral on
 # Render free tier) and are never exposed via any API endpoint.
 PENDING_VERIFICATION_DIR = Path(os.environ.get("TMPDIR", "/tmp")) / "revora_pending_verification"
+
+# Sub-directory used for verification files that can never be persisted
+# (malformed JSON, missing parent Review, deterministic integrity errors).
+# The startup glob only matches *.json in the parent directory, so quarantined
+# files are never replayed as normal pending work.
+QUARANTINED_VERIFICATION_DIR_NAME = "errors"
+
+# SQLSTATE classes that are deterministic and can never be fixed by retrying:
+# 23xxx = integrity constraint violation (23503 = FK, 23502 = not null,
+# 23505 = unique), 22xxx = data exception (invalid value/type/truncation).
+_PERMANENT_SQLSTATE_PREFIXES = ("23", "22")
+
+
+class MissingReviewParentError(Exception):
+    """Permanent failure: the parent Review row for verification is absent.
+
+    The existence check that raises this is advisory only; the database FK on
+    verification_metrics.review_id remains the final integrity guarantee.
+    """
+
+
+@dataclass(frozen=True)
+class PersistenceOutcome:
+    """Result of a bounded verification-persistence attempt."""
+
+    persisted: bool
+    permanent: bool = False
+    missing_review: bool = False
+    attempts: int = 0
+    error: BaseException | None = None
+
+
+def _record_persistence_failure() -> int:
+    global VERIFICATION_PERSIST_FAILURES
+    VERIFICATION_PERSIST_FAILURES += 1
+    return VERIFICATION_PERSIST_FAILURES
+
+
+def _is_permanent_persistence_error(error: BaseException) -> bool:
+    """Classify deterministic persistence failures; everything else stays retryable.
+
+    Unknown exceptions deliberately retain the historical bounded-retry
+    behavior so a novel transient failure is not silently downgraded.
+    """
+    if isinstance(error, (MissingReviewParentError, IntegrityError)):
+        return True
+    state = get_sqlstate(error)
+    return bool(state and state.startswith(_PERMANENT_SQLSTATE_PREFIXES))
 
 
 class VerificationEngine:
@@ -106,12 +159,25 @@ class VerificationEngine:
             parsed_uuid = (
                 uuid.UUID(review_id) if isinstance(review_id, str) else review_id
             )
-            persisted = await self._persist_with_retry(
+            outcome = await self._persist_with_retry_detailed(
                 parsed_uuid, verified_raw, metrics, execution_id=execution_id
             )
-            if persisted:
+            if outcome.persisted:
                 await verification_cache.set_verification_result(
                     str(review_id), result.to_dict()
+                )
+            elif outcome.permanent:
+                # A deterministic integrity error (e.g. a missing Review parent)
+                # can never be fixed by replaying the same payload. Writing a
+                # pending file would create a poison pill that fails on every
+                # subsequent startup, so deliberately do not write one.
+                logger.error(
+                    "Verification results for review %s were NOT persisted "
+                    "because of a permanent error (%s attempt(s)); no replayable "
+                    "pending file was written. Findings remain available in the "
+                    "HTTP response and the GitHub PR review.",
+                    review_id,
+                    outcome.attempts,
                 )
             else:
                 # Best-effort: write to a local pending file.  This is NOT
@@ -141,20 +207,65 @@ class VerificationEngine:
         max_attempts: int = 3,
         execution_id: uuid.UUID | None = None,
     ) -> bool:
+        """Boolean compatibility wrapper around the detailed persistence path."""
+        outcome = await self._persist_with_retry_detailed(
+            review_id,
+            verified_findings,
+            metrics,
+            max_attempts=max_attempts,
+            execution_id=execution_id,
+        )
+        return outcome.persisted
+
+    async def _persist_with_retry_detailed(
+        self,
+        review_id: uuid.UUID,
+        verified_findings: list[dict[str, Any]],
+        metrics: dict[str, Any],
+        max_attempts: int = 3,
+        execution_id: uuid.UUID | None = None,
+    ) -> PersistenceOutcome:
         """Bounded retries with exponential backoff for verification persistence.
 
-        The commit inside ``_persist_to_db`` is atomic, so a failed attempt
-        leaves no rows behind and a retry cannot create duplicates.
+        Only errors classified as transient are retried. Deterministic database
+        integrity errors (foreign-key, not-null, unique, invalid data) and a
+        missing parent Review fail immediately: retrying an identical INSERT
+        can never succeed, and replaying it as a pending file creates a poison
+        pill. The commit inside ``_persist_to_db`` is atomic, so a failed
+        attempt leaves no rows behind and a transient retry cannot duplicate.
         """
         import asyncio
 
+        attempts = 0
         for attempt in range(1, max_attempts + 1):
+            attempts = attempt
             try:
                 await self._persist_to_db(
                     review_id, verified_findings, metrics, execution_id=execution_id
                 )
-                return True
+                return PersistenceOutcome(persisted=True, attempts=attempts)
             except Exception as error:
+                if _is_permanent_persistence_error(error):
+                    total = _record_persistence_failure()
+                    missing = isinstance(error, MissingReviewParentError)
+                    logger.error(
+                        "Verification persistence failed permanently for review %s "
+                        "(attempt %d/%d, not retried; missing_parent=%s); "
+                        "total persistence failures since startup: %d; %s",
+                        review_id,
+                        attempt,
+                        max_attempts,
+                        missing,
+                        total,
+                        sanitize_error_message(error),
+                    )
+                    return PersistenceOutcome(
+                        persisted=False,
+                        permanent=True,
+                        missing_review=missing,
+                        attempts=attempts,
+                        error=error,
+                    )
                 logger.warning(
                     "Verification persistence failed (attempt %d/%d) for review %s: %s",
                     attempt,
@@ -164,16 +275,15 @@ class VerificationEngine:
                 )
                 if attempt < max_attempts:
                     await asyncio.sleep(min(2 ** (attempt - 1) * 0.5, 4.0))
-        global VERIFICATION_PERSIST_FAILURES
-        VERIFICATION_PERSIST_FAILURES += 1
+        total = _record_persistence_failure()
         logger.error(
             "Verification persistence exhausted after %d attempts for review %s; "
             "total persistence failures since startup: %d",
             max_attempts,
             review_id,
-            VERIFICATION_PERSIST_FAILURES,
+            total,
         )
-        return False
+        return PersistenceOutcome(persisted=False, attempts=attempts)
 
     def _pending_file_path(self, review_id: uuid.UUID) -> Path:
         return PENDING_VERIFICATION_DIR / f"{review_id}.json"
@@ -224,10 +334,47 @@ class VerificationEngine:
                 sanitize_error_message(write_error),
             )
 
+    def _quarantined_dir(self) -> Path:
+        return PENDING_VERIFICATION_DIR / QUARANTINED_VERIFICATION_DIR_NAME
+
+    def _quarantine_pending_file(self, path: Path, reason: str) -> Path | None:
+        """Move an unrecoverable pending file out of the retry queue.
+
+        Data is preserved, never silently deleted. A name collision is resolved
+        deterministically so an unrelated quarantined file is never overwritten.
+        """
+        quarantine_dir = self._quarantined_dir()
+        try:
+            quarantine_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            target = quarantine_dir / path.name
+            if target.exists():
+                index = 1
+                while (quarantine_dir / f"{path.stem}.{index}{path.suffix}").exists():
+                    index += 1
+                target = quarantine_dir / f"{path.stem}.{index}{path.suffix}"
+            os.replace(path, target)
+            logger.warning(
+                "Quarantined unrecoverable pending verification file %s as %s: %s",
+                path.name,
+                target.name,
+                sanitize_error_message(reason),
+            )
+            return target
+        except Exception as quarantine_error:
+            logger.error(
+                "Failed to quarantine pending verification file %s: %s",
+                path.name,
+                sanitize_error_message(quarantine_error),
+            )
+            return None
+
     async def recover_pending_files(self) -> dict[str, int]:
         """Best-effort startup recovery: attempt to flush pending files to DB.
 
-        Returns counts of recovered and failed files.  Never raises.
+        Transient failures keep the file for the next startup. Permanently
+        unrecoverable files (missing parent, deterministic integrity error,
+        malformed payload) are moved to the quarantine directory so they are
+        never replayed. Returns counts of recovered and failed files. Never raises.
         """
         recovered = 0
         failed = 0
@@ -238,17 +385,24 @@ class VerificationEngine:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 review_id = uuid.UUID(data["review_id"])
-                # Idempotency: check if already persisted
+                # Idempotency. Verification with zero findings persists ONLY a
+                # metrics row, so checking verification_results alone would
+                # replay an already-successful file forever.
                 async with AsyncSessionLocal() as db:
-                    from sqlalchemy import select as sa_select
-                    from app.models.verification import VerificationResultModel
-
-                    existing = await db.execute(
+                    existing_result = await db.execute(
                         sa_select(VerificationResultModel.id).where(
                             VerificationResultModel.review_id == review_id
                         ).limit(1)
                     )
-                    if existing.scalars().first() is not None:
+                    already_persisted = existing_result.scalars().first() is not None
+                    if not already_persisted:
+                        existing_metric = await db.execute(
+                            sa_select(VerificationMetricModel.id).where(
+                                VerificationMetricModel.review_id == review_id
+                            ).limit(1)
+                        )
+                        already_persisted = existing_metric.scalars().first() is not None
+                    if already_persisted:
                         path.unlink(missing_ok=True)
                         recovered += 1
                         continue
@@ -260,32 +414,39 @@ class VerificationEngine:
                         execution_id = uuid.UUID(str(stored_exec_id))
                     except ValueError:
                         execution_id = None
-                persisted = await self._persist_with_retry(
+                outcome = await self._persist_with_retry_detailed(
                     review_id,
                     data.get("verified_findings", []),
                     data.get("metrics", {}),
                     execution_id=execution_id,
                 )
-                if persisted:
+                if outcome.persisted:
                     path.unlink(missing_ok=True)
                     recovered += 1
                     logger.info(
                         "Recovered pending verification for review %s", review_id
                     )
+                elif outcome.permanent:
+                    self._quarantine_pending_file(
+                        path,
+                        f"permanent persistence failure for review {review_id}"
+                        + (
+                            " (parent Review missing)"
+                            if outcome.missing_review
+                            else ""
+                        ),
+                    )
+                    failed += 1
                 else:
+                    # Genuinely transient: keep the retryable pending file.
                     failed += 1
             except (json.JSONDecodeError, KeyError, ValueError) as parse_error:
                 logger.warning(
-                    "Malformed pending verification file %s: %s; moving to error dir",
+                    "Malformed pending verification file %s: %s; quarantining",
                     path.name,
                     sanitize_error_message(parse_error),
                 )
-                error_dir = PENDING_VERIFICATION_DIR / "errors"
-                error_dir.mkdir(mode=0o700, exist_ok=True)
-                try:
-                    os.replace(path, error_dir / path.name)
-                except Exception:
-                    pass
+                self._quarantine_pending_file(path, "malformed payload")
                 failed += 1
             except Exception as error:
                 logger.error(
@@ -304,6 +465,19 @@ class VerificationEngine:
         execution_id: uuid.UUID | None = None,
     ):
         async with AsyncSessionLocal() as db:
+            # Advisory parent check. This is NOT a substitute for the database
+            # FK — a concurrent delete can still happen after this read — but
+            # it turns the common stale-ID case into a clear, permanent,
+            # non-retryable failure instead of an opaque FK violation.
+            parent = await db.execute(
+                sa_select(Review.id).where(Review.id == review_id).limit(1)
+            )
+            if parent.scalars().first() is None:
+                raise MissingReviewParentError(
+                    f"Review {review_id} is not present; verification metrics "
+                    "require an existing parent Review row."
+                )
+
             # Save metrics
             db_metric = VerificationMetricModel(
                 review_id=review_id,

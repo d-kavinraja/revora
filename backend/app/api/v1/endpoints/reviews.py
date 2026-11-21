@@ -433,12 +433,19 @@ async def cancel_review(
     if review.status not in ["pending", "running", "queued"]:
         return {"status": "success", "message": "Review already in terminal state"}
 
-    # 1. Mark the Review as cancelled in our DB
-    await db.execute(
+    # 1. Atomically mark the Review as cancelled. The status predicate
+    # prevents a stale read from cancelling a review that has already reached
+    # a terminal state in another transaction.
+    cancel_result = await db.execute(
         update(Review)
-        .where(Review.id == rid)
+        .where(
+            Review.id == rid,
+            Review.status.in_(["pending", "running", "queued"]),
+        )
         .values(status="cancelled")
     )
+    if cancel_result.rowcount == 0:
+        return {"status": "success", "message": "Review already in terminal state"}
     from app.services.review_execution_service import mark_execution_final
 
     await mark_execution_final(db, rid, "cancelled", error_message="Cancelled by user")

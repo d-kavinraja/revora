@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -29,10 +30,13 @@ from app.db.session import get_db
 from app.middleware.rate_limit import limiter
 from app.models.user import User as UserModel
 from app.schemas.user import User, UserCreate
+from app.services import user_presence
+from app.services.kllm_autoload import schedule_login_preload
 from app.services.sync_engine import _login_reconciliation
 from app.services.user_service import user_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # OAuth login-CSRF binding. The `oauth_state` cookie is HttpOnly,
 # short-lived (10 min), random per attempt, and single-use: it is cleared
@@ -117,7 +121,7 @@ def _github_error(
     try:
         for staged in response.headers.getlist("set-cookie"):
             error_resp.headers.append("set-cookie", staged)
-    except Exception:  # noqa: S110
+    except Exception:
         pass
     return error_resp
 
@@ -127,6 +131,7 @@ def _github_error(
 async def login(
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
@@ -164,6 +169,10 @@ async def login(
     # Backend-written HttpOnly session cookie (page JS can never read it).
     _set_session_cookie(response, access_token)
 
+    # Optional, best-effort kLLM preload. The admin policy defaults to
+    # disabled and this task never blocks or fails the login.
+    schedule_login_preload(background_tasks, user.id)
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -174,6 +183,7 @@ async def login(
             "role": user.role,
             "image": user.avatar_url,
             "github_username": user.github_username,
+            "onboarding_completed": bool(getattr(user, "onboarding_completed", False)),
         },
     }
 
@@ -398,6 +408,9 @@ async def github_login(
 
     # 6. Trigger lightweight background reconciliation (non-blocking)
     if background_tasks is not None:
+        # Optional, best-effort kLLM preload registered before reconciliation;
+        # the admin policy defaults to disabled and failures are swallowed.
+        schedule_login_preload(background_tasks, user.id)
         background_tasks.add_task(_login_reconciliation, user.id)
 
     return {
@@ -410,6 +423,8 @@ async def github_login(
             "role": user.role,
             "image": user.avatar_url,
             "github_username": user.github_username,
+            "onboarding_completed": bool(getattr(user, "onboarding_completed", False)),
+
         },
     }
 
@@ -465,6 +480,29 @@ async def logout(
     current_tv = int(getattr(current_user, "token_version", 0) or 0)
     current_user.token_version = current_tv + 1
     db.add(current_user)
+    # token_version revokes every login, so every browser presence row for this
+    # account ends at the same time. Presence is advisory only; this is not an
+    # alternative authentication path.
+    try:
+        await user_presence.delete_all_for_user(db, current_user.id)
+    except Exception:
+        # Presence cleanup must never prevent a user from signing out.
+        logger.warning("kLLM presence cleanup failed during logout", exc_info=True)
     await db.commit()
     _clear_session_cookie(response)
     return {"status": "logged_out"}
+
+@router.post("/onboarding/complete", response_model=dict)
+async def complete_onboarding(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist onboarding tour completion/dismissal for the current user."""
+    current_user.onboarding_completed = True
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    return {
+        "status": "completed",
+        "onboarding_completed": bool(current_user.onboarding_completed),
+    }

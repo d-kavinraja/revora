@@ -4,7 +4,7 @@ import time
 import uuid
 
 from app.core.config import settings
-from app.ai.llm import llm_service
+from app.ai.llm import ManagedModelError, llm_service
 from app.orchestrator.models import (
     CONFIG_SOURCE_REPO,
     CONFIG_SOURCE_ROUTING,
@@ -122,6 +122,9 @@ class LLMOrchestrator:
 
         is_explicit = config_source == CONFIG_SOURCE_REPO
         last_error: Exception | None = None
+        # Preserve the first authoritative managed-model error across generic
+        # fallback failures; a later generic exception must not erase it.
+        authoritative_error: ManagedModelError | None = None
 
         for provider, model, key_id, is_fallback in chain:
             if cancel_check is not None:
@@ -169,6 +172,7 @@ class LLMOrchestrator:
                                 messages=prompt.get_user_messages(),
                                 model=model,
                                 api_key_id=key_id,
+                                cancel_check=cancel_check,
                             )
                         )
 
@@ -230,6 +234,8 @@ class LLMOrchestrator:
 
                 except Exception as e:
                     last_error = e
+                    if isinstance(e, ManagedModelError) and authoritative_error is None:
+                        authoritative_error = e
                     error_str = str(e).lower()
                     logger.warning(
                         f"Provider {provider} attempt {attempt + 1}/{max_attempts} "
@@ -253,6 +259,10 @@ class LLMOrchestrator:
                     # Exhausted this route — try the next fallback.
                     break
 
+        if authoritative_error is not None:
+            raise authoritative_error
+        if isinstance(last_error, ManagedModelError):
+            raise last_error
         raise RuntimeError(
             str(last_error)
             if last_error

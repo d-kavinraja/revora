@@ -64,12 +64,16 @@ async def resolve_provider_config(
                 db_session, provider
             )
             if provider_row is not None and provider_row.is_managed:
-                from app.services.kllm_service import KllmError, ensure_model_ready
+                from app.services.kllm_service import KllmError, ensure_model_selectable
 
                 try:
-                    await ensure_model_ready(db_session, model)
+                    await ensure_model_selectable(db_session, model)
                 except KllmError as exc:
-                    raise ProviderUnavailableError(provider, exc.message) from exc
+                    raise ProviderUnavailableError(
+                        provider,
+                        exc.message,
+                        definitive=bool(getattr(exc, "definitive", False)),
+                    ) from exc
                 config_source = CONFIG_SOURCE_REPO
                 logger.info(f"MODE 1 (managed repo config): {provider}/{model}")
                 return provider, model, None, config_source
@@ -138,13 +142,17 @@ async def resolve_provider_config(
                 if provider_row is not None and provider_row.is_managed:
                     from app.services.kllm_service import (
                         KllmError,
-                        ensure_model_ready,
+                        ensure_model_selectable,
                     )
 
                     try:
-                        await ensure_model_ready(db_session, model)
+                        await ensure_model_selectable(db_session, model)
                     except KllmError as exc:
-                        raise ProviderUnavailableError(provider, exc.message) from exc
+                        raise ProviderUnavailableError(
+                            provider,
+                            exc.message,
+                            definitive=bool(getattr(exc, "definitive", False)),
+                        ) from exc
                     config_source = CONFIG_SOURCE_ROUTING
                     logger.info(f"MODE 2 (managed routing): {provider}/{model}")
                     return provider, model, None, config_source

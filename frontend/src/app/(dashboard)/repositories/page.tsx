@@ -426,6 +426,7 @@ function ConfigModal({
                     let badge = '';
                     if (m.admin_disabled) badge = ' [Disabled]';
                     else if (!m.accessible) badge = ' [Unavailable]';
+                    else if (m.loads_on_demand) badge = ' [Loads on demand]';
                     else if (idx < 5) badge = ' [Recommended]';
                     else if (m.deprecated) badge = ' [Deprecated]';
                     else if (m.preview || m.experimental) badge = ' [Preview]';
@@ -443,9 +444,9 @@ function ConfigModal({
 
               {isManagedProvider && models.length === 0 && (
                 <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500 leading-relaxed">
-                  No kLLM models are loaded right now. An administrator can load one
-                  from Settings &rarr; kLLM, then reopen this dialog. The existing
-                  mapping is kept until you change it.
+                  No kLLM models are available right now. An administrator can
+                  load one or approve it for on-demand loading from the admin
+                  console. The existing mapping is kept until you change it.
                 </div>
               )}
 

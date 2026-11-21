@@ -1,5 +1,15 @@
 import axios from 'axios';
 import { useAuthStore, normalizeUserProfile } from '@/store/useAuthStore';
+import { API_BASE } from '@/lib/api-transport';
+import {
+  classifyUserSessionFailure,
+  createSingleFlight,
+} from '@/lib/auth-session';
+
+// Re-exported for existing consumers (events.ts, SSE/media URLs). The value
+// now comes from the single shared transport config, which next.config.ts
+// also reads for its /api/v1 rewrite — the two can no longer disagree.
+export { API_BASE };
 
 // Marks the session-restore request so the 401 interceptor skips it —
 // restore failures belong to the dashboard guard (which routes
@@ -11,17 +21,6 @@ declare module 'axios' {
   }
 }
 
-// Same-origin proxy (P0-A): when NEXT_PUBLIC_USE_API_PROXY is 'true', every
-// apiClient call, health ping, SSE stream, and media URL goes to /api/v1 on
-// the frontend host — carrying the HttpOnly session cookie — and the Next
-// rewrite (next.config.ts, BACKEND_ORIGIN-gated) forwards to Render.
-// Disabled by default so local dev keeps its absolute localhost base,
-// where the same-host cookie already flows without a proxy.
-const USE_API_PROXY = process.env.NEXT_PUBLIC_USE_API_PROXY === 'true';
-export const API_BASE = USE_API_PROXY
-  ? '/api/v1'
-  : process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
-
 export const apiClient = axios.create({
   baseURL: API_BASE,
   // Cookie-based session: the HttpOnly revora_auth_token cookie rides along
@@ -32,6 +31,16 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true'
   },
+});
+
+// Admin authentication is deliberately isolated from the user API client:
+// no user Bearer token or user-session response interceptor is involved. The
+// dedicated same-origin BFF relays only the opaque admin cookie.
+const adminAuthClient = axios.create({
+  baseURL: '/api/admin/auth',
+  withCredentials: true,
+  timeout: 30_000,
+  headers: { 'Content-Type': 'application/json' },
 });
 
 /** Ping the backend health endpoint. Returns true if server is alive, false if sleeping/unreachable. */
@@ -120,45 +129,63 @@ export type RestoreOutcome =
 // waking-up page, not to a polling loop here.
 const RESTORE_TIMEOUT_MS = 60_000;
 
-export async function restoreSession(): Promise<RestoreOutcome> {
+async function performSessionRestore(): Promise<RestoreOutcome> {
+  // Session confirmation goes through the same-origin BFF (/api/auth/me) so
+  // the first-party session cookie set by the exchange BFF is actually
+  // attached. A direct cross-origin call to the backend would drop it and
+  // falsely report "session could not be confirmed" even though the exchange
+  // succeeded (the bug seen after a restart / on cross-origin setups).
   try {
-    const res = await apiClient.get<{
+    const res = await fetch('/api/auth/me', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(RESTORE_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      let data: { detail?: unknown; code?: unknown } = {};
+      try {
+        data = (await res.json()) as { detail?: unknown; code?: unknown };
+      } catch {
+        data = {};
+      }
+      const reason = classifyUserSessionFailure(res.status, data);
+      useAuthStore.setState({ restoreReason: reason });
+      return { ok: false, reason };
+    }
+    const data = (await res.json()) as {
       id: string;
       email: string;
       name: string;
       role: string;
       image?: string;
-      // GET /auth/me serializes the DB field name, not `image`.
-      // normalizeUserProfile maps it so refresh keeps the avatar.
       avatar_url?: string | null;
       github_username?: string;
-    }>('/auth/me', { timeout: RESTORE_TIMEOUT_MS, __revoraRestore: true });
+      onboarding_completed?: boolean | null;
+    };
     useAuthStore.setState({
       token: null, // never reintroduce a JS-readable token
-      user: normalizeUserProfile(res.data),
+      user: normalizeUserProfile(data),
       isAuthenticated: true,
       restoreReason: null,
     });
     return { ok: true };
-  } catch (error) {
-    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-    const data = axios.isAxiosError(error) ? error.response?.data : undefined;
-    const detail = String(data?.detail ?? '');
-    const code = String(data?.code ?? '');
-    let reason: 'unauthorized' | 'unreachable' | 'disabled';
-    if (code === 'account_disabled' || detail.toLowerCase().includes('disabled') || status === 403) {
-      reason = 'disabled';
-    } else if (status === 401) {
-      reason = 'unauthorized';
-    } else {
-      reason = 'unreachable';
-    }
-    useAuthStore.setState({ restoreReason: reason });
-    return { ok: false, reason };
+  } catch {
+    // Network failure / timeout: backend unreachable. Never treat this as a
+    // permanent auth failure — the dashboard guard routes to the waking-up
+    // flow instead of signing the user out.
+    useAuthStore.setState({ restoreReason: 'unreachable' });
+    return { ok: false, reason: 'unreachable' };
   } finally {
     // Unblock auth guards: the restore attempt has settled either way.
     useAuthStore.getState().markSessionChecked();
   }
+}
+
+const restoreSessionSingleFlight = createSingleFlight(performSessionRestore);
+
+/** Share concurrent app-shell/callback confirmation attempts. */
+export function restoreSession(): Promise<RestoreOutcome> {
+  return restoreSessionSingleFlight();
 }
 
 /** Routes that require a session; mirrors proxy.ts AUTHENTICATED_ROUTE_PREFIXES. */
@@ -252,6 +279,13 @@ export interface PullRequestInfo {
   changed_files: number;
 }
 
+export interface KllmReadinessProjection {
+  model: string;
+  state: 'ready' | 'loading_model' | 'unavailable' | string;
+  reason_code: string;
+  checked_at: string | null;
+}
+
 export interface ReviewSelection {
   repository_mapping_status: 'mapped' | 'not_mapped' | 'unknown' | string;
   repository_provider: string | null;
@@ -272,6 +306,7 @@ export interface ReviewSelection {
   execution_started: boolean;
   fallback_used?: boolean;
   fallback_reason?: string | null;
+  kllm_readiness?: KllmReadinessProjection | null;
 }
 
 export interface Review extends ReviewSelection {
@@ -449,6 +484,11 @@ export interface ModelMetadata {
   supports_reasoning: boolean;
   status: string;
   validation_timestamp: string;
+  /** Managed (kLLM) models only: backend-computed readiness projection. */
+  readiness?: string;
+  reason_code?: string;
+  /** True when the model is not loaded but approved for on-demand loading. */
+  loads_on_demand?: boolean;
 }
 
 // BYOK Orchestrator types
@@ -485,14 +525,30 @@ export interface KllmModel {
   status: 'loaded' | 'loading' | 'unloaded' | 'failed' | string;
   loaded: boolean;
   ready: boolean;
+  readiness: 'ready' | 'loading' | 'unloaded' | 'failed' | 'unavailable' | 'stale' | string;
+  reason_code: string;
   context_window: number | null;
   vision: boolean;
   tags: string[];
   backend_count: number;
 }
 
+export interface KllmModelOption {
+  model_name: string;
+  canonical_model_name: string;
+  provider: string;
+  readiness: string;
+  reason_code: string;
+  loads_on_demand: boolean;
+  context_window: number | null;
+  supports_vision: boolean;
+  status: string;
+  validation_timestamp: string;
+}
+
 export interface KllmBackend {
-  id: string;
+  /** Opaque control handles are exposed only in the admin namespace. */
+  id: string | null;
   model: string | null;
   healthy: boolean;
   state: 'running' | 'draining' | 'retiring' | 'unhealthy' | string;
@@ -519,7 +575,8 @@ export interface KllmBackend {
 }
 
 export interface KllmPending {
-  id: string;
+  /** Opaque control handles are exposed only in the admin namespace. */
+  id: string | null;
   model: string | null;
   phase: string;
   failed: boolean;
@@ -558,7 +615,93 @@ export interface KllmStatus {
   traffic: { rpm: number | null; ttft_p50: number | null };
   supervisor: boolean;
   autoscale: boolean;
-  can_manage: boolean;
+}
+
+export interface KllmAutoloadGroup {
+  enabled: boolean;
+  allowed_models: string[];
+}
+
+export interface KllmAutoloadPolicy {
+  review_autoload: KllmAutoloadGroup;
+  login_preload: KllmAutoloadGroup;
+  active_session_autoload: KllmAutoloadGroup;
+  load_timeout_seconds: number;
+  max_concurrent_loads: number;
+  login_preload_cooldown_seconds: number;
+  changed_at: string | null;
+  changed_by: string | null;
+  version: number;
+}
+
+export interface AdminKllmBackend extends KllmBackend {
+  id: string;
+}
+
+export interface AdminKllmPending extends KllmPending {
+  id: string;
+}
+
+export interface KllmManualUnloadBlock {
+  model: string;
+  blocked_at: string;
+  blocked_by: string;
+  reason: string;
+}
+
+export interface AdminKllmStatus
+  extends Omit<KllmStatus, 'backends' | 'pending'> {
+  backends: AdminKllmBackend[];
+  pending: AdminKllmPending[];
+  autoload: KllmAutoloadPolicy;
+  manual_unload_blocks: KllmManualUnloadBlock[];
+  active_sessions: number;
+  always_on_size: number | null;
+  always_on_desired_pool: number | null;
+  always_on_min_backends: number | null;
+  always_on_verified: boolean;
+  default_model: string | null;
+}
+
+export interface KllmSessionRead {
+  active: boolean;
+  last_seen_at: string | null;
+  expires_at: string | null;
+}
+
+export interface KllmSessionReconciliation {
+  model: string;
+  state: string;
+  reason_code: string;
+  status?: string | null;
+}
+
+export interface KllmSessionHeartbeatResponse {
+  session: KllmSessionRead;
+  models: KllmSessionReconciliation[];
+}
+
+export interface KllmActionResult {
+  status: string;
+  model?: string | null;
+  automatic_loading_blocked?: boolean;
+  always_on_disabled?: boolean;
+  manual_block_cleared?: boolean;
+  models_affected?: string[];
+  size?: number | null;
+  desired_pool_size?: number | null;
+  effective_min_backends?: number | null;
+  effective_size?: number | null;
+  effectively_disabled?: boolean | null;
+  verified?: boolean;
+  stopped?: number | null;
+  pending_stopped?: number | null;
+  targets?: number | null;
+  remaining_backends?: number | null;
+  remaining_pending?: number | null;
+  sessions_affected?: number | null;
+  inflight_affected?: number | null;
+  errors?: number | null;
 }
 
 export interface KllmTelemetry {
@@ -576,7 +719,7 @@ export interface KllmTelemetry {
     temp: number | null;
   }>;
   backends: Array<{
-    id: string;
+    id: string | null;
     model: string | null;
     gpu_used_mib: number | null;
     gpu_total_mib: number | null;
@@ -885,6 +1028,10 @@ export const api = {
   updateRepositoryConfig: (id: string, config: { assigned_provider?: string; assigned_model?: string; assigned_key_id?: string; reviews_enabled?: boolean; fallback_enabled?: boolean }) =>
     apiClient.patch<Repository>(`/repositories/${id}/config`, config).then((r) => r.data),
   getAuthConfig: () => apiClient.get<{ github_client_id: string }>('/auth/config').then((r) => r.data),
+  completeOnboarding: () =>
+    apiClient
+      .post<{ status: string; onboarding_completed: boolean }>('/auth/onboarding/complete', {})
+      .then((r) => r.data),
 
   // OAuth login-CSRF state (single-use; verified at POST /auth/github)
   startOAuthState: () => apiClient.get<{ state: string }>('/auth/oauth/start').then((r) => r.data),
@@ -921,15 +1068,43 @@ export const api = {
     apiClient.get<DiscoveredModel[]>(`/providers/${slug}/models`).then((r) => r.data),
 
   // Managed local kLLM (server-owned; proxied through the Revora backend)
-  getKllmStatus: (refresh = false, signal?: AbortSignal) =>
+  getKllmStatus: (signal?: AbortSignal) =>
     apiClient
-      .get<KllmStatus>('/kllm/status', {
-        params: refresh ? { refresh: true } : undefined,
+      .get<KllmStatus>('/kllm/status', { signal })
+      .then((r) => r.data),
+  sessionHeartbeat: (
+    clientSessionId: string,
+    active = true,
+    signal?: AbortSignal,
+  ) =>
+    apiClient
+      .post<KllmSessionHeartbeatResponse>(
+        '/kllm/session/heartbeat',
+        {
+          client_session_id: clientSessionId,
+          active,
+        },
+        { signal },
+      )
+      .then((r) => r.data),
+  endKllmSession: (clientSessionId: string) =>
+    apiClient
+      .post<KllmSessionRead>('/kllm/session/end', {
+        client_session_id: clientSessionId,
+        active: false,
+      })
+      .then((r) => r.data),
+  getKllmSessionStatus: (clientSessionId: string, signal?: AbortSignal) =>
+    apiClient
+      .get<KllmSessionRead>('/kllm/session', {
+        params: { client_session_id: clientSessionId },
         signal,
       })
       .then((r) => r.data),
   getKllmReadyModels: () =>
     apiClient.get<KllmModel[]>('/kllm/models').then((r) => r.data),
+  getKllmModelOptions: () =>
+    apiClient.get<KllmModelOption[]>('/kllm/models/options').then((r) => r.data),
   getKllmTelemetry: (signal?: AbortSignal) =>
     apiClient.get<KllmTelemetry>('/kllm/telemetry', { signal }).then((r) => r.data),
   getKllmActivity: (limit = 20, signal?: AbortSignal) =>
@@ -938,27 +1113,6 @@ export const api = {
         params: { limit },
         signal,
       })
-      .then((r) => r.data),
-  kllmRefresh: () => apiClient.post<KllmStatus>('/kllm/admin/refresh').then((r) => r.data),
-  kllmLoadModel: (model: string, confirm: boolean) =>
-    apiClient
-      .post<{ status: string; model?: string }>('/kllm/admin/models/load', { model, confirm })
-      .then((r) => r.data),
-  kllmStopBackend: (id: string, confirm: boolean) =>
-    apiClient
-      .post<{ status: string; models_affected?: string[] }>(`/kllm/admin/backends/${id}/stop`, { confirm })
-      .then((r) => r.data),
-  kllmRotateBackend: (id: string, confirm: boolean) =>
-    apiClient
-      .post<{ status: string; model?: string }>(`/kllm/admin/backends/${id}/rotate`, { confirm })
-      .then((r) => r.data),
-  kllmPinBackend: (id: string, pinned: boolean) =>
-    apiClient
-      .post<{ status: string }>(`/kllm/admin/backends/${id}/pin`, { pinned })
-      .then((r) => r.data),
-  kllmSetKeep: (size: number, confirm: boolean) =>
-    apiClient
-      .post<{ status: string; size?: number }>('/kllm/admin/keep', { size, confirm })
       .then((r) => r.data),
 
   // Usage
@@ -1689,11 +1843,11 @@ export interface AdminReviewListParams {
 
 export const adminApi = {
   login: (data: { username: string; password: string }) =>
-    apiClient.post<AdminSessionInfo>('/admin/auth/login', data).then((r) => r.data),
+    adminAuthClient.post<AdminSessionInfo>('login', data).then((r) => r.data),
   session: () =>
-    apiClient.get<AdminSessionInfo>('/admin/auth/session').then((r) => r.data),
+    adminAuthClient.get<AdminSessionInfo>('session').then((r) => r.data),
   logout: () =>
-    apiClient.post<{ status: string }>('/admin/auth/logout').then((r) => r.data),
+    adminAuthClient.post<{ status: string }>('logout').then((r) => r.data),
 
   // Phase 2 — read-only analytics
   overview: (params?: { period?: string; start?: string; end?: string }) =>
@@ -1782,6 +1936,66 @@ export const adminApi = {
   }) =>
     apiClient
       .get<AdminAuditListResponse>('/admin/audit', { params })
+      .then((r) => r.data),
+
+  // kLLM lifecycle controls (admin namespace only)
+  kllm: (params?: { refresh?: boolean }) =>
+    apiClient
+      .get<AdminKllmStatus>('/admin/kllm', { params })
+      .then((r) => r.data),
+  refreshKllm: () =>
+    apiClient.post<AdminKllmStatus>('/admin/kllm/refresh').then((r) => r.data),
+  loadKllmModel: (model: string, confirm: boolean) =>
+    apiClient
+      .post<KllmActionResult>('/admin/kllm/models/load', { model, confirm })
+      .then((r) => r.data),
+  unloadKllmModel: (
+    model: string,
+    confirm: boolean,
+    force = false,
+    disableAlwaysOn = false,
+  ) =>
+    apiClient
+      .post<KllmActionResult>('/admin/kllm/models/unload', {
+        model,
+        confirm,
+        force,
+        disable_always_on: disableAlwaysOn,
+      })
+      .then((r) => r.data),
+  allowKllmAutoload: (model: string, confirm: boolean) =>
+    apiClient
+      .post<KllmActionResult>('/admin/kllm/models/allow-autoload', {
+        model,
+        confirm,
+      })
+      .then((r) => r.data),
+  stopKllmBackend: (id: string, confirm: boolean, force = false) =>
+    apiClient
+      .post<KllmActionResult>(`/admin/kllm/backends/${id}/stop`, {
+        confirm,
+        force,
+      })
+      .then((r) => r.data),
+  rotateKllmBackend: (id: string, confirm: boolean) =>
+    apiClient
+      .post<KllmActionResult>(`/admin/kllm/backends/${id}/rotate`, { confirm })
+      .then((r) => r.data),
+  pinKllmBackend: (id: string, pinned: boolean) =>
+    apiClient
+      .post<KllmActionResult>(`/admin/kllm/backends/${id}/pin`, { pinned })
+      .then((r) => r.data),
+  setKllmKeep: (size: number, confirm: boolean) =>
+    apiClient
+      .post<KllmActionResult>('/admin/kllm/keep', { size, confirm })
+      .then((r) => r.data),
+  kllmAutoload: () =>
+    apiClient
+      .get<KllmAutoloadPolicy>('/admin/kllm/autoload')
+      .then((r) => r.data),
+  updateKllmAutoload: (data: Partial<KllmAutoloadPolicy>) =>
+    apiClient
+      .put<KllmAutoloadPolicy>('/admin/kllm/autoload', data)
       .then((r) => r.data),
 };
 

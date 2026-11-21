@@ -38,6 +38,7 @@ from app.models.team import Team, TeamMember
 from app.models.timeline import ReviewTimeline
 from app.models.token_usage import CostBudget, LlmTokenUsage
 from app.models.user import User
+from app.models.user_presence import UserPresence
 from app.models.verification import (
     FalsePositiveReportModel,
     HallucinationReportModel,

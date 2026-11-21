@@ -197,8 +197,7 @@ export function OnboardingHelpButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       aria-label="Open setup tour"
       title="Setup tour"
-      className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1 text-muted-foreground shadow-md transition-[top] transition-[top_0.2s_ease-out,colors] hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-      style={{ top: 'calc(var(--revora-announcement-height, 0px) + 1rem)' }}
+      className="fixed right-4 z-50 bottom-5 md:top-[calc(var(--revora-announcement-height,0px)+1rem)] md:bottom-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1 text-muted-foreground shadow-md hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
       <HelpCircle size={18} />
     </button>

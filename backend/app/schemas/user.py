@@ -19,6 +19,7 @@ class UserUpdate(BaseModel):
     avatar_url: str | None = None
     default_provider: str | None = None
     settings: dict[str, Any] | None = None
+    onboarding_completed: bool | None = None
 
 
 class UserInDBBase(UserBase):
@@ -29,6 +30,7 @@ class UserInDBBase(UserBase):
     role: str
     is_verified: bool
     default_provider: str | None = None
+    onboarding_completed: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -90,8 +90,8 @@ async def get_models_per_provider(
     )
     grouped = dict(probe_results)
 
-    # Managed providers (kLLM) expose only live, loaded/ready models and need
-    # no user key.
+    # Managed providers (kLLM) expose ready models plus administrator-approved
+    # on-demand models and need no user key.
     from app.core.config import settings as _settings
 
     if _settings.KLLM_ENABLED:
@@ -103,7 +103,7 @@ async def get_models_per_provider(
             if provider.name in user_keys:
                 continue
             try:
-                models = await kllm_service.build_available_models(db)
+                models = await kllm_service.get_model_options(db)
             except Exception:  # noqa: BLE001 - never leak kLLM details
                 grouped[provider.name] = []
                 continue
@@ -196,11 +196,11 @@ async def update_routing_preferences(
                 if pref_model:
                     from app.services.kllm_service import (
                         KllmError,
-                        ensure_model_ready,
+                        ensure_model_selectable,
                     )
 
                     try:
-                        await ensure_model_ready(db, pref_model)
+                        await ensure_model_selectable(db, pref_model)
                     except KllmError as exc:
                         raise HTTPException(
                             status_code=400, detail=exc.message

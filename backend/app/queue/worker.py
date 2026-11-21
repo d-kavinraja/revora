@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 _worker_id = str(uuid.uuid4())[:8]
 _shutdown = False
 
+# Reasons written by the execution failure path are authoritative. A later
+# best-effort snapshot refresh must not replace them with generic state.
+_AUTHORITATIVE_KLLM_REASONS = {
+    "load_timeout",
+    "manual_unload",
+    "admin_disabled",
+    "model_failed",
+    "idle_unloaded",
+    "review_autoload_disabled",
+    "lifecycle_lock_busy",
+    "lifecycle_lock_unavailable",
+    "global_load_limit_busy",
+    "global_load_gate_unavailable",
+}
+
 # The global single-flight review advisory lock is intentionally removed:
 # review execution is now bounded by REVIEW_WORKER_CONCURRENCY per process and
 # safe across processes via atomic SELECT ... FOR UPDATE SKIP LOCKED claiming
@@ -158,6 +173,61 @@ async def _mark_review_failed(job, error_str: str):
         logger.error(f"Failed to update Review status to failed: {inner_e}")
 
 
+async def _resolve_execution_selection(db, current_execution, user_id, db_repo):
+    """Restore (or resolve) the selection for one review execution.
+
+    The selection snapshot written at enqueue time is authoritative: a later
+    repository-mapping change must not silently swap the model an already
+    queued review uses. The snapshot is only re-resolved when it is
+    unresolved, or when the saved primary became definitively unavailable
+    (then the repository's explicit fallback preference applies).
+
+    Returns the :class:`ResolvedSelection` to execute with.
+    """
+    from app.services.provider_registry import ProviderUnavailableError
+    from app.services.review_selection import (
+        apply_selection_to_execution,
+        read_selection_snapshot,
+        resolve_selection,
+        selection_from_snapshot,
+        validate_selection,
+    )
+
+    snapshot = read_selection_snapshot(current_execution)
+    if snapshot and current_execution is not None:
+        selection = selection_from_snapshot(current_execution, snapshot)
+        if selection.is_resolved:
+            try:
+                # Availability only. An unloaded (but approved) managed model
+                # stays selectable; readiness/loading is resolved inside the
+                # execution path.
+                await validate_selection(db, selection)
+            except ProviderUnavailableError as exc:
+                if not getattr(exc, "definitive", False):
+                    # Ambiguous state (kLLM unreachable/stale). Keep the
+                    # immutable enqueue-time snapshot: waiting/retrying at
+                    # inference time may still make it ready, and an explicit
+                    # fallback must never be chosen from a transient read.
+                    return selection
+                # The saved primary is definitively unusable. Re-resolve
+                # primary-first; the repository's fallback preference is
+                # applied inside resolve_selection.
+                selection = await resolve_selection(db, user_id, db_repo)
+                apply_selection_to_execution(current_execution, selection)
+                db.add(current_execution)
+        if not selection.is_resolved:
+            selection = await resolve_selection(db, user_id, db_repo)
+            apply_selection_to_execution(current_execution, selection)
+            db.add(current_execution)
+        return selection
+
+    selection = await resolve_selection(db, user_id, db_repo)
+    if current_execution is not None:
+        apply_selection_to_execution(current_execution, selection)
+        db.add(current_execution)
+    return selection
+
+
 async def process_job(job_row) -> bool:
     """Process a single review job by invoking the orchestrator pipeline.
 
@@ -251,40 +321,13 @@ async def process_job(job_row) -> bool:
             get_latest_execution,
             mark_execution_running,
         )
-        from app.services.review_selection import (
-            apply_selection_to_execution,
-            read_selection_snapshot,
-            resolve_selection,
-            selection_from_snapshot,
-            validate_selection,
-        )
-        from app.services.provider_registry import ProviderUnavailableError
 
         fallback_routes = None
         async with AsyncSessionLocal() as db:
             current_execution = await get_latest_execution(db, db_review.id)
-            snapshot = read_selection_snapshot(current_execution)
-            if snapshot and current_execution is not None:
-                selection = await resolve_selection(db, user_id, db_repo)
-                if selection.is_resolved:
-                    try:
-                        await validate_selection(db, selection)
-                    except ProviderUnavailableError:
-                        # The saved primary became unavailable after enqueue.
-                        # Re-resolve primary-first; the repository's fallback
-                        # preference is applied inside resolve_selection.
-                        selection = await resolve_selection(db, user_id, db_repo)
-                        apply_selection_to_execution(current_execution, selection)
-                        db.add(current_execution)
-                if not selection.is_resolved:
-                    selection = await resolve_selection(db, user_id, db_repo)
-                    apply_selection_to_execution(current_execution, selection)
-                    db.add(current_execution)
-            else:
-                selection = await resolve_selection(db, user_id, db_repo)
-                if current_execution is not None:
-                    apply_selection_to_execution(current_execution, selection)
-                    db.add(current_execution)
+            selection = await _resolve_execution_selection(
+                db, current_execution, user_id, db_repo
+            )
 
             # Repository fallback: when the repository opted in, prepare the
             # existing ModelRouter's ranked alternatives (excluding the primary)
@@ -404,6 +447,9 @@ async def process_job(job_row) -> bool:
         except Exception as e:
             logger.warning(f"Failed to mark execution running for {db_review.id}: {e}")
 
+        # Honest, persisted readiness state (ready vs loading_model) for the UI.
+        await _record_kllm_readiness(db_review.id, provider, model)
+
         # Log the execution mode
         mode_label = {
             "repo_config": "MODE 1 (Explicit Repo Config)",
@@ -457,6 +503,11 @@ async def process_job(job_row) -> bool:
             cancel_check=_is_cancelled,
         )
 
+        # Replace the pre-flight "loading model" projection with the final
+        # live state. A cancelled pipeline skips this refresh so the
+        # cancellation path never waits on another gateway read.
+        if not await _is_cancelled():
+            await _record_kllm_readiness(db_review.id, provider, model)
         return result.get("status") == "success"
 
     except Exception as e:
@@ -954,6 +1005,81 @@ async def _claim_next_job_locked(session) -> tuple | None:
     )
     await session.commit()
     return job_row
+
+
+async def _record_kllm_readiness(
+    review_id, provider: str | None, model: str | None
+) -> None:
+    """Record whether this execution is waiting for a managed model to load.
+
+    Job status has no "waiting for model" state. Persisting the fact in the
+    execution's existing configuration snapshot lets the UI show an honest
+    "loading model" state without inventing a parallel lifecycle engine. This
+    helper is best-effort and never fails the execution.
+    """
+    if not provider or not model or not settings.KLLM_ENABLED:
+        return
+    try:
+        from app.services import kllm_autoload, kllm_service
+        from app.services.provider_registry import provider_registry_service
+        from app.services.review_execution_service import get_latest_execution
+
+        async with AsyncSessionLocal() as db:
+            row = await provider_registry_service.get_by_identifier(db, provider)
+            if row is None or not row.is_managed:
+                return
+            execution = await get_latest_execution(db, review_id)
+            if execution is None:
+                return
+            snapshot = await kllm_service.get_snapshot(db, force=True)
+            canonical = kllm_service.canonical_model(model)
+            match = next(
+                (m for m in snapshot.models if m.key == canonical), None
+            )
+            state = "unavailable"
+            reason_code = "model_not_found"
+            if match is not None:
+                reason_code = match.reason_code
+                manually_blocked = await kllm_autoload.is_manually_blocked(
+                    db, canonical
+                )
+                if manually_blocked:
+                    state = "unavailable"
+                    reason_code = "manual_unload"
+                elif match.ready:
+                    state = "ready"
+                elif (
+                    execution.status in ("queued", "pending", "running")
+                    and match.status in ("unloaded", "loading")
+                ):
+                    policy = await kllm_autoload.get_policy(db, force=True)
+                    if match.status == "loading" or kllm_autoload.review_allows(
+                        policy, match.key
+                    ):
+                        state = "loading_model"
+            configuration = dict(execution.configuration_snapshot or {})
+            existing = configuration.get("kllm_readiness")
+            preserve_existing = (
+                isinstance(existing, dict)
+                and execution.status in ("failed", "cancelled")
+                and existing.get("reason_code") in _AUTHORITATIVE_KLLM_REASONS
+            )
+            if not preserve_existing:
+                configuration["kllm_readiness"] = {
+                    "model": canonical,
+                    "state": state,
+                    "reason_code": reason_code,
+                    "checked_at": datetime.now(UTC).isoformat(),
+                }
+            execution.configuration_snapshot = configuration
+            db.add(execution)
+            await db.commit()
+    except Exception as exc:
+        logger.debug(
+            "kLLM readiness snapshot skipped for review %s (%s)",
+            review_id,
+            type(exc).__name__,
+        )
 
 
 async def _execute_claimed_job(job_row, worker_id: str) -> None:

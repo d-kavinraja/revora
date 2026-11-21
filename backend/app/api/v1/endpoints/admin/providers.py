@@ -181,9 +181,8 @@ async def update_admin_provider(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "kLLM is not enabled in the backend environment. Set "
-                    "KLLM_ENABLED=true in backend/.env and restart the backend "
-                    "before enabling the managed provider."
+                    "The kLLM managed provider cannot be enabled right now: "
+                    "it is turned off in the backend environment."
                 ),
             )
 

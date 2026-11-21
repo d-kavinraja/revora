@@ -47,6 +47,11 @@ STALE_AFTER_SECONDS = 30.0
 #: `draining` but exposes `left_s`.
 PRELAUNCH_LEAD_SECONDS = 1500
 
+#: User-facing text for "kLLM is off" API errors. Deliberately free of
+#: `backend/.env` paths, environment variable names and restart steps: those
+#: are developer-facing and must never leak into user-facing UI messages.
+DISABLED_MESSAGE = "kLLM is currently unavailable."
+
 #: Mirrors kLLM `gateway/scheduler.py:UNIVERSAL_ALIASES` so a mapping saved
 #: under an alias resolves to the same canonical model key the relay serves.
 UNIVERSAL_ALIASES: dict[str, str] = {
@@ -108,13 +113,27 @@ UNIVERSAL_ALIASES: dict[str, str] = {
 
 
 class KllmError(Exception):
-    """Base error with a safe, client-facing message."""
+    """Base error with a safe, client-facing message.
+
+    ``definitive`` marks a failure that cannot become usable by waiting:
+    the mapped model is missing/failed, disabled, or explicitly not approved
+    for on-demand loading. Transient transport/state failures leave it false
+    so callers never trigger an automatic fallback from an ambiguous read.
+    """
 
     code = "kllm_error"
     status_code = 502
 
-    def __init__(self, message: str):
+    def __init__(
+        self,
+        message: str,
+        *,
+        definitive: bool = False,
+        reason_code: str | None = None,
+    ):
         self.message = message
+        self.definitive = bool(definitive)
+        self.reason_code = reason_code
         super().__init__(message)
 
 
@@ -158,6 +177,10 @@ class KllmModel:
     vision: bool
     tags: list[str] = field(default_factory=list)
     backend_count: int = 0
+    #: Backend-computed, user-facing readiness projection. Raw kLLM status is
+    #: preserved separately so the UI never has to interpret it itself.
+    readiness: str = "unknown"
+    reason_code: str = "unknown"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -165,6 +188,8 @@ class KllmModel:
             "status": self.status,
             "loaded": self.loaded,
             "ready": self.ready,
+            "readiness": self.readiness,
+            "reason_code": self.reason_code,
             "context_window": self.context_window,
             "vision": self.vision,
             "tags": self.tags,
@@ -305,14 +330,16 @@ def _headers() -> dict[str, str]:
 def _post_headers() -> dict[str, str]:
     headers = _headers()
     headers["Content-Type"] = "application/json"
+    # kLLM's admin router refuses state-changing requests without this header
+    # (cross-site pages cannot set it without an ungranted CORS preflight).
+    headers["X-Kllm-Panel"] = "1"
     return headers
 
 
 def canonical_model(key: str | None) -> str:
     """Mirror kLLM's `_canonical_model` for the alias vocabulary we know."""
     value = (key or "").strip()
-    if value.startswith("openai/"):
-        value = value[len("openai/") :]
+    value = value.removeprefix("openai/")
     seen: set[str] = set()
     while value not in seen:
         seen.add(value)
@@ -359,7 +386,7 @@ async def _fetch_json(
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.get(url, headers=_headers())
-    except Exception as exc:  # noqa: BLE001 - mapped to a safe message
+    except Exception as exc:
         logger.warning("kLLM GET %s failed: %s", path, type(exc).__name__)
         return None, _safe_error(exc, "kLLM is unreachable.")
 
@@ -391,7 +418,7 @@ async def _post_json(
         raise KllmUnavailableError("kLLM request timed out.") from exc
     except httpx.HTTPError as exc:
         raise KllmUnavailableError("kLLM is unreachable.") from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("kLLM POST %s failed: %s", path, type(exc).__name__)
         raise KllmUnavailableError("kLLM is unreachable.") from exc
 
@@ -515,9 +542,7 @@ def _backend_ready(backend: dict[str, Any], *, fresh: bool) -> bool:
     draining = backend.get("draining")
     if draining is None and isinstance(left, (int, float)):
         draining = left <= PRELAUNCH_LEAD_SECONDS
-    if draining:
-        return False
-    return True
+    return not draining
 
 
 def _gpu_summary(res: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -534,6 +559,40 @@ def _gpu_summary(res: dict[str, Any] | None) -> dict[str, Any] | None:
         "age_s": res.get("age_s"),
         "status": res.get("status"),
     }
+
+
+def _readiness_projection(
+    *,
+    status: str,
+    ready: bool,
+    backend_count: int,
+    reachable: bool,
+    stale: bool,
+    admin_disabled: bool,
+) -> tuple[str, str]:
+    """Map raw kLLM state to the user-facing readiness vocabulary.
+
+    The projection is deliberately honest: a model reported ``loaded`` without
+    a qualifying healthy backend is ``unavailable`` (not ready, and not a
+    reason to issue another load), and stale/unreachable state is never ready.
+    """
+    if admin_disabled:
+        return "unavailable", "admin_disabled"
+    if not reachable:
+        return "unavailable", "kllm_unreachable"
+    if stale:
+        return "stale", "kllm_state_stale"
+    if status == "failed":
+        return "failed", "model_failed"
+    if status == "loading":
+        return "loading", "model_loading"
+    if ready:
+        return "ready", "ready"
+    if status == "loaded":
+        return "unavailable", "no_ready_backend"
+    if not backend_count and status not in ("unloaded",):
+        return "unavailable", "model_unavailable"
+    return "unloaded", "model_unloaded"
 
 
 def _disabled_models_for(disabled: dict[str, set[str]]) -> set[str]:
@@ -639,7 +698,16 @@ def _build_snapshot(
         vision = "image" in modalities or "vision" in {t.lower() for t in tags}
         backend_count = ready_by_model.get(key, 0)
         loaded = status == "loaded"
-        ready = loaded and backend_count > 0 and key not in disabled_models
+        admin_disabled = key in disabled_models
+        ready = loaded and backend_count > 0 and not admin_disabled
+        readiness, reason_code = _readiness_projection(
+            status=status,
+            ready=ready,
+            backend_count=backend_count,
+            reachable=raw.reachable,
+            stale=stale,
+            admin_disabled=admin_disabled,
+        )
         models.append(
             KllmModel(
                 key=key,
@@ -650,6 +718,8 @@ def _build_snapshot(
                 vision=vision,
                 tags=tags,
                 backend_count=backend_count,
+                readiness=readiness,
+                reason_code=reason_code,
             )
         )
 
@@ -790,11 +860,81 @@ async def get_ready_models(db: AsyncSession) -> list[KllmModel]:
     return [m for m in snapshot.models if m.ready]
 
 
-async def ensure_model_ready(db: AsyncSession, model: str) -> KllmModel:
+async def ensure_model_available(db: AsyncSession, model: str) -> KllmModel:
+    """Selection-time validation: the model exists and may be used.
+
+    Unlike :func:`ensure_model_ready`, an unloaded model is *available*: the
+    administrator may have approved on-demand loading. This function never
+    substitutes another model and never forces a load.
+    """
+    if not settings.KLLM_ENABLED:
+        raise KllmDisabledError(
+            DISABLED_MESSAGE
+        )
+    provider = await _provider_row(db)
+    if provider is None or not provider.is_managed:
+        raise KllmNotConfiguredError(
+            "The kLLM managed provider is not configured.", definitive=True
+        )
+    if not provider.is_enabled or provider.status != "available":
+        raise KllmDisabledError(
+            provider.status_message
+            or "The kLLM managed provider is currently disabled.",
+            definitive=True,
+        )
+
+    canonical = canonical_model(model)
+    if not canonical:
+        raise KllmUnavailableError(
+            "A kLLM model must be selected.", definitive=True
+        )
+
+    from app.services.model_overrides import model_overrides_service
+
+    if await model_overrides_service.is_model_disabled(db, KLLM_SLUG, canonical):
+        raise KllmUnavailableError(
+            f"Model '{canonical}' is temporarily disabled by an administrator.",
+            definitive=True,
+        )
+
+    # Selection is a preflight decision. Read kLLM's current state instead of
+    # relying on the dashboard cache so a just-unloaded or just-disabled model
+    # cannot enter an execution snapshot from stale state.
+    snapshot = await get_snapshot(db, force=True)
+    if not snapshot.reachable:
+        raise KllmUnavailableError(
+            snapshot.error or "kLLM is unreachable. The model cannot be verified."
+        )
+    if snapshot.stale:
+        raise KllmUnavailableError(
+            "kLLM state is stale; the model cannot be verified right now."
+        )
+    match = next((m for m in snapshot.models if m.key == canonical), None)
+    if match is None:
+        raise KllmUnavailableError(
+            f"Model '{canonical}' is not available in kLLM.", definitive=True
+        )
+    if match.readiness == "stale":
+        raise KllmUnavailableError(
+            "kLLM state is stale; the model cannot be verified right now."
+        )
+    if match.readiness == "unavailable":
+        reason = match.reason_code
+        transient = reason == "kllm_unreachable"
+        raise KllmUnavailableError(
+            f"Model '{canonical}' is not available in kLLM right now.",
+            definitive=not transient,
+        )
+    return match
+
+
+async def ensure_model_ready(
+    db: AsyncSession, model: str, *, force: bool = False
+) -> KllmModel:
     """Execution/mapping-time validation. Never substitutes another model."""
     if not settings.KLLM_ENABLED:
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     provider = await _provider_row(db)
     if provider is None or not provider.is_managed:
@@ -816,7 +956,7 @@ async def ensure_model_ready(db: AsyncSession, model: str) -> KllmModel:
             f"Model '{canonical}' is temporarily disabled by an administrator."
         )
 
-    snapshot = await get_snapshot(db)
+    snapshot = await get_snapshot(db, force=force)
     if not snapshot.reachable:
         raise KllmUnavailableError(
             snapshot.error or "kLLM is unreachable. The model cannot be verified."
@@ -839,10 +979,45 @@ async def ensure_model_ready(db: AsyncSession, model: str) -> KllmModel:
             raise KllmUnavailableError(
                 f"Model '{canonical}' failed to load in kLLM."
             )
+        if match.status == "loaded":
+            raise KllmUnavailableError(
+                f"Model '{canonical}' has no healthy backend in kLLM."
+            )
         raise KllmUnavailableError(
             f"Model '{canonical}' is not loaded and ready in kLLM."
         )
     return match
+
+
+async def ensure_model_selectable(db: AsyncSession, model: str) -> KllmModel:
+    """Execution-selection gate for a managed model.
+
+    A ready model passes. A loading model passes (execution waits for it). An
+    unloaded model passes only when the administrator enabled review-demand
+    loading for that exact model; otherwise it is a definitive failure so an
+    explicitly opted-in fallback may be used.
+    """
+    match = await ensure_model_available(db, model)
+    if match.ready or match.status == "loading":
+        return match
+    if match.status == "unloaded":
+        from app.services import kllm_autoload
+
+        policy = await kllm_autoload.get_policy(db, force=True)
+        if kllm_autoload.review_allows(policy, match.key):
+            return match
+        raise KllmUnavailableError(
+            f"Model '{match.key}' is not loaded and automatic loading is not "
+            "enabled for this model by an administrator.",
+            definitive=True,
+        )
+    if match.status == "failed":
+        raise KllmUnavailableError(
+            f"Model '{match.key}' failed to load in kLLM.", definitive=True
+        )
+    raise KllmUnavailableError(
+        f"Model '{match.key}' is not selectable in kLLM right now."
+    )
 
 
 async def get_telemetry(db: AsyncSession, *, force: bool = False) -> dict[str, Any]:
@@ -850,7 +1025,7 @@ async def get_telemetry(db: AsyncSession, *, force: bool = False) -> dict[str, A
     global _telemetry_cache, _telemetry_at, _telemetry_error
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
 
     now = time.monotonic()
@@ -1040,19 +1215,39 @@ def _live_backend(backend_id: str, snapshot: KllmSnapshot) -> KllmBackend | None
     return next((b for b in snapshot.backends if b.id == backend_id), None)
 
 
-async def load_model(
-    db: AsyncSession, model: str, *, confirm: bool = False
-) -> dict[str, Any]:
+async def request_model_load(db: AsyncSession, model: str) -> dict[str, Any]:
+    """Issue at most one upstream load request for an exact canonical model.
+
+    Used by the automatic-loading paths. It never substitutes a model and
+    never retries: kLLM's load endpoint is idempotent for loaded/loading
+    models and returns 409 for paused/failed ones.
+    """
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     canonical = canonical_model(model)
     if not canonical:
         raise KllmUnavailableError("A kLLM model must be selected.")
-    _require_confirm(confirm)
 
-    snapshot = await get_snapshot(db)
+    from app.services.model_overrides import model_overrides_service
+
+    if await model_overrides_service.is_model_disabled(db, KLLM_SLUG, canonical):
+        raise KllmConflictError(
+            f"Model '{canonical}' is disabled by an administrator.",
+            definitive=True,
+            reason_code="admin_disabled",
+        )
+
+    snapshot = await get_snapshot(db, force=True)
+    if not snapshot.reachable:
+        raise KllmUnavailableError(
+            snapshot.error or "kLLM is unreachable. The model cannot be loaded."
+        )
+    if snapshot.stale:
+        raise KllmUnavailableError(
+            "kLLM state is stale; the model cannot be loaded safely right now."
+        )
     existing = next((m for m in snapshot.models if m.key == canonical), None)
     if existing is None:
         raise KllmNotFoundError(f"Model '{canonical}' is not in kLLM's catalogue.")
@@ -1070,30 +1265,169 @@ async def load_model(
     return {"status": "loading", "model": canonical}
 
 
+async def load_model(
+    db: AsyncSession, model: str, *, confirm: bool = False
+) -> dict[str, Any]:
+    canonical = canonical_model(model)
+    if not canonical:
+        raise KllmUnavailableError("A kLLM model must be selected.")
+    _require_confirm(confirm)
+    return await request_model_load(db, canonical)
+
+
 async def stop_backend(
-    db: AsyncSession, backend_id: str, *, confirm: bool = False
+    db: AsyncSession,
+    backend_id: str,
+    *,
+    confirm: bool = False,
+    force: bool = False,
 ) -> dict[str, Any]:
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     _require_confirm(confirm)
     account = resolve_backend_id(backend_id)
     if account is None:
         raise KllmNotFoundError("Unknown kLLM backend.")
 
-    snapshot = await get_snapshot(db)
+    snapshot = await get_snapshot(db, force=True)
     live = _live_backend(backend_id, snapshot)
     if live is None:
-        if account in _live_accounts:
-            # The opaque id is still current but the backend just vanished.
-            return {"status": "already_stopped", "models_affected": []}
         return {"status": "already_stopped", "models_affected": []}
+
+    sessions = int(live.sessions or 0)
+    inflight = int(live.inflight or 0)
+    if (sessions or inflight) and not force:
+        raise KllmConflictError(
+            "This backend is serving active sessions or in-flight requests. "
+            "kLLM provides no drain guarantee; repeat with force=true to stop it."
+        )
 
     affected = sorted({b.model for b in snapshot.backends if b.id == backend_id and b.model})
     await _post_json("/admin/api/backends/stop", {"account": account})
     invalidate_cache()
-    return {"status": "stopping", "models_affected": affected}
+    return {
+        "status": "stopping",
+        "models_affected": affected,
+        "sessions_affected": sessions,
+        "inflight_affected": inflight,
+    }
+
+
+async def unload_model(
+    db: AsyncSession,
+    model: str,
+    *,
+    confirm: bool = False,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Unload an exact model by stopping every backend and pending launch.
+
+    kLLM's ``/chat-ui/models/unload`` endpoint is a verified no-op, so this
+    composes the only destructive mechanism kLLM actually provides: per-account
+    backend stop. No stop request is ever retried.
+    """
+    if not await is_enabled(db):
+        raise KllmDisabledError(
+            DISABLED_MESSAGE
+        )
+    canonical = canonical_model(model)
+    if not canonical:
+        raise KllmUnavailableError("A kLLM model must be selected.")
+    _require_confirm(confirm)
+
+    snapshot = await get_snapshot(db, force=True)
+    if not snapshot.reachable:
+        raise KllmUnavailableError(
+            snapshot.error or "kLLM is unreachable. The model cannot be unloaded."
+        )
+    if snapshot.stale:
+        raise KllmUnavailableError(
+            "kLLM state is stale; the model cannot be unloaded safely right now."
+        )
+
+    running = [b for b in snapshot.backends if b.model == canonical]
+    pending = [p for p in snapshot.pending if p.get("model") == canonical]
+    sessions = sum(int(b.sessions or 0) for b in running)
+    inflight = sum(int(b.inflight or 0) for b in running)
+    if (sessions or inflight) and not force:
+        raise KllmConflictError(
+            "Model "
+            f"'{canonical}' is serving {sessions} session(s) and {inflight} "
+            "in-flight request(s). kLLM provides no drain guarantee; repeat "
+            "with force=true to stop the serving backends."
+        )
+
+    seen: set[str] = set()
+    running_accounts: list[str] = []
+    for backend in running:
+        account = resolve_backend_id(backend.id)
+        if account and account not in seen:
+            seen.add(account)
+            running_accounts.append(account)
+    pending_accounts: list[str] = []
+    for row in pending:
+        account = resolve_backend_id(str(row.get("id") or ""))
+        if account and account not in seen:
+            seen.add(account)
+            pending_accounts.append(account)
+
+    if not running_accounts and not pending_accounts:
+        return {
+            "status": "already_unloaded",
+            "model": canonical,
+            "stopped": 0,
+            "pending_stopped": 0,
+            "sessions_affected": sessions,
+            "inflight_affected": inflight,
+        }
+
+    stopped_running = 0
+    stopped_pending = 0
+    errors = 0
+    for account in running_accounts:
+        try:
+            await _post_json("/admin/api/backends/stop", {"account": account})
+            stopped_running += 1
+        except KllmError:
+            # Never retry a stop: one request per target, then report honestly.
+            errors += 1
+    for account in pending_accounts:
+        try:
+            await _post_json("/admin/api/backends/stop", {"account": account})
+            stopped_pending += 1
+        except KllmError:
+            errors += 1
+
+    invalidate_cache()
+    fresh = await get_snapshot(db, force=True)
+    remaining = [b for b in fresh.backends if b.model == canonical]
+    remaining_pending = [p for p in fresh.pending if p.get("model") == canonical]
+
+    if not fresh.reachable or fresh.stale:
+        status = "ambiguous"
+    elif remaining or remaining_pending:
+        status = (
+            "partial"
+            if (stopped_running or stopped_pending)
+            else "ambiguous"
+        )
+    else:
+        status = "success"
+
+    return {
+        "status": status,
+        "model": canonical,
+        "stopped": stopped_running,
+        "pending_stopped": stopped_pending,
+        "targets": len(running_accounts) + len(pending_accounts),
+        "remaining_backends": len(remaining),
+        "remaining_pending": len(remaining_pending),
+        "sessions_affected": sessions,
+        "inflight_affected": inflight,
+        "errors": errors,
+    }
 
 
 async def rotate_backend(
@@ -1101,14 +1435,14 @@ async def rotate_backend(
 ) -> dict[str, Any]:
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     _require_confirm(confirm)
     account = resolve_backend_id(backend_id)
     if account is None:
         raise KllmNotFoundError("Unknown kLLM backend.")
 
-    snapshot = await get_snapshot(db)
+    snapshot = await get_snapshot(db, force=True)
     live = _live_backend(backend_id, snapshot)
     if live is None:
         raise KllmConflictError("That kLLM backend is no longer running.")
@@ -1125,13 +1459,13 @@ async def pin_backend(
 ) -> dict[str, Any]:
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     account = resolve_backend_id(backend_id)
     if account is None:
         raise KllmNotFoundError("Unknown kLLM backend.")
 
-    snapshot = await get_snapshot(db)
+    snapshot = await get_snapshot(db, force=True)
     if _live_backend(backend_id, snapshot) is None:
         raise KllmNotFoundError("That kLLM backend is no longer running.")
     await _post_json(
@@ -1141,12 +1475,87 @@ async def pin_backend(
     return {"status": "pinned" if pinned else "unpinned"}
 
 
+async def get_default_model(db: AsyncSession) -> str | None:
+    """The kLLM default model, which is the only always-on-eligible model."""
+    try:
+        provider = await _provider_row(db)
+    except Exception:
+        return None
+    if provider is None:
+        return None
+    return canonical_model(provider.default_model) or None
+
+
+async def get_autoscale_config() -> dict[str, Any]:
+    """Read the effective always-on size without exposing scheduler internals.
+
+    kLLM exposes both the legacy ``desired_pool`` and the newer
+    ``autoscale.min_backends``. Either can enable an always-on default model, so
+    the effective size is their maximum. The raw knobs are returned only as
+    normalized counts; no scheduler configuration or host detail is exposed.
+    """
+    if not settings.KLLM_ENABLED:
+        raise KllmDisabledError(DISABLED_MESSAGE)
+    payload, error = await _fetch_json(
+        "/admin/api/autoscale/config", timeout=settings.KLLM_STATE_TIMEOUT_S
+    )
+    if payload is None:
+        raise KllmUnavailableError(
+            error or "kLLM autoscale configuration is unavailable."
+        )
+    unverified = {
+        "reachable": True,
+        "desired_pool": None,
+        "autoscale_min_backends": None,
+        "size": None,
+        "effectively_disabled": None,
+        "verified": False,
+        "enabled": None,
+    }
+    settings_map = payload.get("settings")
+    if not isinstance(settings_map, dict):
+        return unverified
+    if "min_backends" not in settings_map or "desired_pool" not in payload:
+        return unverified
+
+    def _non_negative_int(value):
+        if isinstance(value, bool):
+            return None
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 0 else None
+
+    min_backends = _non_negative_int(settings_map.get("min_backends"))
+    desired_pool = _non_negative_int(payload.get("desired_pool"))
+    if min_backends is None or desired_pool is None:
+        return unverified
+
+    effective_size = max(min_backends, desired_pool)
+    return {
+        "reachable": True,
+        "desired_pool": desired_pool,
+        "autoscale_min_backends": min_backends,
+        "size": effective_size,
+        "effectively_disabled": effective_size == 0,
+        "verified": True,
+        "enabled": bool(settings_map.get("enabled", True)),
+    }
+
+
 async def set_keep(
     db: AsyncSession, size: int, *, confirm: bool = False
 ) -> dict[str, Any]:
+    """Set kLLM's desired pool and re-read the effective always-on state.
+
+    kLLM also enforces ``autoscale.min_backends``, so changing ``desired_pool``
+    alone cannot always disable the always-on default model. The response never
+    claims an effective disablement that could not be verified upstream.
+    """
     if not await is_enabled(db):
         raise KllmDisabledError(
-            "kLLM is disabled. Set KLLM_ENABLED=true in backend/.env and restart."
+            DISABLED_MESSAGE
         )
     if size < 0 or size > 10:
         raise KllmConflictError("The always-on pool size must be between 0 and 10.")
@@ -1154,41 +1563,137 @@ async def set_keep(
         _require_confirm(confirm)
     await _post_json("/admin/api/keep", {"size": size})
     invalidate_cache()
-    return {"status": "always_on_set", "size": size}
+    try:
+        config = await get_autoscale_config()
+    except KllmError:
+        return {
+            "status": "always_on_update_unverified",
+            "size": size,
+            "desired_pool_size": size,
+            "effective_min_backends": None,
+            "effective_size": None,
+            "effectively_disabled": None,
+            "verified": False,
+        }
+    verified = bool(config.get("verified"))
+    effective_size = config.get("size")
+    if not verified or effective_size is None:
+        return {
+            "status": "always_on_update_unverified",
+            "size": size,
+            "desired_pool_size": size,
+            "effective_min_backends": None,
+            "effective_size": None,
+            "effectively_disabled": None,
+            "verified": False,
+        }
+    return {
+        "status": (
+            "always_on_disabled"
+            if effective_size == 0
+            else "always_on_update_incomplete"
+        ),
+        "size": size,
+        "desired_pool_size": size,
+        "effective_min_backends": config.get("autoscale_min_backends"),
+        "effective_size": effective_size,
+        "effectively_disabled": bool(config.get("effectively_disabled")),
+        "verified": True,
+    }
 
 
-async def build_available_models(db: AsyncSession) -> list[dict[str, Any]]:
-    """Model metadata for the repository config modal (ready models only)."""
+def _available_model_row(
+    model: KllmModel, *, loads_on_demand: bool, stamp: str
+) -> dict[str, Any]:
+    return {
+        "model_name": model.key,
+        "canonical_model_name": model.key,
+        "provider": KLLM_SLUG,
+        "accessible": True,
+        "admin_disabled": False,
+        "deprecated": False,
+        "preview": False,
+        "experimental": False,
+        "enterprise_only": False,
+        "region_supported": True,
+        "context_window": model.context_window,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "supports_streaming": True,
+        "supports_function_calling": True,
+        "supports_vision": model.vision,
+        "supports_reasoning": True,
+        "status": model.status,
+        "readiness": model.readiness,
+        "reason_code": model.reason_code,
+        "loads_on_demand": loads_on_demand,
+        "validation_timestamp": stamp,
+    }
+
+
+async def build_available_models(
+    db: AsyncSession, *, approved_unloaded: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """Model metadata for the repository config modal.
+
+    Ready models are always offered. An unloaded model is also offered when
+    the administrator explicitly approved it for review-demand loading; the
+    row is marked ``loads_on_demand`` so the UI never implies it is ready.
+    """
     snapshot = await get_snapshot(db)
     if not snapshot.enabled or not snapshot.reachable:
         return []
 
+    approved = approved_unloaded or set()
     stamp = datetime.now(UTC).isoformat()
     rows: list[dict[str, Any]] = []
     for model in snapshot.models:
-        if not model.ready:
+        loads_on_demand = (
+            not model.ready
+            and model.key in approved
+            and model.status in ("unloaded", "loading")
+        )
+        if not model.ready and not loads_on_demand:
             continue
         rows.append(
-            {
-                "model_name": model.key,
-                "canonical_model_name": model.key,
-                "provider": KLLM_SLUG,
-                "accessible": True,
-                "admin_disabled": False,
-                "deprecated": False,
-                "preview": False,
-                "experimental": False,
-                "enterprise_only": False,
-                "region_supported": True,
-                "context_window": model.context_window,
-                "input_cost": 0.0,
-                "output_cost": 0.0,
-                "supports_streaming": True,
-                "supports_function_calling": True,
-                "supports_vision": model.vision,
-                "supports_reasoning": True,
-                "status": model.status,
-                "validation_timestamp": stamp,
-            }
+            _available_model_row(
+                model, loads_on_demand=loads_on_demand, stamp=stamp
+            )
+        )
+    return rows
+
+
+async def get_model_options(db: AsyncSession) -> list[dict[str, Any]]:
+    """Read-only model options for ordinary users.
+
+    Includes ready models plus administrator-approved unloaded models, each
+    with the backend-computed readiness projection. Never exposes controls.
+    """
+    snapshot = await get_snapshot(db)
+    if not snapshot.enabled or not snapshot.reachable:
+        return []
+
+    from app.services import kllm_autoload
+
+    policy = await kllm_autoload.get_policy(db)
+    approved = (
+        set(policy["review_autoload"]["allowed_models"])
+        if policy["review_autoload"]["enabled"]
+        else set()
+    )
+    stamp = datetime.now(UTC).isoformat()
+    rows: list[dict[str, Any]] = []
+    for model in snapshot.models:
+        loads_on_demand = (
+            not model.ready
+            and model.key in approved
+            and model.status in ("unloaded", "loading")
+        )
+        if not model.ready and not loads_on_demand:
+            continue
+        rows.append(
+            _available_model_row(
+                model, loads_on_demand=loads_on_demand, stamp=stamp
+            )
         )
     return rows

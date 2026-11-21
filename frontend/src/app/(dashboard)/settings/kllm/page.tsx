@@ -2,21 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import {
-  RefreshCwIcon,
-  TriangleAlertIcon,
-  PinIcon,
-  PlayIcon,
-  RotateCwIcon,
-  SquareIcon,
-} from 'lucide-react';
+import { RefreshCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { api, KllmActivityItem, KllmStatus, KllmTelemetry } from '@/lib/api';
-import { useAuthStore } from '@/store/useAuthStore';
-import { useToast } from '@/components/ui/toaster';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { timeAgo } from '@/components/shared/time-ago';
+import { useBrowserSessionId } from '@/hooks/use-kllm-session-presence';
+import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 const STATUS_INTERVAL_MS = 15_000;
 const TELEMETRY_INTERVAL_MS = 5_000;
@@ -29,34 +23,39 @@ const BACKEND_TONE: Record<string, PillTone> = {
   unhealthy: 'error',
 };
 
-const MODEL_TONE: Record<string, PillTone> = {
-  loaded: 'success',
+const READINESS_TONE: Record<string, PillTone> = {
+  ready: 'success',
   loading: 'warning',
-  failed: 'error',
   unloaded: 'muted',
+  failed: 'error',
+  unavailable: 'error',
+  stale: 'warning',
 };
 
-type ConfirmState = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  danger?: boolean;
-  onConfirm: () => Promise<void>;
-} | null;
+const READINESS_LABEL: Record<string, string> = {
+  ready: 'Ready',
+  loading: 'Loading',
+  unloaded: 'Not loaded',
+  failed: 'Failed',
+  unavailable: 'Unavailable',
+  stale: 'Stale',
+};
 
 function errorMessage(err: unknown): string {
-  if (typeof err === 'object' && err !== null && 'response' in err) {
-    const response = (err as { response?: { data?: { detail?: unknown } } }).response;
+  if (typeof err === 'object' && err !== null) {
+    const response = (err as { response?: { data?: { detail?: unknown } } })
+      .response;
     const detail = response?.data?.detail;
-    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (typeof detail === 'string') return detail;
+    if (typeof (err as Error).message === 'string') {
+      return (err as Error).message;
+    }
   }
-  if (err instanceof Error && err.message) return err.message;
-  return 'Unexpected error.';
+  return 'Something went wrong. Please try again.';
 }
 
-function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '—';
-  const total = Math.max(0, Math.floor(seconds));
+function formatDuration(total: number | null | undefined): string {
+  if (total == null || !Number.isFinite(total)) return '—';
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   if (h > 0) return `${h}h ${m}m`;
@@ -75,21 +74,32 @@ function formatNumber(value: number | null | undefined, digits = 0): string {
   return value.toFixed(digits);
 }
 
+/**
+ * Read-only kLLM status for ordinary users.
+ *
+ * Lifecycle control (load/unload, backend stop/rotate/pin, always-on pool and
+ * automatic-loading policy) is administrator-only and lives in the isolated
+ * admin console. This page intentionally has no mutation calls.
+ */
 export default function KllmPage() {
-  const { toast } = useToast();
-  const role = useAuthStore((s) => s.user?.role);
-  const isAdmin = role === 'admin';
-
   const [status, setStatus] = useState<KllmStatus | null>(null);
   const [telemetry, setTelemetry] = useState<KllmTelemetry | null>(null);
   const [activity, setActivity] = useState<KllmActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<ConfirmState>(null);
-  const [keepSize, setKeepSize] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const sessionId = useBrowserSessionId();
+  const [sessionActive, setSessionActive] = useState(false);
+  // Page/UI-access gate (§11.1): `kllm_page` controls only this dashboard
+  // view. Fail-open during SSR/loading (features undefined → `enabled`), so
+  // the dashboard renders first and swaps to the notice once flags load —
+  // the same hydration contract as other gated pages.
+  const { data: features } = usePlatformFeatures();
+  const { status: pageStatus, message: pageMessage } = featureState(
+    features,
+    'kllm_page'
+  );
 
-  const mounted = useRef(true);
   const statusController = useRef<AbortController | null>(null);
   const telemetryController = useRef<AbortController | null>(null);
   const statusInFlight = useRef(false);
@@ -109,29 +119,22 @@ export default function KllmPage() {
   }, []);
 
   const refreshAll = useCallback(async () => {
-    setBusy('refresh');
+    setRefreshing(true);
     try {
-      const data = isAdmin
-        ? await api.kllmRefresh()
-        : await api.getKllmStatus();
+      const data = await api.getKllmStatus();
       setStatus(data);
       setError(null);
       await loadActivity();
     } catch (err) {
-      toast({
-        title: 'Refresh failed',
-        description: errorMessage(err),
-        type: 'error',
-      });
+      setError(errorMessage(err));
     } finally {
-      setBusy(null);
+      setRefreshing(false);
     }
-  }, [isAdmin, loadActivity, toast]);
+  }, [loadActivity]);
 
   // Status polling: 15 s, paused while the tab is hidden, aborted on unmount,
   // never overlapping, exponential backoff on failures.
   useEffect(() => {
-    mounted.current = true;
     let cancelled = false;
 
     function schedule(delay: number) {
@@ -149,7 +152,7 @@ export default function KllmPage() {
       const controller = new AbortController();
       statusController.current = controller;
       try {
-        const data = await api.getKllmStatus(false, controller.signal);
+        const data = await api.getKllmStatus(controller.signal);
         if (cancelled || controller.signal.aborted) return;
         setStatus(data);
         setError(null);
@@ -175,7 +178,6 @@ export default function KllmPage() {
     }
 
     void tick();
-    // Deferred so activity loading cannot be seen as synchronous setState.
     setTimeout(() => {
       void loadActivity();
     }, 0);
@@ -183,12 +185,32 @@ export default function KllmPage() {
 
     return () => {
       cancelled = true;
-      mounted.current = false;
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (statusTimer.current) clearTimeout(statusTimer.current);
       statusController.current?.abort();
     };
   }, [loadActivity]);
+
+  // Sanitized per-tab presence state. The layout owns the heartbeat; this
+  // only reads the projected state for the user-facing explanation.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const value = await api.getKllmSessionStatus(sessionId);
+        if (!cancelled) setSessionActive(value.active);
+      } catch {
+        if (!cancelled) setSessionActive(false);
+      }
+    };
+    void load();
+    const timer = setInterval(() => void load(), STATUS_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionId]);
 
   const activeBackends = (status?.summary?.backends ?? 0) > 0;
 
@@ -196,7 +218,6 @@ export default function KllmPage() {
   // backend exists. No polling when kLLM is disabled/unreachable.
   useEffect(() => {
     if (!status?.enabled || !activeBackends) {
-      // Defer the reset so the effect body stays free of synchronous setState.
       queueMicrotask(() => setTelemetry(null));
       return;
     }
@@ -250,103 +271,27 @@ export default function KllmPage() {
     };
   }, [status?.enabled, activeBackends]);
 
-  const runAction = async (
-    key: string,
-    action: () => Promise<unknown>,
-    successTitle: string,
-  ) => {
-    setBusy(key);
-    try {
-      await action();
-      toast({ title: successTitle, type: 'success' });
-      await refreshAll();
-    } catch (err) {
-      toast({
-        title: 'Action failed',
-        description: errorMessage(err),
-        type: 'error',
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const requestLoad = (model: string) => {
-    setConfirm({
-      title: `Load ${model}?`,
-      description:
-        'kLLM will start a new backend for this model. It can take several minutes before it becomes ready, and it may consume GPU quota on the kLLM host.',
-      confirmLabel: 'Load model',
-      onConfirm: () =>
-        runAction(
-          `load:${model}`,
-          () => api.kllmLoadModel(model, true),
-          'Load requested',
-        ),
-    });
-  };
-
-  const requestStop = (id: string, models: string[]) => {
-    setConfirm({
-      title: 'Stop this backend?',
-      description: `This stops every model and in-flight request served by this backend${
-        models.length ? ` (${models.join(', ')})` : ''
-      }. This cannot be undone from Revora.`,
-      confirmLabel: 'Stop backend',
-      danger: true,
-      onConfirm: () =>
-        runAction(
-          `stop:${id}`,
-          () => api.kllmStopBackend(id, true),
-          'Stop requested',
-        ),
-    });
-  };
-
-  const requestRotate = (id: string, model: string | null) => {
-    setConfirm({
-      title: 'Rotate this backend?',
-      description: `kLLM will start a fresh backend${
-        model ? ` for ${model}` : ''
-      }, hand sessions over, then stop the old one. Capacity is briefly reduced during the hand-off.`,
-      confirmLabel: 'Rotate backend',
-      onConfirm: () =>
-        runAction(
-          `rotate:${id}`,
-          () => api.kllmRotateBackend(id, true),
-          'Rotation requested',
-        ),
-    });
-  };
-
-  const applyKeep = () => {
-    if (keepSize === 0) {
-      void runAction(
-        'keep',
-        () => api.kllmSetKeep(0, false),
-        'Always-on pool disabled',
-      );
-      return;
-    }
-    setConfirm({
-      title: `Keep ${keepSize} model(s) always on?`,
-      description:
-        'kLLM will maintain this many backends around the clock and auto-rotate them before the session cap. This consumes GPU quota continuously.',
-      confirmLabel: 'Enable always-on',
-      onConfirm: () =>
-        runAction(
-          'keep',
-          () => api.kllmSetKeep(keepSize, true),
-          'Always-on pool updated',
-        ),
-    });
-  };
-
   if (loading && !status) {
     return (
       <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col items-center justify-center min-h-[50vh]">
         <LoaderIcon size={24} className="text-brand mb-2 animate-spin" />
         <span className="text-sm text-muted-foreground">Loading kLLM status...</span>
+      </div>
+    );
+  }
+
+  if (pageStatus !== 'enabled') {
+    return (
+      <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
+        <FeatureUnavailable
+          status={pageStatus}
+          message={
+            pageMessage ??
+            "We're currently updating the real-time kLLM data visualization system. The kLLM dashboard view will be available soon."
+          }
+          title="kLLM dashboard"
+          variant="page"
+        />
       </div>
     );
   }
@@ -371,7 +316,8 @@ export default function KllmPage() {
           </h1>
           <p className="mt-1 text-muted-foreground text-sm">
             Local, server-owned inference. kLLM owns serving and lifecycle; Revora
-            proxies a sanitized view and never exposes backend identities.
+            proxies a sanitized, read-only view and never exposes backend
+            identities.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -386,10 +332,10 @@ export default function KllmPage() {
           </Pill>
           <button
             onClick={() => void refreshAll()}
-            disabled={busy === 'refresh'}
+            disabled={refreshing}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-brand/40 disabled:opacity-50"
           >
-            {busy === 'refresh' ? (
+            {refreshing ? (
               <LoaderIcon size={14} className="animate-spin" />
             ) : (
               <RefreshCwIcon size={14} />
@@ -399,30 +345,38 @@ export default function KllmPage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-xl border border-border bg-surface-1 p-4">
+        <p className="text-sm text-muted-foreground">
+          Model loading and lifecycle are managed by an administrator. If a model
+          shows <span className="font-medium text-foreground">Not loaded</span>,
+          it may load automatically when a review needs it, or an administrator
+          can load it from the admin console.
+        </p>
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Pill tone={sessionActive ? 'success' : 'muted'} dot>
+            {sessionActive ? 'Session active' : 'Session idle'}
+          </Pill>
+          An active browser session may keep an approved model available. When
+          you stop using Revora, kLLM still decides when to retire it; Revora
+          never unloads models on your behalf.
+        </p>
+      </div>
+
+      {/* State 3: the page-access flag is on, but the managed provider is
+          disabled or under maintenance. The dashboard stays fully rendered;
+          every string below is plain user-facing copy. */}
       {!enabled && (
-        <div className="mb-6 rounded-xl border border-border bg-surface-1 p-5">
+        <div className="mb-6 rounded-xl border border-warning/30 bg-warning/5 p-5">
           <div className="flex items-start gap-3">
             <TriangleAlertIcon size={20} className="mt-0.5 text-warning" />
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-foreground">
-                kLLM is disabled
+                kLLM is disabled or under maintenance
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                The managed provider is off. Enable it in two places: set{' '}
-                <code className="rounded bg-surface-2 px-1 py-0.5 text-xs">
-                  KLLM_ENABLED=true
-                </code>{' '}
-                in <code className="text-xs">backend/.env</code> and restart the
-                backend, then enable the <strong>kLLM</strong> provider in
-                Settings &rarr; Providers. Until both are done, routing,
-                repository mapping, reviews and this dashboard stay gated.
+                The kLLM provider is currently disabled or under maintenance,
+                so kLLM inference and reviews cannot be used right now.
               </p>
-              {status?.configured === false && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  The managed provider row is missing. Run{' '}
-                  <code className="text-xs">alembic upgrade head</code>.
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -440,7 +394,7 @@ export default function KllmPage() {
         </div>
       )}
 
-      {enabled && status && (
+      {status && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <StatCard label="Backends" value={status.summary.backends} sub={`${status.summary.healthy_backends} healthy`} />
@@ -465,10 +419,9 @@ export default function KllmPage() {
                 <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2.5 font-medium">Model</th>
-                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Readiness</th>
                     <th className="px-4 py-2.5 font-medium">Context</th>
                     <th className="px-4 py-2.5 font-medium">Backends</th>
-                    <th className="px-4 py-2.5 font-medium text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -484,8 +437,8 @@ export default function KllmPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Pill tone={MODEL_TONE[model.status] ?? 'muted'} dot>
-                          {model.status}
+                        <Pill tone={READINESS_TONE[model.readiness] ?? 'muted'} dot>
+                          {READINESS_LABEL[model.readiness] ?? model.readiness}
                         </Pill>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
@@ -496,31 +449,11 @@ export default function KllmPage() {
                       <td className="px-4 py-3 text-muted-foreground">
                         {model.backend_count}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {isAdmin && !model.ready && model.status !== 'loading' ? (
-                          <button
-                            onClick={() => requestLoad(model.key)}
-                            disabled={busy === `load:${model.key}`}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-foreground hover:border-brand/40 disabled:opacity-50"
-                          >
-                            {busy === `load:${model.key}` ? (
-                              <LoaderIcon size={12} className="animate-spin" />
-                            ) : (
-                              <PlayIcon size={12} />
-                            )}
-                            Load
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {model.ready ? 'Ready' : model.status === 'loading' ? 'Loading' : '—'}
-                          </span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                   {status.models.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
                         No models reported by kLLM.
                       </td>
                     </tr>
@@ -538,9 +471,9 @@ export default function KllmPage() {
               </span>
             </div>
             <div className="grid grid-cols-1 gap-3">
-              {status.backends.map((backend) => (
+              {status.backends.map((backend, index) => (
                 <div
-                  key={backend.id}
+                  key={`${backend.model ?? 'backend'}-${index}`}
                   className="rounded-xl border border-border bg-surface-1 p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -551,53 +484,8 @@ export default function KllmPage() {
                       <span className="truncate text-sm font-semibold text-foreground">
                         {backend.model ?? 'Unknown model'}
                       </span>
-                      {backend.pinned && (
-                        <Pill tone="brand">
-                          <PinIcon size={11} /> Pinned
-                        </Pill>
-                      )}
+                      {backend.pinned && <Pill tone="brand">Pinned</Pill>}
                     </div>
-                    {isAdmin && (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          onClick={() =>
-                            runAction(
-                              `pin:${backend.id}`,
-                              () => api.kllmPinBackend(backend.id, !backend.pinned),
-                              backend.pinned ? 'Backend unpinned' : 'Backend pinned',
-                            )
-                          }
-                          disabled={busy === `pin:${backend.id}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2 px-2 py-1 text-xs font-medium text-foreground hover:border-brand/40 disabled:opacity-50"
-                        >
-                          <PinIcon size={11} />
-                          {backend.pinned ? 'Unpin' : 'Pin'}
-                        </button>
-                        <button
-                          onClick={() =>
-                            requestRotate(backend.id, backend.model)
-                          }
-                          disabled={busy === `rotate:${backend.id}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2 px-2 py-1 text-xs font-medium text-foreground hover:border-brand/40 disabled:opacity-50"
-                        >
-                          <RotateCwIcon size={11} />
-                          Rotate
-                        </button>
-                        <button
-                          onClick={() =>
-                            requestStop(
-                              backend.id,
-                              backend.model ? [backend.model] : [],
-                            )
-                          }
-                          disabled={busy === `stop:${backend.id}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-error/30 bg-error/10 px-2 py-1 text-xs font-medium text-error hover:border-error/50 disabled:opacity-50"
-                        >
-                          <SquareIcon size={11} />
-                          Stop
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-xs">
@@ -630,7 +518,8 @@ export default function KllmPage() {
               ))}
               {status.backends.length === 0 && (
                 <div className="rounded-xl border border-border bg-surface-1 p-8 text-center text-sm text-muted-foreground">
-                  No backends are running. Load a model to start one.
+                  No backends are running. An administrator can load a model from
+                  the admin console.
                 </div>
               )}
             </div>
@@ -641,8 +530,11 @@ export default function KllmPage() {
                   Starting
                 </h3>
                 <ul className="space-y-1.5 text-sm">
-                  {status.pending.map((row) => (
-                    <li key={row.id} className="flex items-center justify-between gap-3">
+                  {status.pending.map((row, index) => (
+                    <li
+                      key={`${row.model ?? 'pending'}-${index}`}
+                      className="flex items-center justify-between gap-3"
+                    >
                       <span className="truncate text-foreground">{row.model ?? 'Unknown model'}</span>
                       <span className={`text-xs ${row.failed ? 'text-error' : 'text-muted-foreground'}`}>
                         {row.phase}
@@ -724,45 +616,6 @@ export default function KllmPage() {
             </div>
           </section>
 
-          {isAdmin && (
-            <section className="mb-8">
-              <h2 className="text-lg font-semibold text-foreground mb-3">Always-on pool</h2>
-              <div className="rounded-xl border border-border bg-surface-1 p-4">
-                <p className="text-sm text-muted-foreground mb-3">
-                  Keep a fixed number of backends running continuously. kLLM
-                  auto-rotates them before the session cap. This consumes GPU
-                  quota for as long as it is enabled.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={keepSize}
-                    onChange={(event) =>
-                      setKeepSize(
-                        Math.max(0, Math.min(10, Number(event.target.value) || 0)),
-                      )
-                    }
-                    className="w-20 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground"
-                    aria-label="Always-on pool size"
-                  />
-                  <button
-                    onClick={applyKeep}
-                    disabled={busy === 'keep'}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground hover:border-brand/40 disabled:opacity-50"
-                  >
-                    {busy === 'keep' && <LoaderIcon size={12} className="animate-spin" />}
-                    Apply
-                  </button>
-                  <span className="text-xs text-muted-foreground">
-                    0 disables always-on.
-                  </span>
-                </div>
-              </div>
-            </section>
-          )}
-
           <section className="mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-3">Your review activity</h2>
             <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
@@ -816,44 +669,6 @@ export default function KllmPage() {
             </div>
           </section>
         </>
-      )}
-
-      {confirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label={confirm.title}
-        >
-          <div className="w-full max-w-md rounded-xl border border-border bg-surface-1 p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-foreground">
-              {confirm.title}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {confirm.description}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirm(null)}
-                className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const action = confirm;
-                  setConfirm(null);
-                  void action.onConfirm();
-                }}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium text-white ${
-                  confirm.danger ? 'bg-error hover:bg-error/90' : 'bg-brand hover:bg-brand-hover'
-                }`}
-              >
-                {confirm.confirmLabel}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       <footer className="mt-12 border-t border-border pt-6 text-center text-xs text-muted-foreground">

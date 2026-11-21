@@ -13,17 +13,27 @@ import { MaintenanceBanner } from '@/components/shared/maintenance-banner';
 import { FeatureNoticeBanner } from '@/components/shared/feature-notice-banner';
 import { usePlatformFeatures } from '@/lib/use-platform-features';
 import { useOnboarding } from '@/hooks/use-onboarding';
+import { useKllmSessionPresence } from '@/hooks/use-kllm-session-presence';
 import { OnboardingTour, OnboardingHelpButton } from '@/components/onboarding/onboarding-tour';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Advisory kLLM presence. Always mounted for authenticated dashboard tabs;
+  // the backend no-ops when kLLM or session autoload is disabled.
+  useKllmSessionPresence();
+
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, sessionChecked, restoreReason, logout } = useAuthStore();
-  const { open: tourOpen, openTour, closeTour } = useOnboarding(
-    sessionChecked && isAuthenticated,
-  );
+  const { isAuthenticated, sessionChecked, restoreReason, logout, user } = useAuthStore();
+  const onboardingReady =
+    Boolean(sessionChecked) && isAuthenticated && Boolean(user);
+  const { open: tourOpen, openTour, closeTour } = useOnboarding({
+    autoShow: Boolean(user),
+    ready: onboardingReady,
+    dismissed: user?.onboarding_completed ?? false,
+    userId: user?.id ?? null,
+  });
 
   // Warm the public feature-flag query once per dashboard mount (§11.1);
   // the sidebar and gated pages share the same React Query cache entry.

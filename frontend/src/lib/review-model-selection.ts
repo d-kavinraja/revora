@@ -17,6 +17,14 @@ export interface ModelSelectionView {
   executed: boolean;
   fallbackUsed: boolean;
   fallbackReason: string | null;
+  /** Original repository-mapped provider (never substituted by fallback). */
+  repositoryProvider: string | null;
+  /** Original repository-mapped model (never substituted by fallback). */
+  repositoryModel: string | null;
+  /** True when the resolved selected provider/model differs from the repository mapping. */
+  mappedVsExecutingDiffer: boolean;
+  /** True when execution has started and a selection is resolved but actual stats are not yet recorded. */
+  isExecuting: boolean;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -94,11 +102,24 @@ export function modelSelectionView(
     selection?.actual_execution_provider ||
     null;
   const actualModel = selection?.actual_execution_model || null;
+  const execution_started = Boolean(selection?.execution_started);
   const executed = Boolean(
-    selection?.execution_started && (actualProvider || actualModel),
+    execution_started && (actualProvider || actualModel),
   );
   const executionStatus = selection?.execution_status || null;
   const fallbackUsed = Boolean(selection?.fallback_used);
+
+  const repositoryProvider = selection?.repository_provider ?? null;
+  const repositoryModel = selection?.repository_model ?? null;
+  const mappedVsExecutingDiffer = Boolean(
+    repositoryProvider &&
+    repositoryModel &&
+    providerSlug &&
+    model &&
+    (repositoryProvider !== selection?.selected_provider ||
+      repositoryModel !== selection?.selected_model),
+  );
+  const isExecuting = Boolean(execution_started && hasSelection && !executed);
 
   let actualLabel: string;
   if (executed) {
@@ -108,6 +129,8 @@ export function modelSelectionView(
     ]
       .filter(Boolean)
       .join(' · ');
+  } else if (isExecuting) {
+    actualLabel = [providerLabel, model].filter(Boolean).join(' · ');
   } else if (executionStatus === 'running') {
     actualLabel = 'Running · not recorded yet';
   } else if (executionStatus === 'queued' || executionStatus === 'pending') {
@@ -133,8 +156,12 @@ export function modelSelectionView(
       'Source not recorded',
     actualProvider,
     actualModel,
+    repositoryProvider,
+    repositoryModel,
     actualLabel,
     executed,
+    isExecuting,
+    mappedVsExecutingDiffer,
     fallbackUsed,
     fallbackReason: selection?.fallback_reason ?? null,
   };

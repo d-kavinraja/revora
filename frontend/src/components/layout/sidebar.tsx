@@ -31,7 +31,7 @@ const navLinks: NavLink[] = [
 const bottomLinks: NavLink[] = [
   { href: '/settings/api-keys', label: 'API Keys', icon: KeyIcon },
   { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
-  { href: '/settings/kllm', label: 'kLLM', icon: ZapIcon },
+  { href: '/settings/kllm', label: 'kLLM', icon: ZapIcon, feature: 'kllm_page' },
   { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
   { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
   { href: '/settings/health', label: 'Health', icon: ActivityIcon },

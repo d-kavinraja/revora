@@ -9,6 +9,7 @@ No fallback, no key cycling, no provider switching.
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 
 from litellm import acompletion
 
@@ -19,6 +20,15 @@ from app.db.session import AsyncSessionLocal
 from app.services.api_key_service import api_key_service
 
 logger = logging.getLogger(__name__)
+
+
+class ManagedModelError(RuntimeError):
+    """Managed-provider failure that keeps its structured lifecycle reason."""
+
+    def __init__(self, message: str, reason_code: str):
+        super().__init__(message)
+        self.message = message
+        self.reason_code = reason_code or "kllm_error"
 
 
 class LLMService:
@@ -32,6 +42,7 @@ class LLMService:
         model: str | None = None,
         api_key_id: str | None = None,
         timeout: int = LLM_DEFAULT_TIMEOUT,
+        cancel_check: Callable[[], Awaitable[bool]] | None = None,
     ) -> tuple[str | None, int, int]:
         """Execute exactly one LLM call with the given provider/key/model.
 
@@ -57,7 +68,7 @@ class LLMService:
         if managed:
             # Server-owned provider: no user key, and readiness is validated
             # against live kLLM state immediately before the call.
-            await self._ensure_managed_ready(model)
+            await self._ensure_managed_ready(model, cancel_check=cancel_check)
             api_key = settings.KLLM_GATEWAY_API_KEY or "sk-kllm-local"
         else:
             api_key = await self._resolve_api_key(user_id, provider, api_key_id)
@@ -231,15 +242,34 @@ class LLMService:
             logger.warning("Managed-provider lookup failed: %s", type(exc).__name__)
         return provider.lower() == "kllm"
 
-    async def _ensure_managed_ready(self, model: str) -> None:
-        """Validate live kLLM readiness immediately before inference."""
-        from app.services.kllm_service import KllmError, ensure_model_ready
+    async def _ensure_managed_ready(
+        self,
+        model: str,
+        *,
+        cancel_check: Callable[[], Awaitable[bool]] | None = None,
+    ) -> None:
+        """Wait for genuine kLLM readiness before inference.
+
+        A ready model returns immediately. An unloaded model is loaded only
+        when the administrator approved that exact model for review-demand
+        loading; otherwise this fails without substituting another model.
+        The cancellation callback is forwarded into the readiness wait so a
+        cancelled review cannot remain parked until the load timeout.
+        """
+        from app.services import kllm_autoload
+        from app.services.kllm_service import KllmError
 
         try:
             async with AsyncSessionLocal() as db:
-                await ensure_model_ready(db, model)
+                await kllm_autoload.ensure_model_ready_with_autoload(
+                    db,
+                    model,
+                    cancel_check=cancel_check,
+                )
         except KllmError as exc:
-            raise RuntimeError(exc.message) from exc
+            raise ManagedModelError(
+                exc.message, exc.reason_code or "kllm_error"
+            ) from exc
 
     async def _resolve_api_key(
         self,

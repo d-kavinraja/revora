@@ -3,6 +3,7 @@
 import React, { use } from 'react';
 import dynamic from 'next/dynamic';
 import { api, Review } from '@/lib/api';
+import { isAxiosError } from 'axios';
 import Link from 'next/link';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -67,6 +68,15 @@ const markdownComponents: Components = {
   },
 };
 
+function requestErrorMessage(error: unknown): string {
+  if (isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'An unexpected error occurred.';
+}
+
 type TimelineEntry = {
   id: string;
   stage: string;
@@ -127,8 +137,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       refetch();
     },
-    onError: (err: any) => {
-      console.error('Rerun failed:', err.response?.data?.detail || err.message);
+    onError: (err: unknown) => {
+      console.error('Rerun failed:', requestErrorMessage(err));
     },
   });
 
@@ -138,8 +148,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       refetch();
     },
-    onError: (err: any) => {
-      console.error('Retry failed:', err.response?.data?.detail || err.message);
+    onError: (err: unknown) => {
+      console.error('Retry failed:', requestErrorMessage(err));
     },
   });
 
@@ -149,16 +159,16 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       refetch();
     },
-    onError: (err: any) => {
-      console.error('Restart failed:', err.response?.data?.detail || err.message);
+    onError: (err: unknown) => {
+      console.error('Restart failed:', requestErrorMessage(err));
     },
   });
 
   const cancelMutation = useMutation({
     mutationFn: () => api.cancelReview(id),
     onSuccess: () => refetch(),
-    onError: (err: any) => {
-      console.error('Cancel failed:', err.response?.data?.detail || err.message);
+    onError: (err: unknown) => {
+      console.error('Cancel failed:', requestErrorMessage(err));
     },
   });
 
@@ -194,7 +204,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   }
 
   if (error) {
-    const is404 = (error as any).response?.status === 404;
+    const is404 = isAxiosError(error) && error.response?.status === 404;
     
     if (is404) {
       return (
@@ -210,7 +220,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         <div className="p-4 bg-error/10 border border-error/30 rounded-xl max-w-md mx-auto">
           <TriangleAlertIcon size={32} className="text-error mx-auto mb-3" />
           <h2 className="text-lg font-bold text-foreground">Failed to load review</h2>
-          <p className="text-muted-foreground text-sm mt-1 mb-4">{(error as any).message || 'An unexpected error occurred.'}</p>
+          <p className="text-muted-foreground text-sm mt-1 mb-4">{requestErrorMessage(error)}</p>
           <button onClick={() => refetch()} className="px-4 py-2 bg-brand hover:bg-brand-hover text-brand-foreground rounded-lg text-sm font-semibold transition-colors">
             Retry
           </button>
@@ -223,6 +233,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
   const pr = review.pull_request;
   const selection = modelSelectionView(review.current_execution ?? review);
+  const kllmReadiness = (review.current_execution ?? review).kllm_readiness;
   const completedSelection = review.last_completed_execution
     ? modelSelectionView(review.last_completed_execution)
     : null;
@@ -255,6 +266,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     review.started_at && review.completed_at
       ? Math.round((new Date(review.completed_at).getTime() - new Date(review.started_at).getTime()) / 1000)
       : null;
+  const hasVerifiedFindings = review.stats.verified_findings !== undefined;
+  const verifiedFindings = Number(review.stats.verified_findings ?? 0);
+  const rejectedFindings = Number(review.stats.rejected_findings ?? 0);
 
   /* ─── PR State indicator ─── */
   const prState = review.github_pr_state;
@@ -323,15 +337,15 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-sm font-mono font-semibold text-foreground">{duration}s</div>
             </div>
           )}
-          {(review.stats as Record<string, any>)?.verified_findings !== undefined && (
+          {hasVerifiedFindings && (
             <div>
               <div className="text-[11px] text-brand font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1">
                 <TriangleAlertIcon size={10} className="text-brand" /> Machine Verified
               </div>
               <div className="text-sm font-semibold">
-                <span className="text-success font-mono">{(review.stats as Record<string, any>).verified_findings} verified</span>
+                <span className="text-success font-mono">{verifiedFindings} verified</span>
                 {' '}
-                <span className="text-muted-foreground text-xs">/ {((review.stats as Record<string, any>).verified_findings || 0) + ((review.stats as Record<string, any>).rejected_findings || 0)} total</span>
+                <span className="text-muted-foreground text-xs">/ {verifiedFindings + rejectedFindings} total</span>
               </div>
             </div>
           )}
@@ -361,6 +375,22 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             ) : (
               <span className="text-sm font-semibold text-warning">No model resolved</span>
             )}
+            {kllmReadiness?.state === 'loading_model' &&
+              kllmReadiness.reason_code !== 'manual_unload' && (
+                <span className="inline-flex shrink-0 items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+                  Loading model
+                </span>
+              )}
+            {kllmReadiness?.reason_code === 'manual_unload' && (
+              <span className="inline-flex shrink-0 items-center rounded-full border border-error/30 bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+                Auto-load blocked by admin
+              </span>
+            )}
+            {kllmReadiness?.reason_code === 'load_timeout' && (
+              <span className="inline-flex shrink-0 items-center rounded-full border border-error/30 bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+                Model load timed out
+              </span>
+            )}
           </div>
         </div>
         <div className="rounded-xl border border-border bg-surface-1 p-4">
@@ -374,7 +404,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             {selection.executed && (
               <ProviderIcon slug={selection.actualProvider ?? undefined} size={18} />
             )}
-            <span className={`text-sm font-semibold truncate ${selection.executed ? 'text-foreground' : 'text-muted-foreground'}`}>
+            <span className={`text-sm font-semibold truncate ${selection.executed || selection.isExecuting ? 'text-foreground' : 'text-muted-foreground'}`}>
               {selection.actualLabel}
             </span>
             {selection.fallbackUsed && (
@@ -428,7 +458,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           <div className="flex flex-col items-center gap-1.5">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider bg-surface-2 px-2 py-0.5 rounded-md border border-border">
-                Execution #{(review as any).current_execution?.execution_number || '?'}
+                Execution #{review.current_execution?.execution_number || '?'}
               </span>
               <span className={`text-[11px] font-semibold flex items-center gap-1 uppercase tracking-wider ${review.status === 'running' ? 'text-info' : 'text-warning'}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${review.status === 'running' ? 'bg-info animate-pulse' : 'bg-warning'}`} />

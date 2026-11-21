@@ -242,7 +242,7 @@ async def test_orchestrator_cancellation_before_fallback():
     prompt = _Prompt()
     calls = []
 
-    async def _get_completion(user_id, provider, messages, model, api_key_id=None):
+    async def _get_completion(user_id, provider, messages, model, api_key_id=None, cancel_check=None):
         calls.append((provider, model))
         if provider == "kllm":
             raise RuntimeError("model unavailable")
@@ -343,7 +343,7 @@ async def test_orchestrator_fallback_tries_alternative():
 
     calls = []
 
-    async def _get_completion(user_id, provider, messages, model, api_key_id=None):
+    async def _get_completion(user_id, provider, messages, model, api_key_id=None, cancel_check=None):
         calls.append((provider, model))
         if provider == "kllm":
             raise RuntimeError("model unavailable")
@@ -365,3 +365,151 @@ async def test_orchestrator_fallback_tries_alternative():
     assert response.model == "gemini-2.5-flash"
     assert response.is_fallback is True
     assert calls == [("kllm", "qwen3.8-27b"), ("gemini", "gemini-2.5-flash")]
+
+
+async def test_resolve_provider_config_unloaded_blocked_resolves_fallback(
+    test_db, mock_user, monkeypatch
+):
+    """Unloaded kLLM with admin-blocked autoload + fallback enabled → fallback selected."""
+    repo = await _seed_repo(
+        test_db,
+        mock_user,
+        settings={
+            "assigned_provider": "kllm",
+            "assigned_model": "qwen3.8-27b",
+            "fallback_enabled": True,
+        },
+    )
+
+    async def _raise_definitive(*a, **kw):
+        raise ProviderUnavailableError("kllm", "model blocked by admin", definitive=True)
+
+    monkeypatch.setattr(
+        "app.services.kllm_service.ensure_model_selectable", _raise_definitive
+    )
+
+    fallback_route = ModelRoute(
+        provider="gemini",
+        model="gemini-2.5-flash",
+        litellm_model="gemini/gemini-2.5-flash",
+        api_key_id=None,
+        estimated_cost_per_1k=0.0,
+    )
+    monkeypatch.setattr(
+        model_router,
+        "route_excluding",
+        AsyncMock(return_value=fallback_route),
+    )
+
+    selection = await resolve_selection(test_db, str(mock_user.id), repo)
+    assert selection.is_resolved is True
+    assert selection.provider == "gemini"
+    assert selection.model == "gemini-2.5-flash"
+    assert selection.fallback_used is True
+    assert selection.fallback_provider == "kllm"
+    assert selection.fallback_model == "qwen3.8-27b"
+    assert selection.fallback_reason == "primary_unavailable"
+    # Repository mapping must remain unchanged
+    assert selection.repository_provider == "kllm"
+    assert selection.repository_model == "qwen3.8-27b"
+    assert selection.repository_mapping_status == "mapped"
+
+
+async def test_resolve_provider_config_unloaded_allowed_demand_load(
+    test_db, mock_user, monkeypatch
+):
+    """Unloaded but autoload-allowed kLLM → primary selected, no spurious fallback."""
+    repo = await _seed_repo(
+        test_db,
+        mock_user,
+        settings={
+            "assigned_provider": "kllm",
+            "assigned_model": "qwen3.8-27b",
+            "fallback_enabled": True,
+        },
+    )
+
+    class _ProviderRow:
+        slug = "kllm"
+        display_name = "kLLM"
+        is_managed = True
+
+    monkeypatch.setattr(
+        "app.services.provider_registry.provider_registry_service.get_by_identifier",
+        AsyncMock(return_value=_ProviderRow()),
+    )
+
+    async def _return_match(*a, **kw):
+        class _Match:
+            key = "qwen3.8-27b"
+            ready = True
+            status = "loaded"
+        return _Match()
+
+    monkeypatch.setattr(
+        "app.services.kllm_service.ensure_model_selectable", _return_match
+    )
+
+    selection = await resolve_selection(test_db, str(mock_user.id), repo)
+    assert selection.is_resolved is True
+    assert selection.provider == "kllm"
+    assert selection.model == "qwen3.8-27b"
+    assert selection.fallback_used is False
+    assert selection.repository_provider == "kllm"
+    assert selection.repository_model == "qwen3.8-27b"
+
+
+async def test_resolve_provider_config_transient_not_definitive(
+    test_db, mock_user, monkeypatch
+):
+    """Transient kLLM unavailability (definitive=False) → fail closed, no fallback."""
+    repo = await _seed_repo(
+        test_db,
+        mock_user,
+        settings={
+            "assigned_provider": "kllm",
+            "assigned_model": "qwen3.8-27b",
+            "fallback_enabled": True,
+        },
+    )
+
+    async def _raise_transient(*a, **kw):
+        raise ProviderUnavailableError("kllm", "temporarily unavailable", definitive=False)
+
+    monkeypatch.setattr(
+        "app.services.kllm_service.ensure_model_selectable", _raise_transient
+    )
+
+    selection = await resolve_selection(test_db, str(mock_user.id), repo)
+    assert selection.is_resolved is False
+    assert selection.provider is None
+    assert selection.fallback_used is False
+    assert selection.error is not None
+
+
+async def test_resolve_provider_config_fallback_disabled_still_fail_closed(
+    test_db, mock_user, monkeypatch
+):
+    """fallback_enabled=False + unloaded+blocked → no fallback, error recorded."""
+    repo = await _seed_repo(
+        test_db,
+        mock_user,
+        settings={
+            "assigned_provider": "kllm",
+            "assigned_model": "qwen3.8-27b",
+            "fallback_enabled": False,
+        },
+    )
+
+    async def _raise_definitive(*a, **kw):
+        raise ProviderUnavailableError("kllm", "model blocked by admin", definitive=True)
+
+    monkeypatch.setattr(
+        "app.services.kllm_service.ensure_model_selectable", _raise_definitive
+    )
+
+    selection = await resolve_selection(test_db, str(mock_user.id), repo)
+    assert selection.is_resolved is False
+    assert selection.provider is None
+    assert selection.fallback_used is False
+    assert selection.error is not None
