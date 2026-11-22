@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { RefreshCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { api, KllmActivityItem, KllmStatus, KllmTelemetry } from '@/lib/api';
@@ -40,6 +40,15 @@ const READINESS_LABEL: Record<string, string> = {
   unavailable: 'Unavailable',
   stale: 'Stale',
 };
+
+const READINESS_RANK: Record<string, number> = {
+  ready: 0,
+  loading: 1,
+};
+
+function readinessRank(value: string | undefined): number {
+  return READINESS_RANK[(value ?? '').toLowerCase()] ?? 2;
+}
 
 function errorMessage(err: unknown): string {
   if (typeof err === 'object' && err !== null) {
@@ -213,6 +222,16 @@ export default function KllmPage() {
   }, [sessionId]);
 
   const activeBackends = (status?.summary?.backends ?? 0) > 0;
+
+  const sortedModels = useMemo(
+    () =>
+      [...(status?.models ?? [])].sort((a, b) => {
+        const rankDiff = readinessRank(a.readiness) - readinessRank(b.readiness);
+        if (rankDiff !== 0) return rankDiff;
+        return a.key.localeCompare(b.key);
+      }),
+    [status?.models],
+  );
 
   // Telemetry polling: 5 s, only while the page is visible and at least one
   // backend exists. No polling when kLLM is disabled/unreachable.
@@ -415,51 +434,96 @@ export default function KllmPage() {
               </span>
             </div>
             <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5 font-medium">Model</th>
-                    <th className="px-4 py-2.5 font-medium">Readiness</th>
-                    <th className="px-4 py-2.5 font-medium">Context</th>
-                    <th className="px-4 py-2.5 font-medium">Backends</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {status.models.map((model) => (
-                    <tr key={model.key} className="border-t border-border/70">
-                      <td className="px-4 py-3">
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2.5 font-medium">Model</th>
+                      <th className="px-4 py-2.5 font-medium">Readiness</th>
+                      <th className="px-4 py-2.5 font-medium">Context</th>
+                      <th className="px-4 py-2.5 font-medium">Backends</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedModels.map((model) => (
+                      <tr key={model.key} className="border-t border-border/70">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <ProviderIcon slug="kllm" size={15} />
+                            <span className="truncate font-medium text-foreground" title={model.key}>
+                              {model.key}
+                            </span>
+                            {model.vision && <Pill tone="info">Vision</Pill>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Pill tone={READINESS_TONE[model.readiness] ?? 'muted'} dot>
+                            {READINESS_LABEL[model.readiness] ?? model.readiness}
+                          </Pill>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {model.context_window
+                            ? `${Math.round(model.context_window / 1024)}K`
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {model.backend_count}
+                        </td>
+                      </tr>
+                    ))}
+                    {sortedModels.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                          No models reported by kLLM.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="md:hidden divide-y divide-border/70">
+                {sortedModels.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No models reported by kLLM.
+                  </div>
+                ) : (
+                  sortedModels.map((model) => (
+                    <div key={model.key} className="px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <ProviderIcon slug="kllm" size={15} />
-                          <span className="truncate font-medium text-foreground" title={model.key}>
+                          <span
+                            className="truncate font-medium text-foreground"
+                            title={model.key}
+                          >
                             {model.key}
                           </span>
-                          {model.vision && <Pill tone="info">Vision</Pill>}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Pill tone={READINESS_TONE[model.readiness] ?? 'muted'} dot>
+                        <Pill
+                          tone={READINESS_TONE[model.readiness] ?? 'muted'}
+                          dot
+                          className="shrink-0"
+                        >
                           {READINESS_LABEL[model.readiness] ?? model.readiness}
                         </Pill>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {model.context_window
-                          ? `${Math.round(model.context_window / 1024)}K`
-                          : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {model.backend_count}
-                      </td>
-                    </tr>
-                  ))}
-                  {status.models.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        No models reported by kLLM.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {model.vision && <Pill tone="info">Vision</Pill>}
+                        <span>
+                          Context:{' '}
+                          {model.context_window
+                            ? `${Math.round(model.context_window / 1024)}K`
+                            : '—'}
+                        </span>
+                        <span>Backends: {model.backend_count}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </section>
 

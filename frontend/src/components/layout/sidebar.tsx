@@ -85,15 +85,24 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew, isDi
   );
 }
 
-function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabled }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isDisabled?: boolean }) {
+function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabled, isNew }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isDisabled?: boolean; isNew?: boolean }) {
   const iconRef = useRef<any>(null);
   return (
     <Link
       href={href}
       onMouseEnter={() => iconRef.current?.startAnimation()}
       onMouseLeave={() => iconRef.current?.stopAnimation()}
-      title={collapsed ? label : undefined}
-      className={`cursor-target flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
+      title={
+        isDisabled
+          ? `${label} — unavailable`
+          : collapsed
+            ? isNew
+              ? `${label} — New`
+              : label
+            : undefined
+      }
+      aria-label={isNew ? `${label} — New` : isDisabled ? `${label} — unavailable` : undefined}
+      className={`cursor-target${isNew ? ' relative group/modellab model-lab-card' : ''} flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 ${
         collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
       } ${
         isDisabled && !isActive
@@ -107,6 +116,15 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabl
         <Icon ref={iconRef} size={16} isAnimated={false} />
       </span>
       {!collapsed && <span className="truncate">{label}</span>}
+      {isNew && !collapsed && (
+        <span className="model-lab-new-badge" aria-hidden="true">
+          <span className="model-lab-new-label">New</span>
+          <span className="model-lab-new-sparkle">✦</span>
+        </span>
+      )}
+      {isNew && collapsed && (
+        <span className="model-lab-new-badge model-lab-new-badge--dot" aria-hidden="true" />
+      )}
     </Link>
   );
 }
@@ -263,6 +281,7 @@ export function Sidebar() {
               isActive={isActive(link.href)}
               collapsed={collapsed}
               isDisabled={isDisabled(link.feature)}
+              isNew={link.href === '/settings/kllm'}
             />
           ))}
         </nav>

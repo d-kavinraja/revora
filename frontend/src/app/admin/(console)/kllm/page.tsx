@@ -26,6 +26,7 @@ import {
 import { QueryError } from '@/components/admin/states';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useToast } from '@/components/ui/toaster';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 
@@ -224,6 +225,7 @@ export default function AdminKllmPage() {
   return (
     <AdminPage
       eyebrow="System"
+      icon={<ProviderIcon slug="kllm" size={28} />}
       title="kLLM lifecycle"
       description="Load and unload managed models, control backends and configure the automatic-loading policy. kLLM owns serving; Revora never substitutes a model."
       actions={
@@ -307,8 +309,13 @@ export default function AdminKllmPage() {
                   const inflight = usage?.inflight ?? 0;
                   return (
                     <tr key={model.key} className="border-t border-border/70">
-                      <td className="px-4 py-3 font-medium text-foreground">
-                        {model.key}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ProviderIcon slug="kllm" size={15} className="shrink-0" />
+                          <span className="truncate font-medium text-foreground" title={model.key}>
+                            {model.key}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
