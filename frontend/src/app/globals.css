@@ -29,6 +29,12 @@
     0 8px 40px -8px color-mix(in oklch, var(--brand) 60%, transparent);
 }
 
+/* Chat shell height = visible viewport above the mobile keyboard, minus the
+   sticky announcement banner. Falls back to 100dvh before JS runs. */
+.chat-visual-vh {
+  height: calc(var(--revora-chat-vh, 100dvh) - var(--revora-announcement-height, 0px));
+}
+
 /* Chat Markdown: force a dark terminal surface for fenced code blocks in BOTH
    themes so syntax tokens are always legible. Also ensure headings/bold/inline
    code have sharp contrast regardless of theme. */

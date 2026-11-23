@@ -719,7 +719,7 @@ export function ChatShell({ onKllmStatusChange }: { onKllmStatusChange?: (unavai
           role="tabpanel"
           aria-label={activeChat?.title || 'Chat conversation'}
           ref={listRef}
-          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden' : 'overflow-y-auto'} overscroll-contain bg-transparent px-3 py-6 md:px-6`}
+          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden max-[520px]:overflow-y-auto' : 'overflow-y-auto'} overscroll-contain bg-transparent px-3 py-6 md:px-6`}
         >
           {statusBanner}
           {!activeChat || activeChat.messages.length === 0 ? (
@@ -806,7 +806,7 @@ export function ChatShell({ onKllmStatusChange }: { onKllmStatusChange?: (unavai
           <button
             type="button"
             onClick={scrollToBottom}
-            className="chat-ink absolute bottom-[104px] left-1/2 z-20 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border/70 bg-background/90 shadow-sm backdrop-blur transition hover:bg-muted hover:text-foreground"
+            className="chat-ink absolute bottom-[calc(96px+env(safe-area-inset-bottom))] left-1/2 z-20 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border/70 bg-background/90 shadow-sm backdrop-blur transition hover:bg-muted hover:text-foreground md:bottom-[104px]"
             aria-label="Scroll to bottom"
             title="Scroll to bottom"
           >

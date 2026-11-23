@@ -138,7 +138,7 @@ export function ChatComposer({
   const isActive = focused || value.trim().length > 0;
 
   return (
-    <div className="shrink-0 px-3 pb-3 pt-2 md:px-6">
+    <div className="shrink-0 px-3 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-3">
       <div className="mx-auto w-full max-w-3xl">
         {helperText ? <p className="chat-ink mb-2 px-2 text-xs">{helperText}</p> : null}
 
@@ -171,7 +171,7 @@ export function ChatComposer({
               }}
               rows={1}
               placeholder="Type a message..."
-              className="max-h-[220px] min-h-[52px] w-full resize-none bg-transparent px-0 py-1 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/70"
+              className="max-h-[min(220px,32dvh)] min-h-[52px] w-full resize-none bg-transparent px-0 py-1 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/70"
               aria-label="Chat message"
             />
 
@@ -268,7 +268,7 @@ export function ChatComposer({
             </div>
           </div>
         </HandoffBeam>
-        <p className="chat-ink mt-2 px-2 text-center text-[11px]">
+        <p className="chat-ink mt-1.5 px-2 text-center text-[11px] md:mt-2">
           AI can make mistakes. Check important information.
         </p>
       </div>

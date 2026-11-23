@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div
       className={
         isChat
-          ? "h-[calc(100dvh-var(--revora-announcement-height,0px))] overflow-hidden p-0 m-0 bg-background text-foreground flex w-full relative"
+          ? "chat-visual-vh overscroll-none overflow-hidden p-0 m-0 bg-background text-foreground flex w-full relative"
           : "min-h-[calc(100dvh-var(--revora-announcement-height,0px))] bg-background text-foreground flex w-full relative"
       }
     >
@@ -129,7 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main
         className={
           isChat
-            ? "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden z-10 p-0 m-0 pt-[var(--revora-app-header-h)] md:pt-0"
+            ? "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden overscroll-none z-10 p-0 m-0 pt-[var(--revora-app-header-h)] md:pt-0"
             : "flex-1 min-w-0 overflow-auto z-10 pt-[var(--revora-app-header-h)] md:pt-0"
         }
       >
