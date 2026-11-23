@@ -5,6 +5,7 @@ import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { featureState, usePlatformFeatures } from '@/lib/use-platform-features';
 import { useThemeStore } from '@/store/useThemeStore';
 
+import { useState } from 'react';
 import { ChatShell } from './_components/chat-shell';
 
 export default function ChatPage() {
@@ -12,6 +13,7 @@ export default function ChatPage() {
   const { status, message } = featureState(features, 'chat');
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
+  const [kllmUnavailable, setKllmUnavailable] = useState(false);
 
   if (status !== 'enabled') {
     return (
@@ -41,7 +43,7 @@ export default function ChatPage() {
           accentStrength={isLight ? 0.9 : 1.0}
           blend={isLight ? 0.45 : 0.4}
           origin="top-right"
-          speed={2.5}
+          speed={kllmUnavailable ? 0 : 2.5}
           intensity={isLight ? 2.8 : 3.4}
           spread={2.4}
           density={6}
@@ -58,7 +60,7 @@ export default function ChatPage() {
       </div>
 
       <div className="relative z-10 flex h-full min-h-0 w-full flex-col">
-        <ChatShell />
+        <ChatShell onKllmStatusChange={setKllmUnavailable} />
       </div>
     </div>
   );

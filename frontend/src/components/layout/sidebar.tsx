@@ -268,7 +268,7 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
           {visibleNavLinks.map((link) => (
             <NavLinkItem
               key={link.href}
-              isNew={link.href === '/model-lab'}
+              isNew={link.href === '/model-lab' || link.href === '/chat'}
               href={link.href}
               label={link.label}
               icon={link.icon}

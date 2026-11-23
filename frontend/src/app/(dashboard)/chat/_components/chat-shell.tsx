@@ -45,7 +45,7 @@ const SCROLL_NEAR_BOTTOM_PX = 80;
 
 type ChatMenu = 'context' | 'model' | 'effort' | null;
 
-export function ChatShell() {
+export function ChatShell({ onKllmStatusChange }: { onKllmStatusChange?: (unavailable: boolean) => void } = {}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: features } = usePlatformFeatures();
@@ -88,6 +88,7 @@ export function ChatShell() {
     patch: Partial<ResponseMetrics>;
   } | null>(null);
   const contextRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const thinkingOrbRef = useRef<HTMLDivElement | null>(null);
 
   const contextOpen = openMenu === 'context';
@@ -95,6 +96,7 @@ export function ChatShell() {
   const chats = useMemo(() => order.map((id) => chatsRecord[id]).filter(Boolean), [order, chatsRecord]);
   const activeChat = activeId ? chatsRecord[activeId] ?? null : null;
   const activeIndex = chats.findIndex((c) => c?.id === activeId);
+  const isFreshChat = !activeChat || activeChat.messages.length === 0;
 
   const statusQuery = useQuery({
     queryKey: ['kllm', 'status', 'chat'],
@@ -106,6 +108,18 @@ export function ChatShell() {
     retry: 1,
     enabled: chatFlagEnabled,
   });
+
+  // Notify parent when kLLM status becomes unavailable/stale so the
+  // SideRays background animation can be disabled.
+  useEffect(() => {
+    if (!onKllmStatusChange) return;
+    const unavailable =
+      !!statusQuery.data &&
+      (!statusQuery.data.enabled ||
+        !statusQuery.data.reachable ||
+        !!statusQuery.data.stale);
+    onKllmStatusChange(unavailable);
+  }, [statusQuery.data, onKllmStatusChange]);
 
   useEffect(() => {
     ensureActiveChat();
@@ -119,7 +133,7 @@ export function ChatShell() {
 
   useEffect(() => {
     const el = listRef.current;
-    if (!el) return;
+    if (!el || isFreshChat) return;
     const onScroll = () => {
       const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
       const near = distance < SCROLL_NEAR_BOTTOM_PX;
@@ -129,7 +143,7 @@ export function ChatShell() {
     onScroll();
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, [activeId]);
+  }, [activeId, isFreshChat]);
 
   useEffect(() => {
     if (!contextOpen) return;
@@ -147,11 +161,42 @@ export function ChatShell() {
     };
   }, [contextOpen]);
 
+  // Mobile-only: position the Context popover with fixed positioning so it
+  // spans the viewport width minus safe margins instead of clipping off the
+  // left edge. Uses direct DOM manipulation (via ref) to avoid synchronous
+  // setState in the effect body. Resets inline styles on desktop.
+  useEffect(() => {
+    if (!contextOpen || !contextRef.current || !popoverRef.current) return;
+    const applyPosition = () => {
+      if (!contextRef.current || !popoverRef.current) return;
+      const isMobile = window.innerWidth < 640;
+      if (isMobile) {
+        const rect = contextRef.current.getBoundingClientRect();
+        popoverRef.current.style.position = 'fixed';
+        popoverRef.current.style.top = `${rect.bottom + 8}px`;
+        popoverRef.current.style.left = '12px';
+        popoverRef.current.style.right = '12px';
+        popoverRef.current.style.width = 'auto';
+        popoverRef.current.style.maxWidth = 'none';
+      } else {
+        popoverRef.current.style.position = '';
+        popoverRef.current.style.top = '';
+        popoverRef.current.style.left = '';
+        popoverRef.current.style.right = '';
+        popoverRef.current.style.width = '';
+        popoverRef.current.style.maxWidth = '';
+      }
+    };
+    applyPosition();
+    window.addEventListener('resize', applyPosition);
+    return () => window.removeEventListener('resize', applyPosition);
+  }, [contextOpen]);
+
   useEffect(() => {
     const el = listRef.current;
-    if (!el || !stickToBottomRef.current) return;
+    if (!el || !stickToBottomRef.current || isFreshChat) return;
     el.scrollTop = el.scrollHeight;
-  }, [activeChat?.messages, activeStream, activeId]);
+  }, [activeChat?.messages, activeStream, activeId, isFreshChat]);
 
   // One flush per animation frame carries BOTH the accumulated text and the
   // latest telemetry. Previously timings_per_token produced a setState per token
@@ -227,6 +272,13 @@ export function ChatShell() {
     ? chatsRecord[activeStream.chatId]?.messages.find((m) => m.id === activeStream.messageId)
     : undefined;
   const isThinking = !!activeStream && !thinkingMessage?.content?.trim();
+
+  useEffect(() => {
+    if (isFreshChat && listRef.current) {
+      listRef.current.scrollTop = 0;
+      setShowScrollButton(false);
+    }
+  }, [isFreshChat]);
 
   useEffect(() => {
     if (!isThinking || !thinkingOrbRef.current || !listRef.current) return;
@@ -530,10 +582,10 @@ export function ChatShell() {
   const statusBanner = (() => {
     if (!statusQuery.data) return null;
     if (!statusQuery.data.enabled) {
-      return <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">Chat needs kLLM. Ask an administrator to enable it.</div>;
+      return <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning dark:bg-zinc-950/80 dark:border-amber-400/35 dark:text-amber-200 dark:backdrop-blur-md">Chat needs kLLM. Ask an administrator to enable it.</div>;
     }
     if (!statusQuery.data.reachable || statusQuery.data.stale) {
-      return <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">kLLM status is unavailable or stale. Refresh before sending.</div>;
+      return <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning dark:bg-zinc-950/80 dark:border-amber-400/35 dark:text-amber-200 dark:backdrop-blur-md">kLLM status is unavailable or stale. Refresh before sending.</div>;
     }
     return null;
   })();
@@ -574,10 +626,13 @@ export function ChatShell() {
                   <ChevronDownIcon size={13} className={`transition ${contextOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {contextOpen ? (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover px-4 py-3.5 text-popover-foreground shadow-xl sm:w-[340px]">
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="font-semibold text-foreground">Context</span>
-                      <span className="tabular-nums text-muted-foreground">
+                  <div
+                    ref={popoverRef}
+                    className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover px-4 py-3.5 text-popover-foreground shadow-xl sm:w-[340px]"
+                  >
+                    <div className="flex items-center justify-between gap-3 text-xs min-w-0">
+                      <span className="font-semibold text-foreground min-w-0 truncate">Context</span>
+                      <span className="tabular-nums text-muted-foreground min-w-0 truncate">
                         {contextInfo.contextWindow
                           ? `${contextInfo.usedTokens.toLocaleString()} / ${contextInfo.contextWindow.toLocaleString()}`
                           : `${contextInfo.usedTokens.toLocaleString()}${contextInfo.backendBacked ? '' : ' est.'} tokens`}
@@ -588,7 +643,7 @@ export function ChatShell() {
                         <div className="my-3 h-2 w-full overflow-hidden rounded-full bg-muted">
                           <div className="h-full rounded-full bg-brand transition-[width] duration-300" style={{ width: `${contextInfo.usedPct ?? 0}%` }} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4 min-w-0">
                           <div className="min-w-0">
                             <span className="block text-sm font-semibold tabular-nums text-foreground">{contextInfo.usedPct}%</span>
                             <span className="text-xs text-muted-foreground">used</span>
@@ -603,14 +658,14 @@ export function ChatShell() {
                       <p className="my-3 text-xs leading-relaxed text-muted-foreground">Model context window is not reported by the gateway.</p>
                     )}
                     <div className="my-3 border-t border-border/70" />
-                    <div className="space-y-1 text-xs">
-                      <div className="flex items-center justify-between gap-4 py-1">
-                        <span className="text-muted-foreground">Messages in context</span>
-                        <span className="font-medium tabular-nums text-foreground">{contextInfo.messages}</span>
+                    <div className="space-y-1 text-xs min-w-0">
+                      <div className="flex items-center justify-between gap-4 py-1 flex-wrap">
+                        <span className="text-muted-foreground min-w-0">Messages in context</span>
+                        <span className="font-medium tabular-nums text-foreground min-w-0">{contextInfo.messages}</span>
                       </div>
-                      <div className="flex items-center justify-between gap-4 py-1">
-                        <span className="text-muted-foreground">Source</span>
-                        <span className="font-medium text-foreground">
+                      <div className="flex items-center justify-between gap-4 py-1 flex-wrap">
+                        <span className="text-muted-foreground min-w-0">Source</span>
+                        <span className="font-medium text-foreground min-w-0">
                           {contextInfo.backendBacked ? 'Backend timings' : '~4 chars/token estimate'}
                         </span>
                       </div>
@@ -664,40 +719,40 @@ export function ChatShell() {
           role="tabpanel"
           aria-label={activeChat?.title || 'Chat conversation'}
           ref={listRef}
-          className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-transparent px-3 py-6 md:px-6"
+          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden' : 'overflow-y-auto'} overscroll-contain bg-transparent px-3 py-6 md:px-6`}
         >
           {statusBanner}
           {!activeChat || activeChat.messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center">
               <div className="max-w-md px-4">
-                <div className="flex items-center justify-center gap-5 mb-8">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-5 mb-8 md:gap-6 md:mb-10">
+                  <div className="flex items-center gap-3 md:gap-4">
                     <Image
                       src="/revora-logo.png"
                       alt="Revora"
                       width={48}
                       height={48}
                       style={{ width: 48, height: 48 }}
-                      className="rounded-xl object-contain shrink-0"
+                      className="rounded-xl object-contain shrink-0 md:w-16 md:h-16"
                     />
                     <span
-                      className="font-bold text-2xl tracking-tight text-foreground font-heading"
+                      className="font-bold text-2xl tracking-tight text-foreground font-heading md:text-3xl"
                       style={{ fontFamily: 'var(--font-oxanium, inherit)' }}
                     >
                       Revora
                     </span>
                   </div>
-                  <span className="text-muted-foreground/60 text-3xl font-light" aria-hidden>×</span>
-                  <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xl font-light backdrop-blur-sm text-muted-foreground/70 bg-muted/40 border border-border/50 dark:text-slate-100 dark:bg-white/10 dark:border-white/15 md:w-10 md:h-10 md:text-2xl" aria-hidden>×</span>
+                  <div className="flex items-center gap-3 md:gap-4">
                     <Image
                       src="/assets/kllm.svg"
                       alt="kLLM"
                       width={42}
                       height={42}
                       style={{ width: 42, height: 42 }}
-                      className="rounded-lg shrink-0"
+                      className="rounded-lg shrink-0 md:w-14 md:h-14"
                     />
-                    <span className="font-bold text-2xl tracking-tight text-foreground">kLLM</span>
+                    <span className="font-bold text-2xl tracking-tight text-foreground md:text-3xl">kLLM</span>
                   </div>
                 </div>
                 <p className="text-xl font-medium tracking-tight text-foreground">What can I help with?</p>
