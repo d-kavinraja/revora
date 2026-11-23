@@ -86,9 +86,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [sessionChecked, isAuthenticated, restoreReason, logout, router, pathname]);
 
   const isModelLab = pathname.startsWith('/model-lab');
+  // The chat page has its own full-bleed background. The shared dotted canvas
+  // is hidden there only; every other dashboard route keeps it unchanged.
+  const isChat = pathname === '/chat';
 
   return (
-    <div className="min-h-[calc(100dvh-var(--revora-announcement-height,0px))] bg-background text-foreground flex w-full relative">
+    <div
+      className={
+        isChat
+          ? "h-[calc(100dvh-var(--revora-announcement-height,0px))] overflow-hidden p-0 m-0 bg-background text-foreground flex w-full relative"
+          : "min-h-[calc(100dvh-var(--revora-announcement-height,0px))] bg-background text-foreground flex w-full relative"
+      }
+    >
       {!isModelLab && (
         <TargetCursor
           spinDuration={2}
@@ -98,29 +107,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           cursorColorOnTarget={isLight ? '#4338ca' : '#d8b4fe'}
         />
       )}
-      {/* Background DotGrid */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <DotGrid
-          dotSize={8}
-          gap={24}
-          baseColor={isLight ? '#e2e8f0' : '#1e293b'}
-          activeColor={isLight ? '#6366f1' : '#8b5cf6'}
-          proximity={120}
-          shockRadius={200}
-          shockStrength={5}
-          resistance={750}
-          returnDuration={1.5}
-          style={{}}
-        />
-      </div>
+      {/* Background DotGrid — hidden on /chat only */}
+      {!isChat && (
+        <div className="fixed inset-0 z-0 pointer-events-none">
+          <DotGrid
+            dotSize={8}
+            gap={24}
+            baseColor={isLight ? '#e2e8f0' : '#1e293b'}
+            activeColor={isLight ? '#6366f1' : '#8b5cf6'}
+            proximity={120}
+            shockRadius={200}
+            shockStrength={5}
+            resistance={750}
+            returnDuration={1.5}
+            style={{}}
+          />
+        </div>
+      )}
 
-      <Sidebar />
-      <main className="flex-1 min-w-0 overflow-auto z-10 pt-[var(--revora-app-header-h)] md:pt-0">
-        <MaintenanceBanner />
-        <FeatureNoticeBanner />
+      <Sidebar isChat={isChat} onHelpClick={openTour} />
+      <main
+        className={
+          isChat
+            ? "flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden z-10 p-0 m-0 pt-[var(--revora-app-header-h)] md:pt-0"
+            : "flex-1 min-w-0 overflow-auto z-10 pt-[var(--revora-app-header-h)] md:pt-0"
+        }
+      >
+        {!isChat && (
+          <>
+            <MaintenanceBanner />
+            <FeatureNoticeBanner />
+          </>
+        )}
         {children}
       </main>
-      <OnboardingHelpButton onClick={openTour} />
+      {!isChat && <OnboardingHelpButton onClick={openTour} isChat={false} />}
       <OnboardingTour open={tourOpen} onClose={closeTour} mode="modal" />
     </div>
   );

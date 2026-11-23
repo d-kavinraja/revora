@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { Modal } from '@/components/shared/modal';
 import { ONBOARDING_STEPS, type OnboardingStep } from '@/lib/onboarding-steps';
+import { cn } from '@/lib/utils';
 
 interface OnboardingTourProps {
   open: boolean;
@@ -190,14 +191,19 @@ export function OnboardingTour({ open, onClose, mode = 'modal' }: OnboardingTour
   );
 }
 
-export function OnboardingHelpButton({ onClick }: { onClick: () => void }) {
+export function OnboardingHelpButton({ onClick, isChat = false }: { onClick: () => void; isChat?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label="Open setup tour"
       title="Setup tour"
-      className="fixed right-4 z-50 bottom-5 md:top-[calc(var(--revora-announcement-height,0px)+1rem)] md:bottom-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1 text-muted-foreground shadow-md hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      className={cn(
+        'fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1 text-muted-foreground shadow-md hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+        isChat
+          ? 'md:top-[calc(var(--revora-announcement-height,0px)+var(--revora-app-header-h)+0.4rem)] md:bottom-auto bottom-5'
+          : 'bottom-5 md:top-[calc(var(--revora-announcement-height,0px)+1rem)] md:bottom-auto'
+      )}
     >
       <HelpCircle size={18} />
     </button>

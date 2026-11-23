@@ -204,6 +204,12 @@ async def lifespan(app: FastAPI):
             await dispose_engine()
         except Exception:
             logger.exception("Engine disposal during shutdown failed")
+        try:
+            from app.ai import kllm_client
+
+            await kllm_client.aclose()
+        except Exception:
+            logger.exception("kLLM client shutdown failed")
 
 
 _is_dev = settings.APP_ENV in ("development", "testing")

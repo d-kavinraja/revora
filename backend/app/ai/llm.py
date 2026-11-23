@@ -9,10 +9,12 @@ No fallback, no key cycling, no provider switching.
 
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 
 from litellm import acompletion
 
+from app.ai import kllm_client
 from app.ai.model_registry import canonical_registry
 from app.core.config import settings
 from app.core.constants import LLM_DEFAULT_TIMEOUT
@@ -138,42 +140,7 @@ class LLMService:
         except Exception as e:
             error_str = str(e).lower()
             if managed:
-                # Never surface raw kLLM payloads, account names or URLs.
-                if "401" in error_str or "403" in error_str or "unauthorized" in error_str:
-                    raise RuntimeError(
-                        "kLLM rejected the server credentials. "
-                        "Check KLLM_GATEWAY_API_KEY in the backend environment."
-                    ) from e
-                if "404" in error_str or "not found" in error_str:
-                    raise RuntimeError(
-                        f"Model '{display_model}' was not found in kLLM. "
-                        "Refresh the dashboard and select a loaded model."
-                    ) from e
-                if (
-                    "overloaded" in error_str
-                    or "503" in error_str
-                    or "busy" in error_str
-                    or "capacity" in error_str
-                    or "429" in error_str
-                    or "rate" in error_str
-                ):
-                    raise RuntimeError(
-                        f"kLLM is busy or at capacity for '{display_model}'. "
-                        "Please try again in a moment."
-                    ) from e
-                if "timeout" in error_str or "timed out" in error_str:
-                    raise RuntimeError(
-                        f"kLLM timed out while serving '{display_model}'."
-                    ) from e
-                if "connection" in error_str or "connect" in error_str:
-                    raise RuntimeError(
-                        "Unable to connect to kLLM. Ensure the kLLM relay is "
-                        "running and KLLM_SERVER_URL is correct."
-                    ) from e
-                raise RuntimeError(
-                    f"kLLM error while serving '{display_model}'. "
-                    "Please try again later."
-                ) from e
+                raise RuntimeError(self._managed_error_message(e, display_model)) from e
             if (
                 "overloaded" in error_str
                 or "503" in error_str
@@ -238,9 +205,99 @@ class LLMService:
                 row = await provider_registry_service.get_by_identifier(db, provider)
                 if row is not None:
                     return bool(row.is_managed)
-        except Exception as exc:  # noqa: BLE001 - fail safe, never leak details
+        except Exception as exc:
             logger.warning("Managed-provider lookup failed: %s", type(exc).__name__)
         return provider.lower() == "kllm"
+
+    def _managed_error_message(self, error: Exception, display_model: str) -> str:
+        """Map managed kLLM errors to safe, user-facing messages.
+
+        Never surface raw upstream payloads, account names, URLs, or credentials.
+        """
+        error_str = str(error).lower()
+        if "401" in error_str or "403" in error_str or "unauthorized" in error_str:
+            return (
+                "kLLM rejected the server credentials. "
+                "Check KLLM_GATEWAY_API_KEY in the backend environment."
+            )
+        if "404" in error_str or "not found" in error_str:
+            return (
+                f"Model '{display_model}' was not found in kLLM. "
+                "Refresh the dashboard and select a loaded model."
+            )
+        if (
+            "overloaded" in error_str
+            or "503" in error_str
+            or "busy" in error_str
+            or "capacity" in error_str
+            or "429" in error_str
+            or "rate" in error_str
+        ):
+            return (
+                f"kLLM is busy or at capacity for '{display_model}'. "
+                "Please try again in a moment."
+            )
+        if "timeout" in error_str or "timed out" in error_str:
+            return f"kLLM timed out while serving '{display_model}'."
+        if "connection" in error_str or "connect" in error_str:
+            return (
+                "Unable to connect to kLLM. Ensure the kLLM relay is "
+                "running and KLLM_SERVER_URL is correct."
+            )
+        return f"kLLM error while serving '{display_model}'. Please try again later."
+
+    async def complete_managed(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        timeout: float | None = None,
+    ) -> tuple[str, int, int]:
+        """Non-streaming completion via the direct kLLM relay client.
+
+        The kLLM Chat pathway deliberately bypasses LiteLLM: kLLM already
+        speaks the OpenAI protocol and LiteLLM rejects relay-supported
+        parameters such as ``reasoning_effort`` before any HTTP request.
+        The caller must validate readiness with kllm_service.ensure_model_ready()
+        immediately before calling; this method never autoloads.
+        """
+        result = await kllm_client.kllm_chat_client.complete(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            timeout=timeout,
+        )
+        return result.content, result.prompt_tokens, result.completion_tokens
+
+    async def stream_managed_completion(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+    ) -> AsyncIterator[kllm_client.ContentDelta | kllm_client.StreamMeta]:
+        """Stream normalized kLLM events via the direct relay client.
+
+        Yields ``ContentDelta`` (a ``str`` subclass) for text and ``StreamMeta``
+        for presence-gated metadata (usage, timings, neutral status, done).
+        Existing string-only consumers keep working unchanged. The caller must
+        validate readiness first; this method never autoloads or persists data.
+        """
+        async for item in kllm_client.kllm_chat_client.stream(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+        ):
+            yield item
 
     async def _ensure_managed_ready(
         self,

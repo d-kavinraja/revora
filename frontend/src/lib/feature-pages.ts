@@ -59,6 +59,11 @@ export const FEATURE_PAGE_ROUTES: readonly FeaturePageRoute[] = [
     gateFeature: 'reviews',
   },
   {
+    prefix: '/chat',
+    features: ['chat'],
+    gateFeature: 'chat',
+  },
+  {
     prefix: '/settings/kllm',
     features: ['kllm_page'],
     gateFeature: 'kllm_page',

@@ -5,10 +5,10 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
-import { LoaderIcon } from '@/components/ui/loader-icon';
-import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon, ZapIcon } from '@animateicons/react/lucide';
+import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon, ZapIcon, MessageCircleIcon } from '@animateicons/react/lucide';
+import { HelpCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePlatformFeatures, isFeatureEnabled } from '@/lib/use-platform-features';
 
 // `feature` links a nav entry to a platform flag (§11.1); entries without one
@@ -25,6 +25,7 @@ const navLinks: NavLink[] = [
   { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon, feature: 'guide' },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
   { href: '/reviews', label: 'Reviews', icon: ClipboardIcon },
+  { href: '/chat', label: 'Chat', icon: MessageCircleIcon, feature: 'chat' },
   { href: '/model-lab', label: 'Model Lab', icon: BrainIcon, feature: 'model_lab' },
 ];
 
@@ -38,8 +39,10 @@ const bottomLinks: NavLink[] = [
   { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon, feature: 'analytics' },
 ];
 
-function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew, isDisabled }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isNew?: boolean; isDisabled?: boolean }) {
-  const iconRef = useRef<any>(null);
+type IconHandle = { startAnimation: () => void; stopAnimation: () => void };
+
+function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew, isDisabled }: { href: string; label: string; icon: React.ComponentType<{ ref?: React.Ref<IconHandle>; size?: number; isAnimated?: boolean }>; isActive: boolean; collapsed: boolean; isNew?: boolean; isDisabled?: boolean }) {
+  const iconRef = useRef<IconHandle>(null);
   return (
     <Link
       href={href}
@@ -85,8 +88,8 @@ function NavLinkItem({ href, label, icon: Icon, isActive, collapsed, isNew, isDi
   );
 }
 
-function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabled, isNew }: { href: string; label: string; icon: any; isActive: boolean; collapsed: boolean; isDisabled?: boolean; isNew?: boolean }) {
-  const iconRef = useRef<any>(null);
+function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabled, isNew }: { href: string; label: string; icon: React.ComponentType<{ ref?: React.Ref<IconHandle>; size?: number; isAnimated?: boolean }>; isActive: boolean; collapsed: boolean; isDisabled?: boolean; isNew?: boolean }) {
+  const iconRef = useRef<IconHandle>(null);
   return (
     <Link
       href={href}
@@ -129,11 +132,11 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabl
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onHelpClick?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const router = useRouter();
-  const logoutIconRef = useRef<any>(null);
+  const logoutIconRef = useRef<IconHandle>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -153,6 +156,8 @@ export function Sidebar() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+
 
   const handleLogoutClick = () => {
     setIsLogoutModalOpen(true);
@@ -182,17 +187,30 @@ export function Sidebar() {
   return (
     <>
       <div className="md:hidden fixed left-0 right-0 h-[var(--revora-app-header-h)] bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} style={{ width: 28, height: 28 }} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
         </div>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Open menu"
-        >
-          <MenuIcon size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          {isChat && onHelpClick && (
+            <button
+              type="button"
+              onClick={onHelpClick}
+              aria-label="Open setup tour"
+              title="Setup tour"
+              className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+            >
+              <HelpCircle size={20} />
+            </button>
+          )}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Open menu"
+          >
+            <MenuIcon size={20} />
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
@@ -210,7 +228,7 @@ export function Sidebar() {
       >
         <div className={`p-4 border-b border-sidebar-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <Image
                 src="/revora-logo.png"
                 alt="Revora Logo"
@@ -219,13 +237,7 @@ export function Sidebar() {
                 style={{ width: 32, height: 32 }}
                 className="rounded-lg object-contain shrink-0"
               />
-              <div className="min-w-0">
-                <span className="font-bold text-lg tracking-tight text-foreground block leading-tight font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
-                <div className="text-[11px] text-brand font-mono font-medium flex items-center gap-1 leading-tight">
-                  <LoaderIcon size={8} className="text-brand" />
-                  AI Code Review
-                </div>
-              </div>
+              <span className="font-bold text-lg tracking-tight text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
             </div>
           )}
           <div className="flex items-center gap-1">
@@ -292,6 +304,7 @@ export function Sidebar() {
             className={`cursor-target flex items-center gap-3 rounded-lg px-2 py-2 mb-2 transition-colors hover:bg-white/[0.04] ${collapsed ? 'justify-center' : ''}`}
           >
             {avatarSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element -- external avatar URLs may not be in next/image remotePatterns
               <img
                 src={avatarSrc}
                 alt={user?.name ?? 'User'}

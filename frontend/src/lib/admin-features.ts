@@ -51,6 +51,11 @@ export const FEATURE_META: Record<string, { label: string; description: string }
     description:
       'The kLLM dashboard view and its real-time data visualization. Backend execution, background PR reviews and repository routing are not affected by this flag.',
   },
+  chat: {
+    label: 'Chat',
+    description:
+      'Temporary in-memory chat with already-loaded kLLM models. No prompts or responses are persisted.',
+  },
 };
 
 export const FEATURE_STATUS_OPTIONS = [

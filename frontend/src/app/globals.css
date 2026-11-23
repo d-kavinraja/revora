@@ -4,6 +4,70 @@
 
 @custom-variant dark (&:is(.dark *, .admin-dark *));
 
+/* Chat-only secondary ink: higher contrast plus a soft halo so labels stay
+   crisp over the fixed full-bleed SideRays layer in both themes. */
+.chat-ink {
+  color: #334155;
+  text-shadow: 0 1px 2px rgb(255 255 255 / 0.65);
+}
+:is(.dark, .admin-dark) .chat-ink {
+  color: rgb(226 232 240 / 0.9);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
+}
+
+/* Chat composer: pronounced focus glow (multi-layered brand halo) applied via
+   the .composer-glow class on the HandoffBeam wrapper. Calibrated separately
+   for Light and Dark themes so it reads as luminous rather than washed out. */
+.composer-glow:focus-within {
+  box-shadow:
+    0 0 0 1px var(--brand),
+    0 8px 32px -8px color-mix(in oklch, var(--brand) 40%, transparent);
+}
+:is(.dark, .admin-dark) .composer-glow:focus-within {
+  box-shadow:
+    0 0 0 1px var(--brand),
+    0 8px 40px -8px color-mix(in oklch, var(--brand) 60%, transparent);
+}
+
+/* Chat Markdown: force a dark terminal surface for fenced code blocks in BOTH
+   themes so syntax tokens are always legible. Also ensure headings/bold/inline
+   code have sharp contrast regardless of theme. */
+.chat-markdown {
+  --tw-prose-pre-code: #f8fafc;
+  --tw-prose-pre-bg: #0f172a;
+  --tw-prose-code: #0f172a;
+  --tw-prose-kbd: #0f172a;
+}
+:is(.dark, .admin-dark) .chat-markdown {
+  --tw-prose-pre-code: #f8fafc;
+  --tw-prose-pre-bg: #0f172a;
+  --tw-prose-code: #e2e8f0;
+  --tw-prose-kbd: #e2e8f0;
+}
+.chat-markdown pre {
+  background-color: var(--tw-prose-pre-bg) !important;
+  color: var(--tw-prose-pre-code) !important;
+  border: 1px solid #1e293b !important;
+  border-radius: var(--radius-lg) !important;
+}
+.chat-markdown :not(pre) > code {
+  background-color: #f1f5f9 !important;
+  color: var(--tw-prose-code) !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: var(--radius-sm) !important;
+  font-weight: 500 !important;
+}
+:is(.dark, .admin-dark) .chat-markdown :not(pre) > code {
+  background-color: #1e293b !important;
+}
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown strong {
+  color: var(--foreground) !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

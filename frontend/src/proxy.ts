@@ -13,6 +13,7 @@ const AUTHENTICATED_ROUTE_PREFIXES = [
   '/settings',
   '/repositories',
   '/reviews',
+  '/chat',
   '/model-lab',
 ];
 
