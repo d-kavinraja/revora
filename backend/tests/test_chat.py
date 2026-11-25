@@ -1,4 +1,4 @@
-﻿"""Mocked tests for temporary kLLM chat.
+"""Mocked tests for temporary kLLM chat.
 
 No test contacts a real kLLM gateway or performs real inference.
 """
@@ -6,6 +6,7 @@ No test contacts a real kLLM gateway or performs real inference.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 
 import pytest
@@ -21,12 +22,21 @@ from app.models.provider import ProviderRegistry
 from app.services import kllm_autoload, kllm_service
 from app.services import chat_service
 from app.services.chat_service import (
+    CLIP_MARKER,
     DEFAULT_OUTPUT_TOKENS,
+    INCOMPLETE_FINISH_REASON,
     MAX_CONTEXT_CHARS,
     MAX_OUTPUT_TOKENS,
+    MAX_REQUEST_MESSAGES,
+    MIN_INPUT_TOKENS,
     MIN_OUTPUT_TOKENS,
     OUTPUT_CONTEXT_RESERVE,
+    clamp_requested_max_tokens,
+    clip_to_budget,
+    context_fit_budget,
     estimate_input_tokens,
+    max_output_tokens_for_window,
+    output_safety_headroom,
     reset_chat_runtime_state,
     resolve_max_tokens,
     stream_chat_sse,
@@ -83,11 +93,12 @@ async def _seed_managed_provider(db) -> ProviderRegistry:
 
 
 async def _disable_chat_flag(db) -> None:
-    await platform_settings_service.set_flag(
-        db, "chat", status="disabled", message="Chat disabled for test"
+    await platform_settings_service.set_chat_modes(
+        db,
+        {"temporary_enabled": False, "persistent_enabled": False},
+        expected_version=0,
     )
     await db.commit()
-    platform_settings_service.clear_cache()
 
 
 def _ready_model(key: str = MODEL) -> KllmModel:
@@ -171,7 +182,7 @@ async def test_chat_validation_rejects_invalid_shapes(client):
         _chat_payload(messages=[{"role": "user", "content": " "}]),
         _chat_payload(messages=[{"role": "system", "content": "nope"}]),
         _chat_payload(messages=[{"role": "user", "content": "a" * 200001}]),
-        _chat_payload(messages=[{"role": "user", "content": "ok"}] * 41),
+        _chat_payload(messages=[{"role": "user", "content": "ok"}] * (MAX_REQUEST_MESSAGES + 1)),
     ]
     for payload in bad_payloads:
         response = client.post("/api/v1/chat/completions", json=payload)
@@ -269,15 +280,50 @@ async def test_chat_context_trimmed_server_side(client, test_db, gateway_enabled
         messages.append({"role": "assistant", "content": f"a{i} " + ("y" * 2000)})
     messages.append({"role": "user", "content": "final question"})
 
-    assert len(messages) <= 40
+    assert len(messages) <= MAX_REQUEST_MESSAGES
     response = client.post("/api/v1/chat/completions", json=_chat_payload(messages=messages))
     assert response.status_code == 200, response.text
     sent = seen["messages"]
-    assert len(sent) <= 20
+    # The model reports a 131K window: the whole conversation fits and none of
+    # it is silently dropped just because it has more than 20 turns.
+    assert len(sent) == len(messages)
     assert sent[-1]["content"] == "final question"
     assert sent[0]["role"] == "user"
+    _, budget_chars = context_fit_budget(131_072, None)
     total_chars = sum(len(m["content"]) for m in sent)
-    assert total_chars <= MAX_CONTEXT_CHARS
+    assert total_chars <= budget_chars
+
+
+async def test_chat_context_is_fitted_for_a_small_window(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    await _seed_managed_provider(test_db)
+    seen = {}
+
+    async def fake_ensure(_db, _model):
+        return dataclasses.replace(_ready_model(), context_window=8192)
+
+    async def fake_complete(_model, messages, **_kwargs):
+        seen["messages"] = messages
+        return "ok", 1, 1
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(llm_service, "complete_managed", fake_complete)
+
+    messages = []
+    for i in range(20):
+        messages.append({"role": "user", "content": f"u{i} " + ("x" * 1000)})
+        messages.append({"role": "assistant", "content": f"a{i} " + ("y" * 1000)})
+    messages.append({"role": "user", "content": "final question"})
+
+    response = client.post("/api/v1/chat/completions", json=_chat_payload(messages=messages))
+    assert response.status_code == 200, response.text
+    sent = seen["messages"]
+    _, budget_chars = context_fit_budget(8192, None)
+    assert 0 < len(sent) < len(messages)
+    assert sent[-1]["content"] == "final question"
+    assert sent[0]["role"] == "user"
+    assert sum(len(m["content"]) for m in sent) <= budget_chars
 
 
 async def test_chat_rate_limit(client, test_db, gateway_enabled, monkeypatch):
@@ -457,13 +503,21 @@ async def test_chat_stream_stops_on_client_disconnect(monkeypatch):
 
 
 def test_estimate_input_tokens_is_a_documented_approximation():
-    assert estimate_input_tokens([{"role": "user", "content": "x" * 400}]) == 100
+    # Same 3-chars-per-token ratio the fit itself uses, so the estimate can
+    # never promise room the fit would refuse to use.
+    assert estimate_input_tokens([{"role": "user", "content": "x" * 400}]) == 134
     assert estimate_input_tokens([{"role": "user", "content": "abc"}]) == 1
+    assert estimate_input_tokens([{"role": "user", "content": "ab"}]) == 1
+    assert estimate_input_tokens([]) == 0
 
 
 def test_output_budget_uses_context_window_bounded_by_ceiling():
     messages = [{"role": "user", "content": "x" * 400}]
-    assert resolve_max_tokens(None, 131072, messages) == MAX_OUTPUT_TOKENS
+    # An unspecified budget gets the default, not the hard ceiling, even when
+    # the window could afford much more.
+    assert resolve_max_tokens(None, 131072, messages) == DEFAULT_OUTPUT_TOKENS
+    assert resolve_max_tokens(MAX_OUTPUT_TOKENS, 131072, messages) == MAX_OUTPUT_TOKENS
+    assert resolve_max_tokens(None, 131072, messages) <= MAX_OUTPUT_TOKENS
 
 
 def test_output_budget_honours_explicit_override_and_clamps_excess():
@@ -474,10 +528,16 @@ def test_output_budget_honours_explicit_override_and_clamps_excess():
 
 
 def test_output_budget_accounts_for_input_and_reserve():
-    messages = [{"role": "user", "content": "x" * 4000}]  # ~1000 tokens
+    messages = [{"role": "user", "content": "x" * 4000}]  # 1334 tokens at 3 c/t
     assert OUTPUT_CONTEXT_RESERVE == 2048
-    # 4096 - 1000 - 2048 = 1048
-    assert resolve_max_tokens(None, 4096, messages) == 1048
+    assert output_safety_headroom(4096) == 1024  # window // 4 below 8192
+    # 4096 - 1334 - 1024 = 1738 remaining; the reserve is 1024 (window // 4).
+    assert resolve_max_tokens(None, 4096, messages) == 1024
+    # A larger request in the same small window is clamped to what is left:
+    # prompt + output + headroom can never exceed the window.
+    requested = resolve_max_tokens(4096, 4096, messages)
+    assert requested == 4096 - 1334 - 1024
+    assert 1334 + requested + output_safety_headroom(4096) <= 4096
 
 
 def test_output_budget_does_not_guarantee_minimum_when_context_short():
@@ -491,6 +551,9 @@ def test_output_budget_unknown_context_uses_conservative_fallback():
     messages = [{"role": "user", "content": "hi"}]
     assert resolve_max_tokens(None, None, messages) == DEFAULT_OUTPUT_TOKENS
     assert resolve_max_tokens(999, None, messages) == 999
+    # Without a window there is no room arithmetic to trust, so the hard
+    # ceiling is still enforced.
+    assert resolve_max_tokens(999_999, None, messages) == MAX_OUTPUT_TOKENS
 
 
 async def test_chat_uses_resolved_model_context_for_output_budget(
@@ -511,7 +574,9 @@ async def test_chat_uses_resolved_model_context_for_output_budget(
 
     response = client.post("/api/v1/chat/completions", json=_chat_payload())
     assert response.status_code == 200, response.text
-    assert captured["max_tokens"] == MAX_OUTPUT_TOKENS
+    # 131072 window, no explicit request: the default reply budget is used and
+    # stays inside the model ceiling.
+    assert captured["max_tokens"] == DEFAULT_OUTPUT_TOKENS
 
 
 # ---- finish-reason propagation ---------------------------------------------
@@ -566,6 +631,139 @@ async def test_chat_stream_end_marker_keeps_default_stop(
         body = "".join(response.iter_text())
 
     assert _parse_sse(body)[-1] == {"type": "done", "finish_reason": "stop"}
+
+
+async def test_chat_stream_forwards_the_confirmed_model_event(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    """The model event is the only source the client may treat as confirmed."""
+    await _seed_managed_provider(test_db)
+
+    async def fake_ensure(_db, _model):
+        return _ready_model()
+
+    async def fake_stream(_model, _messages, **_kwargs):
+        yield StreamMeta("model", {"name": "qwen3.8-27b:latest"})
+        yield kllm_client.ContentDelta("hi")
+        yield StreamMeta("done", {"finish_reason": "stop"})
+        yield StreamMeta("end", {})
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(kllm_client.kllm_chat_client, "stream", fake_stream)
+
+    with client.stream(
+        "POST", "/api/v1/chat/completions", json=_chat_payload(stream=True)
+    ) as response:
+        body = "".join(response.iter_text())
+
+    events = _parse_sse(body)
+    # The confirmed id is forwarded verbatim, and it is never content.
+    assert {"type": "model", "name": "qwen3.8-27b:latest"} in events
+    assert [e for e in events if e["type"] == "delta"] == [
+        {"type": "delta", "content": "hi"}
+    ]
+    assert events[-1] == {"type": "done", "finish_reason": "stop"}
+
+async def test_chat_stream_without_a_terminal_event_is_incomplete(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    """A stream that stops without done/end must never look like a clean stop."""
+    await _seed_managed_provider(test_db)
+
+    async def fake_ensure(_db, _model):
+        return _ready_model()
+
+    async def fake_stream(_model, _messages, **_kwargs):
+        yield kllm_client.ContentDelta("partial")
+        # No StreamMeta("done"/"end"): the connection simply stopped.
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(kllm_client.kllm_chat_client, "stream", fake_stream)
+
+    with client.stream(
+        "POST", "/api/v1/chat/completions", json=_chat_payload(stream=True)
+    ) as response:
+        body = "".join(response.iter_text())
+
+    events = _parse_sse(body)
+    assert [e for e in events if e["type"] == "delta"] == [
+        {"type": "delta", "content": "partial"}
+    ]
+    assert events[-1] == {"type": "done", "finish_reason": INCOMPLETE_FINISH_REASON}
+
+
+async def test_chat_non_streaming_returns_the_provider_finish_reason(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    await _seed_managed_provider(test_db)
+
+    async def fake_ensure(_db, _model):
+        return _ready_model()
+
+    async def fake_complete(_model, _messages, **_kwargs):
+        return "cut off", 5, 7, "length"
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(llm_service, "complete_managed", fake_complete)
+
+    response = client.post("/api/v1/chat/completions", json=_chat_payload())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["finish_reason"] == "length"
+    assert body["content"] == "cut off"
+    assert body["usage"] == {"prompt_tokens": 5, "completion_tokens": 7}
+
+
+async def test_chat_non_streaming_reports_an_unknown_reason_as_null(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    """Legacy three-tuple clients stay supported without inventing a "stop"."""
+    await _seed_managed_provider(test_db)
+
+    async def fake_ensure(_db, _model):
+        return _ready_model()
+
+    async def fake_complete(_model, _messages, **_kwargs):
+        return "ok", 1, 1
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(llm_service, "complete_managed", fake_complete)
+
+    response = client.post("/api/v1/chat/completions", json=_chat_payload())
+    assert response.status_code == 200, response.text
+    assert response.json()["finish_reason"] is None
+
+
+async def test_chat_clamps_an_oversized_max_tokens_to_the_window(
+    client, test_db, gateway_enabled, monkeypatch
+):
+    await _seed_managed_provider(test_db)
+    captured = {}
+
+    async def fake_ensure(_db, _model):
+        return dataclasses.replace(_ready_model(), context_window=8192)
+
+    async def fake_complete(_model, _messages, **kwargs):
+        captured.update(kwargs)
+        return "ok", 1, 1, "stop"
+
+    monkeypatch.setattr(kllm_service, "ensure_model_ready", fake_ensure)
+    monkeypatch.setattr(llm_service, "complete_managed", fake_complete)
+
+    # 16384 is the largest value the request model accepts, yet it cannot fit an
+    # 8192-token window: the endpoint clamps it before fitting the prompt.
+    response = client.post(
+        "/api/v1/chat/completions", json=_chat_payload(max_tokens=MAX_OUTPUT_TOKENS)
+    )
+    assert response.status_code == 200, response.text
+    expected = max_output_tokens_for_window(8192)
+    assert expected == 8192 - output_safety_headroom(8192) - MIN_INPUT_TOKENS
+    assert expected < MAX_OUTPUT_TOKENS
+    assert captured["max_tokens"] == expected
+    assert captured["max_tokens"] == clamp_requested_max_tokens(MAX_OUTPUT_TOKENS, 8192)
+    # The request never reserves more output than the window can hold.
+    assert 8192 - captured["max_tokens"] - output_safety_headroom(8192) >= MIN_INPUT_TOKENS
+
 
 
 async def test_chat_stream_keepalive_is_not_forwarded(

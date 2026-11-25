@@ -7,32 +7,39 @@ import { ActivityIcon, CircleCheckIcon, TriangleAlertIcon } from '@animateicons/
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 
 export default function HealthPage() {
   const [healthData, setHealthData] = useState<ProviderHealth[]>([]);
   const [failovers, setFailovers] = useState<FailoverLog[]>([]);
-  const [circuitBreakers, setCircuitBreakers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [checkingProvider, setCheckingProvider] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const loadData = useCallback(async () => {
-    try {
-      const [hData, fData, cbData] = await Promise.all([
+  // Promise-chain form (not async/await): every state update below happens
+  // in a promise callback, never synchronously when callers invoke this from
+  // an effect body (react-hooks/set-state-in-effect).
+  const loadData = useCallback(
+    () =>
+      Promise.all([
         api.getProviderHealth(),
         api.getFailovers(),
         api.getCircuitBreakers(),
-      ]);
-      setHealthData(hData);
-      setFailovers(fData);
-      setCircuitBreakers(cbData);
-    } catch (err) {
-      console.error('Failed to load health data', err);
-      toast({ title: 'Failed to load health data', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+      ])
+        .then(([hData, fData]) => {
+          setHealthData(hData);
+          setFailovers(fData);
+        })
+        .catch((err: unknown) => {
+          console.error('Failed to load health data', err);
+          toast({ title: 'Failed to load health data', type: 'error' });
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [toast],
+  );
 
   const resumeProviderCheck = useCallback(
     async (job: OperationJob) => {
@@ -50,7 +57,7 @@ export default function HealthPage() {
           type: 'success',
         });
         await loadData();
-      } catch (err) {
+      } catch {
         toast({ title: `Health check failed for ${provider}`, type: 'error' });
       } finally {
         setCheckingProvider(null);
@@ -91,7 +98,7 @@ export default function HealthPage() {
         type: final.status === 'completed' ? 'success' : 'error',
       });
       await loadData();
-    } catch (err) {
+    } catch {
       toast({ title: 'Health check failed', type: 'error' });
     } finally {
       setCheckingProvider(null);
@@ -127,25 +134,22 @@ export default function HealthPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <ActivityIcon size={28} className="text-brand" />
-          Health Monitor
-        </h1>
-        <p className="mt-1 text-muted-foreground text-sm">
-          Provider health status, circuit breaker states, and failover events.
-        </p>
-      </div>
+      <PageHeader
+        title="Health monitor"
+        support="Provider health status, circuit breaker states, and failover events."
+        icon={<ActivityIcon size={28} className="text-brand" />}
+      />
+      <SettingsShell />
 
       {healthData.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface-1 p-8 text-center mb-8">
           <ActivityIcon size={32} className="mx-auto text-muted-foreground mb-3 opacity-50" />
-          <h3 className="font-semibold text-foreground text-base mb-1">No Configured Providers</h3>
+          <h3 className="font-semibold text-foreground text-base mb-1">No configured providers</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
-            You don't have any active API credentials registered for your account. Add an API key in Settings &rarr; API Keys to monitor provider health.
+            You don&apos;t have any active API credentials registered for your account. Add an API key to monitor provider health.
           </p>
           <a href="/settings/api-keys" className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-brand text-white hover:bg-brand-hover transition-colors">
-            + Add API Key
+            Add API key
           </a>
         </div>
       ) : (

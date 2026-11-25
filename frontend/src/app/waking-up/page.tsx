@@ -122,14 +122,14 @@ function WakingUpContent() {
           {/* Text */}
           {status === 'alive' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <h1 className="text-2xl font-bold text-white drop-shadow-md">Server is Ready!</h1>
+              <h1 className="text-2xl font-bold text-white drop-shadow-md">Server is ready!</h1>
               <p className="text-zinc-300 text-sm mt-2">Redirecting you now{dots}</p>
             </div>
           ) : status === 'timeout' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <h1 className="text-2xl font-bold text-red-400 drop-shadow-md">Server Taking Too Long</h1>
+              <h1 className="text-2xl font-bold text-red-400 drop-shadow-md">Server taking too long</h1>
               <p className="text-zinc-300 text-sm leading-relaxed mt-3">
-                The server hasn't responded in 2 minutes. This can happen on the Render free tier during very high load.
+                The server hasn&apos;t responded in 2 minutes. This can happen on the Render free tier during very high load.
               </p>
               <button
                 onClick={() => { setAttempt(0); setStatus('waking'); }}

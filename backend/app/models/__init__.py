@@ -17,6 +17,7 @@ from app.models.botaniq import BotaniqInferenceRun
 from app.models.mouthmap import MouthmapInferenceRun
 from app.models.observability import LLMRequestLog
 from app.models.organization import Organization, OrgMember
+from app.models.persistent_chat import ChatConversation, ChatMessage, ChatTurnRevision
 from app.models.platform import (
     Announcement,
     AnnouncementState,
@@ -60,6 +61,9 @@ __all__ = [
     "AuditLog",
     "BotaniqInferenceRun",
     "CostBudget",
+    "ChatConversation",
+    "ChatMessage",
+    "ChatTurnRevision",
     "DiscoveredModel",
     "FailoverLog",
     "FalsePositiveReportModel",

@@ -342,7 +342,15 @@ def test_advisory_lock_release_is_shielded():
 def test_settings_have_review_worker_config():
     from app.core import config as cfg
 
-    names = [name for name in dir(cfg) if name.isupper()]
-    assert getattr(cfg.settings, "REVIEW_WORKER_CONCURRENCY", 5) == 5  # localhost default
-    assert getattr(cfg.settings, "REVIEW_WORKER_ENABLED", True) is True
-    assert getattr(cfg.settings, "PROVIDER_CONCURRENCY_LIMIT", 3) == 3
+    # ``settings`` is built at import time from backend/.env, so its values are
+    # deployment-specific (the local .env sets REVIEW_WORKER_CONCURRENCY=2).
+    # The declared defaults must not depend on a developer's environment.
+    fields = cfg.Settings.model_fields
+    assert fields["REVIEW_WORKER_CONCURRENCY"].default == 5
+    assert fields["REVIEW_WORKER_ENABLED"].default is True
+    assert fields["PROVIDER_CONCURRENCY_LIMIT"].default == 3
+
+    # The live settings object must still expose the knobs with valid values.
+    assert 1 <= cfg.settings.REVIEW_WORKER_CONCURRENCY <= 5
+    assert isinstance(cfg.settings.REVIEW_WORKER_ENABLED, bool)
+    assert 1 <= cfg.settings.PROVIDER_CONCURRENCY_LIMIT <= 5

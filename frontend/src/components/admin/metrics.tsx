@@ -52,7 +52,7 @@ export function KpiTile({
         }`}
       />
       <div className="flex items-start justify-between gap-3">
-        <p className="admin-eyebrow min-w-0 truncate">{label}</p>
+        <p className="admin-label min-w-0 truncate">{label}</p>
         {icon && (
           <span className="shrink-0 text-muted-foreground" aria-hidden="true">
             {icon}
@@ -60,7 +60,7 @@ export function KpiTile({
         )}
       </div>
       <p
-        className={`admin-figure mt-2 text-2xl font-semibold ${
+        className={`admin-readout mt-2 text-2xl font-semibold ${
           unavailable ? 'text-muted-foreground' : 'text-foreground'
         }`}
       >
@@ -100,7 +100,7 @@ export function StatGroup({
   return (
     <section aria-label={label}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="admin-eyebrow">{label}</h2>
+        <h2 className="admin-label font-semibold text-foreground">{label}</h2>
         {description && (
           <p className="text-xs text-muted-foreground">{description}</p>
         )}
@@ -129,12 +129,14 @@ export function MeterRow({
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="flex min-w-0 items-center gap-2 text-foreground/85" title={label}>
+        <span className="flex min-w-0 items-baseline gap-2 text-foreground/85" title={label}>
           {leading}
-          <span className="min-w-0 truncate">
-            {label}
+          <span className="min-w-0">
+            <span className="block truncate">{label}</span>
             {secondary && (
-              <span className="text-muted-foreground"> · {secondary}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {secondary}
+              </span>
             )}
           </span>
         </span>
@@ -241,6 +243,79 @@ export function DistributionBar({ items }: { items: DistributionItem[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Hero band: one verdict, its readouts, and the page's controls. The single
+ * memorable surface on a page — everything else stays quiet around it.
+ */
+export interface RibbonReadout {
+  key: string;
+  label: string;
+  value: string;
+  sub?: string | null;
+}
+
+export function StatusRibbon({
+  label,
+  verdict,
+  hint,
+  readouts = [],
+  actions,
+}: {
+  label: string;
+  verdict: ReactNode;
+  hint?: ReactNode;
+  readouts?: RibbonReadout[];
+  actions?: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <motion.section
+      aria-label={label}
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="admin-hero admin-tick flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:gap-8"
+    >
+      <div className="min-w-0 lg:max-w-xs">
+        <p className="admin-label">{label}</p>
+        <p className="admin-readout mt-1.5 text-xl font-semibold text-foreground">
+          {verdict}
+        </p>
+        {hint && (
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {hint}
+          </p>
+        )}
+      </div>
+
+      {readouts.length > 0 && (
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-8 gap-y-4 border-border sm:grid-cols-3 lg:border-l lg:pl-8 xl:grid-cols-4">
+          {readouts.map((readout) => (
+            <div key={readout.key} className="min-w-0">
+              <p className="admin-label truncate">{readout.label}</p>
+              <p className="admin-readout mt-1 truncate text-lg font-semibold text-foreground">
+                {readout.value}
+              </p>
+              {readout.sub && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {readout.sub}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {actions && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 lg:ml-auto">
+          {actions}
+        </div>
+      )}
+    </motion.section>
   );
 }
 

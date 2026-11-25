@@ -12,6 +12,7 @@ DTOs: no account names, API/gateway keys, Kaggle identity, tunnel/LAN URLs,
 kernel references, raw prompts or scheduler internals ever leave this module.
 """
 
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -27,8 +28,10 @@ from app.models.execution import ReviewExecution
 from app.models.github import Installation, PullRequest, Repository
 from app.models.review import Review
 from app.models.user import User
-from app.services import kllm_autoload, kllm_service, user_presence
+from app.services import hosted_monitor, kllm_autoload, kllm_service, user_presence
 from app.services.kllm_service import KllmError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -309,6 +312,12 @@ async def session_heartbeat(
     await db.commit()
     status = user_presence.public_status(row)
     models = await kllm_autoload.reconcile_session_models(db)
+    # Hosted availability monitoring is scheduled, never awaited: a monitor
+    # failure cannot delay the heartbeat or affect kLLM reconciliation.
+    try:
+        hosted_monitor.notify_session_activity()
+    except Exception:
+        logger.warning("Hosted monitor scheduling failed")
     return {"session": status, "models": models}
 
 

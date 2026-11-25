@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.auth import create_access_token, get_password_hash
-from app.core.deps import get_current_user, get_current_user_for_stream
+from app.core.deps import (
+    get_current_user,
+    get_current_user_for_stream,
+    get_current_user_readonly,
+)
 from app.core.deps_admin import ADMIN_SESSION_COOKIE
 from app.db.base import Base
 from app.db.session import get_db
@@ -126,6 +130,9 @@ def client(test_db, mock_user) -> TestClient:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # Speech uses a strictly read-only auth dependency; tests that use the
+    # authenticated client should not have to reproduce token plumbing.
+    app.dependency_overrides[get_current_user_readonly] = override_get_current_user
     # The SSE endpoints authenticate via a short-lived helper dependency
     # (get_current_user_for_stream) so the DB session is not pinned for the
     # lifetime of the stream. Override it the same way in tests.

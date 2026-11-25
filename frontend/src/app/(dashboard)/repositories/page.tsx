@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import Image from 'next/image';
+import { useEffect, useState, useRef } from 'react';
 import { api, Repository, ApiKey, ModelMetadata, RepoGithubStats, Provider } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon, TriangleAlertIcon, CircleCheckIcon } from '@animateicons/react/lucide';
-import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, Power, GitFork, CircleDot, Users, Eye, ExternalLink } from 'lucide-react';
+import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon } from '@animateicons/react/lucide';
+import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, GitFork, CircleDot, Users, ExternalLink } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
+import { ErrorBanner } from '@/components/shared/error-banner';
 import { SkeletonList } from '@/components/shared/skeleton';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { providerDisplayName } from '@/components/ui/provider-brand';
@@ -33,21 +34,18 @@ const LANG_COLORS: Record<string, string> = {
   Scala: '#c22d40',
 };
 
-function LangBadge({ lang }: { lang: string | null }) {
-  if (!lang) return null;
-  const colors: Record<string, string> = {
-    Python: 'bg-blue-500/15 text-blue-300',
-    TypeScript: 'bg-sky-500/15 text-sky-300',
-    JavaScript: 'bg-yellow-500/15 text-yellow-300',
-    Go: 'bg-cyan-500/15 text-cyan-300',
-    Rust: 'bg-orange-500/15 text-orange-300',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[lang] ?? 'bg-muted text-muted-foreground'}`}>
-      {lang}
-    </span>
-  );
-}
+type IconHandle = { startAnimation: () => void; stopAnimation: () => void };
+
+/** Completion notice for one background repository sync. `baseline` is the
+ *  state object that produced it, used as the identity for one-shot effects. */
+type SyncNotice = {
+  baseline: { id: string; at: string | null };
+  title: string;
+  description?: string;
+  type: 'error' | 'success';
+};
+
+type SyncAllNotice = { baseline: { at: Record<string, string | null> } };
 
 function timeAgo(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -148,6 +146,7 @@ function GithubRepoAvatar({ repoId, fallbackName }: { repoId: string; fallbackNa
 
   return (
     <div className="w-12 h-12 rounded-xl overflow-hidden border border-border shrink-0">
+      {/* eslint-disable-next-line @next/next/no-img-element -- owner avatars are arbitrary GitHub URLs, outside next/image remotePatterns */}
       <img
         src={data.owner_avatar_url}
         alt={`${fallbackName.split('/')[0]} avatar`}
@@ -224,7 +223,7 @@ function ConfigModal({
     Boolean(repo.settings?.fallback_enabled ?? repo.fallback_enabled ?? false),
   );
   const [saving, setSaving] = useState(false);
-  const settingsRef = useRef<any>(null);
+  const settingsRef = useRef<IconHandle>(null);
   const { toast } = useToast();
 
   // Saving repository routing config is flag-gated server-side (§11.1).
@@ -233,23 +232,23 @@ function ConfigModal({
   const routingFlag = featureState(features, 'routing_mapping');
   const routingEnabled = routingFlag.status === 'enabled';
 
-  useEffect(() => {
-    const keys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
-    if (keys.length > 0 && !keys.some(k => k.id === selectedKeyId)) {
-      setSelectedKeyId(keys[0].id);
-    } else if (keys.length === 0) {
-      setSelectedKeyId('');
-    }
-  }, [selectedProvider, apiKeys, selectedKeyId]);
+  // The selected key follows the chosen provider. Adjusted during render
+  // (the documented "derive state instead of syncing with an effect" pattern,
+  // same as TextFilter) so no setState happens inside an effect.
+  const validKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
+  if (validKeys.length > 0 && !validKeys.some(k => k.id === selectedKeyId)) {
+    setSelectedKeyId(validKeys[0].id);
+  } else if (validKeys.length === 0 && selectedKeyId !== '') {
+    setSelectedKeyId('');
+  }
 
-  useEffect(() => {
-    if (selectedProvider && models.length > 0 && !models.some(m => m.model_name === selectedModel)) {
-      const firstAccessible = models.find(m => m.accessible);
-      if (firstAccessible) {
-        setSelectedModel(firstAccessible.model_name);
-      }
+  // Same render-time adjustment for the model chosen for the provider.
+  if (selectedProvider && models.length > 0 && !models.some(m => m.model_name === selectedModel)) {
+    const firstAccessible = models.find(m => m.accessible);
+    if (firstAccessible) {
+      setSelectedModel(firstAccessible.model_name);
     }
-  }, [selectedProvider, models, selectedModel]);
+  }
 
   useEffect(() => {
     settingsRef.current?.startAnimation?.();
@@ -278,10 +277,14 @@ function ConfigModal({
         fallback_enabled: fallbackEnabled,
       });
       onClose(); // Only close on success
-    } catch (err: any) {
+    } catch (err) {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
       toast({
         title: 'Failed to save configuration',
-        description: err.response?.data?.detail || err.message,
+        description: response?.data?.detail || message,
         type: 'error',
       });
     } finally {
@@ -339,7 +342,7 @@ function ConfigModal({
           <div className="space-y-4">
             {/* Provider Selector */}
             <div>
-              <label htmlFor="provider-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Provider</label>
+              <label htmlFor="provider-select" className="text-xs font-medium text-muted-foreground">Provider</label>
               <div className="relative flex items-center mt-1.5">
                 <div className="absolute left-3 pointer-events-none flex items-center justify-center">
                   <ProviderIcon slug={selectedProvider} size={16} />
@@ -370,7 +373,7 @@ function ConfigModal({
               </div>
             ) : providerKeys.length > 0 ? (
               <div>
-                <label htmlFor="key-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
+                <label htmlFor="key-select" className="text-xs font-medium text-muted-foreground">API key</label>
                 <select
                   id="key-select"
                   value={selectedKeyId}
@@ -394,7 +397,7 @@ function ConfigModal({
             {/* Model Selector */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Model</label>
+                <label htmlFor="model-select" className="text-xs font-medium text-muted-foreground">Model</label>
                 {isManagedProvider ? (
                   <span className="text-[11px] text-muted-foreground">Loaded models only</span>
                 ) : (
@@ -559,9 +562,9 @@ function RepositoryCard({
   onConfigure: (repo: Repository) => void;
   apiKeys: ApiKey[];
 }) {
-  const folderRef = useRef<any>(null);
-  const reviewsRef = useRef<any>(null);
-  const settingsRef = useRef<any>(null);
+  const folderRef = useRef<IconHandle>(null);
+  const reviewsRef = useRef<IconHandle>(null);
+  const settingsRef = useRef<IconHandle>(null);
 
   const removed = repo.status === 'removed';
 
@@ -848,10 +851,14 @@ export default function RepositoriesPage() {
           .flatMap((p) => [p.name, p.slug].filter(Boolean)),
       );
       setConfigRepo(repo);
-    } catch (err: any) {
+    } catch (err) {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
       toast({
         title: 'Failed to load models',
-        description: err.response?.data?.detail || err.message,
+        description: response?.data?.detail || message,
         type: 'error',
       });
     } finally {
@@ -874,6 +881,12 @@ export default function RepositoriesPage() {
   const [syncBaseline, setSyncBaseline] = useState<{ id: string; at: string | null } | null>(null);
   // Baselines for a global sync: every visible repository must advance.
   const [syncAllBaseline, setSyncAllBaseline] = useState<{ at: Record<string, string | null> } | null>(null);
+  // Derived completion notices for the background syncs (see below). Held in
+  // state so the refetch/toast side effects run once per completed sync.
+  const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null);
+  const [syncAllNotice, setSyncAllNotice] = useState<SyncAllNotice | null>(null);
+  const firedSyncNoticeRef = useRef<SyncNotice | null>(null);
+  const firedSyncAllNoticeRef = useRef<SyncAllNotice | null>(null);
 
   const handleSync = async (id: string) => {
     const repo = (activeQuery.data ?? []).find((r) => r.id === id);
@@ -895,10 +908,14 @@ export default function RepositoriesPage() {
         setSyncingRepoId((current) => (current === id ? null : current));
         setSyncBaseline((current) => (current?.id === id ? null : current));
       }, 180000);
-    } catch (err: any) {
+    } catch (err) {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
       toast({
         title: 'Sync failed',
-        description: err.response?.data?.detail || err.message,
+        description: response?.data?.detail || message,
         type: 'error',
       });
       setSyncingRepoId(null);
@@ -909,42 +926,57 @@ export default function RepositoriesPage() {
   // Refresh durability: the backend owns sync state (sync_state per repo).
   // After a browser refresh, React state is gone but the sync continues
   // server-side — re-attach the spinner to the still-running sync instead
-  // of showing idle (and never fire a duplicate sync from here).
-  useEffect(() => {
-    if (syncingRepoId || syncBaseline) return;
-    const running = (activeQuery.data ?? []).find((r) => r.sync_state?.status === 'running');
-    if (running) {
-      setSyncingRepoId(running.id);
-      setSyncBaseline({
-        id: running.id,
-        at: running.last_sync?.completed_at ?? running.last_synced_at ?? null,
-      });
-    }
-  }, [activeQuery.data, syncingRepoId, syncBaseline]);
+  // of showing idle (and never fire a duplicate sync from here). Adjusted
+  // during render instead of inside an effect.
+  const runningRow = (activeQuery.data ?? []).find((r) => r.sync_state?.status === 'running');
+  if (!syncingRepoId && !syncBaseline && runningRow) {
+    setSyncingRepoId(runningRow.id);
+    setSyncBaseline({
+      id: runningRow.id,
+      at: runningRow.last_sync?.completed_at ?? runningRow.last_synced_at ?? null,
+    });
+  }
 
-  // Sync runs in the background: mark it complete once the repository row
+  // Sync runs in the background: it is complete once the repository row
   // (refetched every 5s) shows a newer last-synced timestamp, or the
   // backend sync_state reaches a terminal status (success/partial/failed).
-  useEffect(() => {
-    if (!syncBaseline) return;
+  // The completion is derived and the state reset happens during render;
+  // the side effects (refetch + toast) run once from the effect below.
+  const pendingSyncNotice = ((): SyncNotice | null => {
+    if (!syncBaseline) return null;
     const repo = (activeQuery.data ?? []).find((r) => r.id === syncBaseline.id);
-    if (!repo) return;
-    const current = repo?.last_sync?.completed_at ?? repo?.last_synced_at ?? null;
-    const stateStatus = repo?.sync_state?.status ?? null;
+    if (!repo) return null;
+    const current = repo.last_sync?.completed_at ?? repo.last_synced_at ?? null;
+    const stateStatus = repo.sync_state?.status ?? null;
     const stateDone = stateStatus === 'success' || stateStatus === 'partial' || stateStatus === 'failed';
-    if ((current && current !== syncBaseline.at) || stateDone) {
-      setSyncBaseline(null);
-      setSyncingRepoId(null);
-      queryClient.invalidateQueries({ queryKey: ['repositories'] });
-      if (stateStatus === 'failed') {
-        toast({ title: 'Sync failed', description: repo?.sync_state?.error ?? undefined, type: 'error' });
-      } else if (stateStatus === 'partial') {
-        toast({ title: 'Sync completed with errors', description: repo?.sync_state?.error ?? undefined, type: 'error' });
-      } else {
-        toast({ title: 'Sync completed', type: 'success' });
-      }
-    }
-  }, [activeQuery.data, syncBaseline, queryClient]);
+    if (!((current && current !== syncBaseline.at) || stateDone)) return null;
+    return {
+      baseline: syncBaseline,
+      title:
+        stateStatus === 'failed'
+          ? 'Sync failed'
+          : stateStatus === 'partial'
+            ? 'Sync completed with errors'
+            : 'Sync completed',
+      description: repo.sync_state?.error ?? undefined,
+      type: stateStatus === 'failed' || stateStatus === 'partial' ? 'error' : 'success',
+    };
+  })();
+  if (pendingSyncNotice && syncNotice?.baseline !== pendingSyncNotice.baseline) {
+    setSyncNotice(pendingSyncNotice);
+    setSyncBaseline(null);
+    setSyncingRepoId(null);
+  }
+  useEffect(() => {
+    if (!syncNotice || firedSyncNoticeRef.current === syncNotice) return;
+    firedSyncNoticeRef.current = syncNotice;
+    queryClient.invalidateQueries({ queryKey: ['repositories'] });
+    toast({
+      title: syncNotice.title,
+      description: syncNotice.description,
+      type: syncNotice.type,
+    });
+  }, [syncNotice, queryClient, toast]);
 
   const handleSyncAll = async () => {
     const repos = activeQuery.data ?? [];
@@ -963,10 +995,14 @@ export default function RepositoriesPage() {
         setIsSyncingAll(false);
         setSyncAllBaseline(null);
       }, 180000);
-    } catch (err: any) {
+    } catch (err) {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
       toast({
         title: 'Global sync failed',
-        description: err.response?.data?.detail || err.message,
+        description: response?.data?.detail || message,
         type: 'error',
       });
       setIsSyncingAll(false);
@@ -975,57 +1011,70 @@ export default function RepositoriesPage() {
   };
 
   // Global sync runs in the background: complete once every visible
-  // repository row shows a newer last-synced timestamp.
-  useEffect(() => {
-    if (!syncAllBaseline) return;
+  // repository row shows a newer last-synced timestamp. Same derived-during-
+  // render pattern as the per-repository sync above.
+  const syncAllAdvanced = (() => {
+    if (!syncAllBaseline) return false;
     const repos = activeQuery.data ?? [];
-    if (repos.length === 0) return;
-    const allAdvanced = repos.every((r) => {
+    if (repos.length === 0) return false;
+    return repos.every((r) => {
       const current = r.last_sync?.completed_at ?? r.last_synced_at ?? null;
-      return current && current !== (syncAllBaseline.at[r.id] ?? null);
+      return Boolean(current) && current !== (syncAllBaseline.at[r.id] ?? null);
     });
-    if (allAdvanced) {
-      setSyncAllBaseline(null);
-      setIsSyncingAll(false);
-      queryClient.invalidateQueries({ queryKey: ['repositories'] });
-      toast({ title: 'Global sync completed', type: 'success' });
-    }
-  }, [activeQuery.data, syncAllBaseline, queryClient]);
+  })();
+  if (syncAllAdvanced && syncAllBaseline && syncAllNotice?.baseline !== syncAllBaseline) {
+    setSyncAllNotice({ baseline: syncAllBaseline });
+    setSyncAllBaseline(null);
+    setIsSyncingAll(false);
+  }
+  useEffect(() => {
+    if (!syncAllNotice || firedSyncAllNoticeRef.current === syncAllNotice) return;
+    firedSyncAllNoticeRef.current = syncAllNotice;
+    queryClient.invalidateQueries({ queryKey: ['repositories'] });
+    toast({ title: 'Global sync completed', type: 'success' });
+  }, [syncAllNotice, queryClient, toast]);
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Repositories</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Connected repositories from your GitHub App installation.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSyncAll}
-            disabled={isSyncingAll}
-            className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer"
-          >
-            {isSyncingAll ? (
-              <>
-                <LoaderIcon size={14} className="text-brand-foreground" animate />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <LoaderIcon size={14} className="text-brand-foreground" />
-                Sync from GitHub
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Repositories"
+        support="Connected repositories from your GitHub App installation."
+        actions={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSyncAll}
+              disabled={isSyncingAll}
+              className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-brand-foreground rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+            >
+              {isSyncingAll ? (
+                <>
+                  <LoaderIcon size={14} className="text-brand-foreground" animate />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <LoaderIcon size={14} className="text-brand-foreground" />
+                  Sync from GitHub
+                </>
+              )}
+            </button>
+          </div>
+        }
+      />
 
       {reposError && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/30 rounded-lg flex items-center gap-3">
-          <TriangleAlertIcon size={20} className="text-error" />
-          <p className="text-sm text-error">Failed to load repositories.</p>
-        </div>
+        <ErrorBanner
+          message="Failed to load repositories."
+          action={
+            <button
+              type="button"
+              onClick={() => void activeQuery.refetch()}
+              className="cursor-pointer rounded-lg border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+            >
+              Retry
+            </button>
+          }
+        />
       )}
 
       {/* Tabs */}

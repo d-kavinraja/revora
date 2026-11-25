@@ -97,33 +97,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                const isAdmin = (window.location.pathname || '').startsWith('/admin');
-                if (isAdmin) {
-                  const stored = localStorage.getItem('revora-admin-theme');
-                  const theme = stored ? JSON.parse(stored).state.theme : 'dark';
-                  document.documentElement.classList.add(theme === 'dark' ? 'admin-dark' : 'admin-light');
-                } else {
-                  const stored = localStorage.getItem('revora-theme');
-                  let theme = 'dark';
-                  if (stored) {
-                    theme = JSON.parse(stored).state.theme;
-                  } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-                    theme = 'light';
-                  }
-                  document.documentElement.classList.add(theme);
-                }
-              } catch (e) {}
-            `,
-          }}
-        />
-      </head>
-      <body className={`${inter.variable} ${oxanium.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`} suppressHydrationWarning>
+    <html lang="en">
+      <head />
+      <body className={`${inter.variable} ${oxanium.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`}>
         <Providers>
           <GlobalAnnouncementBanner />
           {children}

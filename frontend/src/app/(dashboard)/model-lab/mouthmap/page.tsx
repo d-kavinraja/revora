@@ -139,15 +139,30 @@ function MouthMapLab() {
     (async () => {
       setLoading(true);
       try {
+        let degraded = false;
         const [cfg, ds, hist] = await Promise.all([
           mouthmapApi.getConfig(),
-          mouthmapApi.getDataset().catch(() => [] as MouthMapTestVideo[]),
-          mouthmapApi.getHistory().catch(() => [] as MouthMapHistoryItem[]),
+          mouthmapApi.getDataset().catch(() => {
+            degraded = true;
+            return [] as MouthMapTestVideo[];
+          }),
+          mouthmapApi.getHistory().catch(() => {
+            degraded = true;
+            return [] as MouthMapHistoryItem[];
+          }),
         ]);
         if (cancelled) return;
         setConfig(cfg);
         setDataset(ds);
         setHistory(hist);
+        // A failed auxiliary load must not masquerade as "no data".
+        if (degraded) {
+          toast({
+            title: 'Some Model Lab data could not be loaded',
+            description: 'Dataset or run history may be incomplete. Refresh to retry.',
+            type: 'error',
+          });
+        }
         // Prefetch small dataset videos (auth fetch -> blob URLs) for REAL
         // thumbnails. Large files fall back to the icon tile. Durations are
         // read from actual video metadata — never fabricated.

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef } from "react";
 import { PlusIcon, SquareIcon, XIcon } from "lucide-react";
@@ -9,20 +9,21 @@ interface ChatTabsProps {
   chats: TemporaryChat[];
   activeId: string | null;
   canCreate: boolean;
-  isGenerating: boolean;
+  /** Chats with a live generation; each one gets its own dot and stop button. */
+  generatingChatIds: string[];
   /** SSR-stable base (from React.useId) used to build tab/panel DOM ids. */
   panelIdBase: string;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
-  onStop?: () => void;
+  onStop?: (id: string) => void;
 }
 
 export function ChatTabs({
   chats,
   activeId,
   canCreate,
-  isGenerating,
+  generatingChatIds,
   panelIdBase,
   onSelect,
   onNew,
@@ -46,7 +47,7 @@ export function ChatTabs({
           {chats.map((chat, index) => {
             const active = chat.id === activeId;
             const title = chat.title?.trim() || `Chat ${index + 1}`;
-            const generating = active && isGenerating;
+            const generating = generatingChatIds.includes(chat.id);
             return (
               <div
                 key={chat.id}
@@ -77,7 +78,7 @@ export function ChatTabs({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStop();
+                      onStop(chat.id);
                     }}
                     className="chat-ink absolute right-1 inline-flex h-6 w-6 items-center justify-center rounded-md transition hover:bg-error/10 hover:text-error"
                     aria-label={`Stop generation in ${title}`}

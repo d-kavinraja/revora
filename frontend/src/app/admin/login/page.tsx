@@ -61,18 +61,16 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden px-4">
+    <div className="admin-grid min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden px-4">
       <div className="absolute top-4 right-4 z-10">
         <ThemeToggle theme={adminTheme} onToggle={toggleAdminTheme} className="h-9 w-9" />
       </div>
-      <div className="absolute top-[10%] left-[20%] w-[40%] h-[40%] bg-brand/10 blur-[140px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[10%] right-[20%] w-[35%] h-[35%] bg-info/10 blur-[140px] rounded-full pointer-events-none" />
 
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: reducedMotion ? 0 : 0.4, ease: 'easeOut' }}
-        className="admin-tick w-full max-w-sm rounded-2xl border border-border bg-surface-1/90 p-8 shadow-2xl backdrop-blur-xl"
+        className="admin-tick admin-frame-elevated w-full max-w-sm p-8"
       >
         <div className="mb-8 flex flex-col items-center text-center">
           <Image
@@ -84,7 +82,9 @@ export default function AdminLoginPage() {
             className="mb-4 rounded-xl object-contain"
           />
           <p className="admin-eyebrow">Restricted access</p>
-          <h1 className="mt-1 text-xl font-bold text-foreground">Admin Console</h1>
+          <h1 className="mt-1.5 font-heading text-xl font-bold text-foreground">
+            Admin console
+          </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Sign in with your administrator credentials.
           </p>

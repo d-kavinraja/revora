@@ -25,6 +25,7 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: 'revora-theme',
+      skipHydration: true,
     }
   )
 );

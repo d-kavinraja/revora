@@ -1,10 +1,7 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState, type FC, type ReactNode } from 'react';
-import { CheckCircle2, TriangleAlert } from 'lucide-react';
+import React, { type FC, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import SplitFlapText from '@/components/ui/SplitFlapText';
 import { REVORA } from '@/lib/site';
 
@@ -36,16 +33,11 @@ interface FooterProps extends React.HTMLAttributes<HTMLElement> {
   usefulLinks?: { label: string; href: string }[];
   /** An array of objects for generating social media links. */
   socialLinks?: { label: string; href: string; icon: ReactNode }[];
-  /** The title for the newsletter subscription section. */
-  newsletterTitle?: string;
-  /** One-line description shown under the newsletter title. */
-  newsletterDescription?: string;
-  /** Async function to handle email subscription. Should return `true` for success and `false` for failure. */
-  onSubscribe?: (email: string) => Promise<boolean>;
 }
 
 /**
- * A responsive and theme-adaptive footer component with a newsletter subscription form.
+ * A responsive and theme-adaptive footer with branding, navigation and
+ * product links.
  */
 export const Footer: FC<FooterProps> = ({
   logoSrc,
@@ -60,69 +52,9 @@ export const Footer: FC<FooterProps> = ({
     { label: 'GitHub Repository', href: REVORA.github.repo, icon: <GithubIcon /> },
     { label: 'Report an Issue', href: REVORA.github.issues, icon: <IssueIcon /> },
   ],
-  newsletterTitle = 'Subscribe to our newsletter',
-  newsletterDescription = 'Release notes and repository-aware review tips. One email a month.',
-  onSubscribe = async (email) => {
-    // Default mock implementation
-    console.log(`Subscribing ${email}...`);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return Math.random() > 0.3;
-  },
   className,
   ...props
 }) => {
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [fieldError, setFieldError] = useState<string | null>(null);
-  const errorId = useId();
-  const statusId = useId();
-  const resetTimer = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (resetTimer.current) window.clearTimeout(resetTimer.current);
-    },
-    [],
-  );
-
-  const handleSubscribe = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isSubmitting) return;
-
-    const value = email.trim();
-    if (!value) {
-      setFieldError('Enter your email address.');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setFieldError('Enter a valid email address.');
-      return;
-    }
-
-    setFieldError(null);
-    setIsSubmitting(true);
-
-    let success = false;
-    try {
-      success = onSubscribe ? await onSubscribe(value) : false;
-    } catch {
-      success = false;
-    }
-
-    setSubscriptionStatus(success ? 'success' : 'error');
-    setIsSubmitting(false);
-    if (success) setEmail('');
-
-    if (resetTimer.current) window.clearTimeout(resetTimer.current);
-    resetTimer.current = window.setTimeout(
-      () => setSubscriptionStatus('idle'),
-      success ? 4000 : 3000,
-    );
-  };
-
-  const locked = isSubmitting || subscriptionStatus === 'success';
-
   return (
     <footer className={cn('bg-muted/50 text-foreground border-t border-border mt-auto', className)} {...props}>
       <p className="sr-only">
@@ -142,10 +74,11 @@ export const Footer: FC<FooterProps> = ({
           textColor="var(--board-text)"
         />
       </div>
-      <div className="container mx-auto grid grid-cols-1 gap-8 px-6 pt-6 pb-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-10">
+      <div className="container mx-auto grid grid-cols-1 gap-8 px-6 pt-6 pb-10 md:grid-cols-2 lg:grid-cols-3 lg:gap-10">
         {/* Company Info */}
         <div className="flex flex-col items-start gap-4">
           <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- logoSrc is a runtime prop that may point at any host */}
             <img src={logoSrc} alt={`${companyName} Logo`} className="h-10 w-10 rounded-xl object-cover bg-background" />
             <span className="text-xl font-bold text-foreground">{companyName}</span>
           </div>
@@ -188,71 +121,6 @@ export const Footer: FC<FooterProps> = ({
               </li>
             ))}
           </ul>
-        </div>
-
-        {/* Newsletter */}
-        <div>
-          <h3 className="mb-2 text-base font-semibold">{newsletterTitle}</h3>
-          <p className="mb-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            {newsletterDescription}
-          </p>
-          <form onSubmit={handleSubscribe} noValidate className="relative w-full max-w-sm">
-            <div className="relative flex rounded-md">
-              <Input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="Your email address"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (fieldError) setFieldError(null);
-                }}
-                disabled={locked}
-                aria-label="Email for newsletter"
-                aria-invalid={Boolean(fieldError)}
-                aria-describedby={fieldError ? errorId : undefined}
-                className="pr-28 h-11 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
-              />
-              <Button
-                type="submit"
-                disabled={locked}
-                className="absolute right-0 top-0 h-full rounded-l-none px-5"
-              >
-                {isSubmitting
-                  ? 'Subscribing...'
-                  : subscriptionStatus === 'success'
-                    ? 'Subscribed'
-                    : 'Subscribe'}
-              </Button>
-            </div>
-            <div className="mt-2 min-h-5 text-xs">
-              {fieldError ? (
-                <p id={errorId} role="alert" className="flex items-center gap-1.5 text-destructive">
-                  <TriangleAlert size={13} aria-hidden="true" />
-                  {fieldError}
-                </p>
-              ) : subscriptionStatus === 'success' ? (
-                <p
-                  id={statusId}
-                  role="status"
-                  className="flex items-center gap-1.5 text-success motion-reduce:animate-none"
-                >
-                  <CheckCircle2 size={13} aria-hidden="true" />
-                  Subscribed. Check your inbox.
-                </p>
-              ) : subscriptionStatus === 'error' ? (
-                <p
-                  id={statusId}
-                  role="alert"
-                  className="flex items-center gap-1.5 text-destructive motion-reduce:animate-none"
-                >
-                  <TriangleAlert size={13} aria-hidden="true" />
-                  Couldn&apos;t subscribe. Try again.
-                </p>
-              ) : null}
-            </div>
-          </form>
         </div>
       </div>
 

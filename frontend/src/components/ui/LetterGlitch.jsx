@@ -16,7 +16,7 @@ const LetterGlitch = ({
   const letters = useRef([]);
   const grid = useRef({ columns: 0, rows: 0 });
   const context = useRef(null);
-  const lastGlitchTime = useRef(Date.now());
+  const lastGlitchTime = useRef(null);
 
   const lettersAndSymbols = Array.from(characters);
 
@@ -158,11 +158,13 @@ const LetterGlitch = ({
     }
   };
 
-  const animate = () => {
+  // `now` is the requestAnimationFrame timestamp (same clock as the kickoff
+  // below) — reading Date.now() during render is impure (react-hooks/purity).
+  const animate = (now) => {
     // Stop the loop if the canvas was unmounted (stale rAF after unmount
     // or StrictMode remount would otherwise crash on a null ref).
     if (!canvasRef.current) return;
-    const now = Date.now();
+    if (lastGlitchTime.current === null) lastGlitchTime.current = now;
     if (now - lastGlitchTime.current >= glitchSpeed) {
       updateLetters();
       drawLetters();
@@ -182,7 +184,7 @@ const LetterGlitch = ({
 
     context.current = canvas.getContext('2d');
     resizeCanvas();
-    animate();
+    animationRef.current = requestAnimationFrame(animate);
 
     let resizeTimeout;
 
@@ -191,7 +193,7 @@ const LetterGlitch = ({
       resizeTimeout = setTimeout(() => {
         cancelAnimationFrame(animationRef.current);
         resizeCanvas();
-        animate();
+        animationRef.current = requestAnimationFrame(animate);
       }, 100);
     };
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
 import './Lightfall.css';
 
@@ -213,10 +213,10 @@ const Lightfall = ({
 }: LightfallProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const programRef = useRef<any>(null);
-  const meshRef = useRef<any>(null);
-  const geometryRef = useRef<any>(null);
-  const rendererRef = useRef<any>(null);
+  const programRef = useRef<Program | null>(null);
+  const meshRef = useRef<Mesh | null>(null);
+  const geometryRef = useRef<Triangle | null>(null);
+  const rendererRef = useRef<Renderer | null>(null);
   const mouseTargetRef = useRef([0, 0]);
   const lastTimeRef = useRef(0);
 
@@ -336,9 +336,10 @@ const Lightfall = ({
       if (canvas.parentElement === container) {
         container.removeChild(canvas);
       }
-      const callIfFn = (obj: any, key: string) => {
-        if (obj && typeof obj[key] === 'function') {
-          obj[key].call(obj);
+      const callIfFn = (obj: unknown, key: string) => {
+        const fn = (obj as Record<string, unknown> | null | undefined)?.[key];
+        if (typeof fn === 'function') {
+          (fn as () => void).call(obj);
         }
       };
       callIfFn(programRef.current, 'remove');
@@ -376,7 +377,7 @@ const Lightfall = ({
       ref={containerRef}
       className={`lightfall-container ${className ?? ''}`}
       style={{
-        ...(mixBlendMode && { mixBlendMode: mixBlendMode as any })
+        ...(mixBlendMode && { mixBlendMode: mixBlendMode as CSSProperties['mixBlendMode'] })
       }}
     />
   );

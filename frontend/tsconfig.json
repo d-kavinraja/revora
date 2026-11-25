@@ -6,6 +6,9 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Regression tests import the real modules with `node --test`, which needs
+    // explicit `.ts` specifiers; noEmit makes that legal for tsc too.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

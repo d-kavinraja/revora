@@ -110,7 +110,7 @@ export function HistoryTable({ history, onRerun, onView }: HistoryTableProps) {
           <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm min-w-[820px]">
               <thead>
-                <tr className="text-left text-xs font-semibold uppercase tracking-wider text-foreground/60 border-b border-border bg-surface-2">
+                <tr className="text-left text-xs font-semibold text-foreground/60 border-b border-border bg-surface-2">
                   <th className="px-3 py-2 font-medium w-10">#</th>
                   <th className="px-3 py-2 font-medium">Video Name</th>
                   <th className="px-3 py-2 font-medium">Date &amp; Time</th>

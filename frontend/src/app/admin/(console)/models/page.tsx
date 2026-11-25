@@ -13,7 +13,9 @@ import {
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
+import { ModelIcon } from '@/components/ui/model-icon';
 import { ProviderBadge } from '@/components/ui/provider-brand';
+import { KLLM_MANAGEMENT_LABEL, REVORA_MANAGEMENT_LABEL } from '@/lib/chat-state';
 import { useToast } from '@/components/ui/toaster';
 import { AdminPage, AdminSection } from '@/components/admin/page-shell';
 import {
@@ -230,6 +232,12 @@ export default function AdminModelsPage() {
                 const key = `${override.provider_slug}:${override.model_id}`;
                 const busy =
                   applyMutation.isPending && restoringKey === key;
+                const managementLabel =
+                  override.provider_slug === 'hosted-ollama'
+                    ? REVORA_MANAGEMENT_LABEL
+                    : override.provider_slug === 'kllm'
+                      ? KLLM_MANAGEMENT_LABEL
+                      : null;
                 return (
                   <div
                     key={key}
@@ -237,16 +245,28 @@ export default function AdminModelsPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {override.model_id}
+                        <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+                          <ModelIcon
+                            model={{ key: override.model_id, provider: override.provider_slug }}
+                            size={14}
+                            className="shrink-0"
+                          />
+                          <span className="min-w-0 truncate">{override.model_id}</span>
                         </p>
-                        <ProviderBadge
-                          slug={override.provider_slug}
-                          label={providerName(override.provider_slug)}
-                          size="sm"
-                          muted
-                          className="mt-1 max-w-56"
-                        />
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <ProviderBadge
+                            slug={override.provider_slug}
+                            label={providerName(override.provider_slug)}
+                            size="sm"
+                            muted
+                            className="max-w-56"
+                          />
+                          {managementLabel ? (
+                            <Pill tone="brand" className="text-[10px]">
+                              {managementLabel}
+                            </Pill>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Pill tone="error" dot>

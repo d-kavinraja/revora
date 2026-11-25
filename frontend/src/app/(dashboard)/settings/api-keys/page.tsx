@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { api, ApiKey, ThemeConfig, ApiKeyHealth, Provider, OperationJob } from '@/lib/api';
+import { api, ApiKey, ApiKeyHealth, Provider } from '@/lib/api';
 import { pollOperation } from '@/lib/use-operation-job';
 import {
   KeyIcon,
@@ -10,19 +10,20 @@ import {
   LoaderCircleIcon,
   CircleCheckIcon,
   TriangleAlertIcon,
-  EyeIcon,
-  EyeOffIcon,
 } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
+
+type IconHandle = { startAnimation: () => void; stopAnimation: () => void };
 
 export default function ApiKeysSettingsPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const { toast } = useToast();
 
@@ -47,10 +48,6 @@ export default function ApiKeysSettingsPage() {
   // Delete confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Rotate state
-  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
-  const [rotateKeyValue, setRotateKeyValue] = useState('');
-
   // Health state
   const [healthKeyId, setHealthKeyId] = useState<string | null>(null);
   const [healthData, setHealthData] = useState<Record<string, ApiKeyHealth[]>>({});
@@ -60,21 +57,20 @@ export default function ApiKeysSettingsPage() {
   const [validationProgress, setValidationProgress] = useState<{ current: number; total: number } | null>(null);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
 
-  const trashIconRefs = useRef<Record<string, any>>({});
-  const refreshIconRefs = useRef<Record<string, any>>({});
-  const plusIconRef = useRef<any>(null);
+  const trashIconRefs = useRef<Record<string, IconHandle | null>>({});
+  const refreshIconRefs = useRef<Record<string, IconHandle | null>>({});
+  const plusIconRef = useRef<IconHandle>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [keysData, themeData, providersData, recentOps] = await Promise.all([
+        const [keysData, , providersData, recentOps] = await Promise.all([
           api.getApiKeys(),
           api.getThemeConfig(),
           api.getProviders(),
           api.listOperations({ limit: 20 }),
         ]);
         setKeys(keysData);
-        setThemeConfig(themeData);
         setProviders(providersData);
         const usable = providersData.find(
           (p) => p.is_enabled && p.status === 'available' && p.allow_key_addition,
@@ -215,9 +211,10 @@ export default function ApiKeysSettingsPage() {
       setApiKey('');
       setProvider('openai');
       setShowAddForm(false);
-    } catch (err: any) {
+    } catch (err) {
+      const { response } = err as { response?: { data?: { detail?: string } } };
       console.error('Failed to add API key', err);
-      const errMsg = err.response?.data?.detail || 'Failed to validate or save the API Key.';
+      const errMsg = response?.data?.detail || 'Failed to validate or save the API Key.';
       setFormErrors({ api_key: errMsg });
       toast({ title: errMsg, type: 'error' });
     } finally {
@@ -272,35 +269,16 @@ export default function ApiKeysSettingsPage() {
         type: item?.status === 'success' ? 'success' : 'error',
       });
       void api.getApiKeys().then(setKeys).catch(() => undefined);
-    } catch (err: any) {
+    } catch (err) {
+      const { response } = err as { response?: { data?: { detail?: string } } };
       console.error('Failed to test key', err);
-      const errMsg = err.response?.data?.detail || 'Connectivity test failed.';
+      const errMsg = response?.data?.detail || 'Connectivity test failed.';
       setTestResults((prev) => ({ ...prev, [id]: { status: 'failed', message: errMsg } }));
       setKeys((prev) => prev.map((key) => (key.id === id ? { ...key, is_valid: false } : key)));
       toast({ title: 'Test failed', description: errMsg, type: 'error' });
     } finally {
       setTestingKeyId(null);
       refreshIconRefs.current[id]?.stopAnimation();
-    }
-  };
-
-  const handleRotateKey = async (id: string) => {
-    if (!rotateKeyValue.trim()) {
-      toast({ title: 'Please enter a new API key', type: 'error' });
-      return;
-    }
-    setRotatingKeyId(id);
-    try {
-      const updated = await api.rotateApiKey(id, rotateKeyValue);
-      setKeys(prev => prev.map(k => k.id === id ? { ...k, ...updated } : k));
-      setRotateKeyValue('');
-      setRotatingKeyId(null);
-      toast({ title: 'API Key rotated successfully', type: 'success' });
-    } catch (err: any) {
-      const errMsg = err.response?.data?.detail || 'Failed to rotate key.';
-      toast({ title: errMsg, type: 'error' });
-    } finally {
-      setRotatingKeyId(null);
     }
   };
 
@@ -313,7 +291,7 @@ export default function ApiKeysSettingsPage() {
       const data = await api.getKeyHealth(id);
       setHealthData(prev => ({ ...prev, [id]: data }));
       setHealthKeyId(id);
-    } catch (err) {
+    } catch {
       toast({ title: 'Failed to load health data', type: 'error' });
     }
   };
@@ -374,16 +352,21 @@ export default function ApiKeysSettingsPage() {
       });
       setBatchJobId(null);
       void api.getApiKeys().then(setKeys).catch(() => undefined);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const detail = err?.response?.data?.detail;
+    } catch (err) {
+      const { response, code, message } = err as {
+        code?: string;
+        message?: unknown;
+        response?: { status?: number; data?: { detail?: string } };
+      };
+      const status = response?.status;
+      const detail = response?.data?.detail;
       if (status === 401) {
         toast({ title: 'Session expired. Please sign in again.', description: detail, type: 'error' });
-      } else if (err?.code === 'ECONNABORTED' || (typeof err?.message === 'string' && err.message.toLowerCase().includes('timeout'))) {
+      } else if (code === 'ECONNABORTED' || (typeof message === 'string' && message.toLowerCase().includes('timeout'))) {
         toast({ title: 'Validation timed out. Please try again.', description: detail, type: 'error' });
-      } else if (!err?.response) {
-        toast({ title: 'Unable to reach the validation service.', description: err?.message, type: 'error' });
-      } else if (status >= 500) {
+      } else if (!response) {
+        toast({ title: 'Unable to reach the validation service.', description: typeof message === 'string' ? message : undefined, type: 'error' });
+      } else if (status !== undefined && status >= 500) {
         toast({ title: 'Validation service encountered an error. Please try again.', description: detail, type: 'error' });
       } else {
         toast({ title: detail || 'Validation failed. Please try again.', type: 'error' });
@@ -418,43 +401,39 @@ export default function ApiKeysSettingsPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <KeyIcon size={28} className="text-brand" />
-            API Keys Settings
-          </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Manage credentials for multi-provider LLM support. Keys are encrypted with AES-256.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleValidateAll}
-            disabled={validatingAll}
-            className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-surface-2 border border-border rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
-            {validatingAll && validationProgress
-              ? `Validating ${validationProgress.current}/${validationProgress.total}...`
-              : validatingAll
-                ? 'Validating...'
-                : 'Validate All'}
-          </button>
-          {addEnabled && (
+      <PageHeader
+        title="API keys"
+        support="Manage credentials for multi-provider LLM support. Keys are encrypted with AES-256."
+        icon={<KeyIcon size={28} className="text-brand" />}
+        actions={
+          <div className="flex gap-2">
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              onMouseEnter={() => plusIconRef.current?.startAnimation()}
-              onMouseLeave={() => plusIconRef.current?.stopAnimation()}
-              className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-lg text-sm font-medium transition-colors shrink-0"
+              onClick={handleValidateAll}
+              disabled={validatingAll}
+              className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-surface-2 border border-border rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
-              <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
-              Add Key
+              {validatingAll ? <LoaderIcon size={14} className="animate-spin" /> : <LoaderCircleIcon size={14} />}
+              {validatingAll && validationProgress
+                ? `Validating ${validationProgress.current}/${validationProgress.total}...`
+                : validatingAll
+                  ? 'Validating...'
+                  : 'Validate all'}
             </button>
-          )}
-        </div>
-      </div>
+            {addEnabled && (
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                onMouseEnter={() => plusIconRef.current?.startAnimation()}
+                onMouseLeave={() => plusIconRef.current?.stopAnimation()}
+                className="flex items-center gap-2 px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover rounded-lg text-sm font-medium transition-colors shrink-0"
+              >
+                <PlusIcon ref={plusIconRef} size={16} isAnimated={false} />
+                Add key
+              </button>
+            )}
+          </div>
+        }
+      />
+      <SettingsShell />
 
       {!addEnabled && (
         <FeatureUnavailable
@@ -469,12 +448,12 @@ export default function ApiKeysSettingsPage() {
       {showAddForm && addEnabled && (
         <div className="mb-8 p-6 rounded-xl border border-border bg-surface-1 shadow-sm shadow-black/5 relative overflow-hidden transition-all duration-300">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-brand-hover" />
-          <h2 className="text-lg font-bold text-foreground mb-4">Add Encrypted API Key</h2>
+          <h2 className="text-lg font-bold text-foreground mb-4">Add encrypted API key</h2>
 
           <form onSubmit={handleValidateAndSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Provider</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Provider</label>
                 <div className="relative flex items-center">
                   <div className="absolute left-3 pointer-events-none flex items-center justify-center">
                     <ProviderIcon slug={provider} size={16} />
@@ -510,7 +489,7 @@ export default function ApiKeysSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Label (e.g. My Prod Key)</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Label (for example, My prod key)</label>
                 <input
                   type="text"
                   placeholder="Key Label"
@@ -527,7 +506,7 @@ export default function ApiKeysSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">API Key Value</label>
+              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">API key value</label>
               <input
                 type="password"
                 placeholder="sk-proj-..."
@@ -685,7 +664,7 @@ export default function ApiKeysSettingsPage() {
                         <TriangleAlertIcon size={14} className="shrink-0 mt-0.5" />
                       )}
                       <div>
-                        <span className="font-bold uppercase tracking-wide mr-1">
+                        <span className="font-bold mr-1">
                           Test {testResult.status}:
                         </span>
                         {testResult.message}

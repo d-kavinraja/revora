@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Flag } from 'lucide-react';
-import { adminApi, type AdminFeatureFlag, type AdminUsageAnalytics } from '@/lib/api';
+import { adminApi, type AdminFeatureFlag, type AdminUsageAnalytics, type ChatModeSettings } from '@/lib/api';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
@@ -48,6 +48,7 @@ export default function AdminFeaturesPage() {
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [analyticsDraft, setAnalyticsDraft] = useState<boolean | null>(null);
   const [confirmingAnalytics, setConfirmingAnalytics] = useState(false);
+  const [chatModesDraft, setChatModesDraft] = useState<ChatModeSettings | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -66,6 +67,23 @@ export default function AdminFeaturesPage() {
     queryKey: ['admin', 'usage-analytics'],
     queryFn: adminApi.usageAnalytics,
     retry: 1,
+  });
+
+  const chatModesQuery = useQuery({
+    queryKey: ['admin', 'chat-modes'],
+    queryFn: adminApi.chatModes,
+    retry: 1,
+  });
+  const chatModesMutation = useMutation({
+    mutationFn: (state: ChatModeSettings) => adminApi.updateChatModes(state),
+    onSuccess: (state) => {
+      setChatModesDraft(null);
+      toast({ title: 'Chat modes updated', description: 'Mode changes are live and have been audited.', type: 'success' });
+      queryClient.setQueryData(['admin', 'chat-modes'], state);
+      void queryClient.invalidateQueries({ queryKey: ['platform-features'] });
+      void queryClient.invalidateQueries({ queryKey: ['chat-modes'] });
+    },
+    onError: (error) => toast({ title: 'Could not update Chat modes', description: errorDetail(error) ?? undefined, type: 'error' }),
   });
 
   const analyticsMutation = useMutation({
@@ -188,6 +206,46 @@ export default function AdminFeaturesPage() {
 
       {analyticsPending && !analyticsError && <AdminLoading label="Loading usage analytics…" />}
 
+      {chatModesQuery.isError && <QueryError message="Could not load Chat mode settings." onRetry={() => void chatModesQuery.refetch()} />}
+      {chatModesQuery.isPending && <AdminLoading label="Loading Chat mode settings…" />}
+      {chatModesQuery.data && (() => {
+        const state = chatModesDraft ?? chatModesQuery.data;
+        return (
+          <section className="rounded-xl border border-border bg-surface-1 p-5">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Temporary &amp; Persistent Chat</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Independent platform controls. Disabling a mode immediately blocks new work; admitted streams finish. Stored Persistent conversations remain readable and deletable while disabled.
+              </p>
+              <p className="mt-1 font-mono text-[11px] text-muted-foreground">Version {chatModesQuery.data.version}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminSwitch
+                checked={state.temporary_enabled}
+                onChange={(temporary_enabled) => setChatModesDraft({ ...state, temporary_enabled })}
+                title="Temporary Chat"
+                description="In-memory-only conversations; no chat history is stored by Revora."
+              />
+              <AdminSwitch
+                checked={state.persistent_enabled}
+                onChange={(persistent_enabled) => setChatModesDraft({ ...state, persistent_enabled })}
+                title="Persistent Chat"
+                description="Owner-scoped conversations saved until the user deletes them."
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <AdminButton
+                variant="primary"
+                disabled={!chatModesDraft || chatModesMutation.isPending}
+                onClick={() => chatModesMutation.mutate({ ...state, version: chatModesQuery.data!.version })}
+              >
+                {chatModesMutation.isPending ? 'Saving…' : 'Save Chat modes'}
+              </AdminButton>
+            </div>
+          </section>
+        );
+      })()}
+
       {analyticsState && (
         <section className="rounded-xl border border-border bg-surface-1 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -216,7 +274,7 @@ export default function AdminFeaturesPage() {
             {analyticsState.changed_at
               ? `Changed ${formatDateTime(analyticsState.changed_at)}`
               : 'Never changed'}
-            {' · v'}
+            {', version '}
             {analyticsState.version}
             {analyticsState.changed_at && (
               <span className="ml-2 font-mono text-[11px]">by {analyticsState.changed_by ?? 'system'}</span>
@@ -297,7 +355,23 @@ export default function AdminFeaturesPage() {
 
       <div className="space-y-4">
         {filteredFlags.length === 0 ? (
-          <InlineEmpty>No feature flags match the current filters.</InlineEmpty>
+          <InlineEmpty
+            action={
+              search || statusFilter ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('');
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
+            }
+          >
+            No feature flags match the current filters.
+          </InlineEmpty>
         ) : filteredFlags.map((flag) => {
           const meta = FEATURE_META[flag.key] ?? {
             label: flag.key,

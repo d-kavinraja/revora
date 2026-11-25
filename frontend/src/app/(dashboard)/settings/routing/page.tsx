@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, ModelRoute } from '@/lib/api';
+import { api } from '@/lib/api';
 import { CircleCheckIcon, GitBranchIcon } from '@animateicons/react/lucide';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 
 type FeatureStatus = 'active' | 'under_development';
 
@@ -105,9 +107,10 @@ export default function RoutingPage() {
       console.log('Saving preferences:', validPreferences);
       await api.updateRoutingPreferences(validPreferences);
       toast({ title: 'Routing preferences saved', type: 'success' });
-    } catch (err: any) {
+    } catch (err) {
+      const { response } = err as { response?: { data?: { detail?: string } } };
       console.error('Failed to save preferences', err);
-      const errMsg = err.response?.data?.detail || 'Failed to save preferences';
+      const errMsg = response?.data?.detail || 'Failed to save preferences';
       toast({ title: errMsg, type: 'error' });
     } finally {
       setSaving(false);
@@ -146,21 +149,21 @@ export default function RoutingPage() {
   if (availableProviders.length === 0) {
     return (
       <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <GitBranchIcon size={28} className="text-brand" />
-            Model Routing
-          </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Configure which provider and model to use for each feature.
-          </p>
-        </div>
+        <PageHeader
+          title="Model routing"
+          support="Configure which provider and model to use for each feature."
+          icon={<GitBranchIcon size={28} className="text-brand" />}
+        />
+        <SettingsShell />
         <div className="rounded-xl border border-border bg-surface-1 p-8 text-center">
           <GitBranchIcon size={32} className="text-muted-foreground/40 mx-auto mb-3" />
           <h3 className="font-bold text-foreground">No API keys configured</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Add an API key in Settings &gt; API Keys to configure routing.
+            Add an API key to configure routing.
           </p>
+          <a href="/settings/api-keys" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-foreground transition-colors hover:bg-brand-hover">
+            Add API key
+          </a>
         </div>
       </div>
     );
@@ -168,25 +171,22 @@ export default function RoutingPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <GitBranchIcon size={28} className="text-brand" />
-            Model Routing
-          </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Configure which provider and model to use for each feature.
-          </p>
-        </div>
-        <button
-          onClick={handleSavePreferences}
-          disabled={saving || !routingEnabled}
-          title={!routingEnabled ? routingFlag.message ?? undefined : undefined}
-          className="px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
-        >
-          {saving ? 'Saving...' : 'Save Preferences'}
-        </button>
-      </div>
+      <PageHeader
+        title="Model routing"
+        support="Configure which provider and model to use for each feature."
+        icon={<GitBranchIcon size={28} className="text-brand" />}
+        actions={
+          <button
+            onClick={handleSavePreferences}
+            disabled={saving || !routingEnabled}
+            title={!routingEnabled ? routingFlag.message ?? undefined : undefined}
+            className="px-4 py-2 bg-brand text-brand-foreground hover:bg-brand-hover disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save preferences'}
+          </button>
+        }
+      />
+      <SettingsShell />
 
       {!routingEnabled && (
         <FeatureUnavailable
@@ -215,8 +215,8 @@ export default function RoutingPage() {
                     Active
                   </span>
                 ) : (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide bg-warning/10 text-warning border border-warning/30">
-                    Under Development
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30">
+                    Under development
                   </span>
                 )}
               </h2>
@@ -227,7 +227,7 @@ export default function RoutingPage() {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Provider</label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Provider</label>
                   <select
                     value={isActive ? selectedProvider : ''}
                     onChange={(e) =>
@@ -253,7 +253,7 @@ export default function RoutingPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Model</label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Model</label>
                   <select
                     value={isActive ? (preferences[feature]?.model || '') : ''}
                     onChange={(e) =>

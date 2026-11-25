@@ -5,12 +5,15 @@ import Image from 'next/image';
 import { RefreshCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { api, KllmActivityItem, KllmStatus, KllmTelemetry } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { ProviderIcon } from '@/components/ui/provider-icon';
+import { ModelIcon } from '@/components/ui/model-icon';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { KLLM_MANAGEMENT_LABEL, KLLM_PROVIDER, modelDisplayName } from '@/lib/chat-state';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { timeAgo } from '@/components/shared/time-ago';
 import { useBrowserSessionId } from '@/hooks/use-kllm-session-presence';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 
 const STATUS_INTERVAL_MS = 15_000;
 const TELEMETRY_INTERVAL_MS = 5_000;
@@ -321,48 +324,45 @@ export default function KllmPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Image
-              src="/assets/kllm.svg"
-              alt="kLLM"
-              width={28}
-              height={28}
-              className="inline-flex rounded-md"
-            />
-            kLLM
-          </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Local, server-owned inference. kLLM owns serving and lifecycle; Revora
-            proxies a sanitized, read-only view and never exposes backend
-            identities.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Pill tone={!enabled ? 'muted' : stale ? 'warning' : reachable ? 'success' : 'error'} dot>
-            {!enabled
-              ? 'Disabled'
-              : stale
-                ? 'Stale'
-                : reachable
-                  ? 'Live'
-                  : 'Unreachable'}
-          </Pill>
-          <button
-            onClick={() => void refreshAll()}
-            disabled={refreshing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-brand/40 disabled:opacity-50"
-          >
-            {refreshing ? (
-              <LoaderIcon size={14} className="animate-spin" />
-            ) : (
-              <RefreshCwIcon size={14} />
-            )}
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="kLLM"
+        support="Local, server-owned inference. kLLM owns serving and lifecycle; Revora proxies a sanitized, read-only view and never exposes backend identities."
+        icon={
+          <Image
+            src="/assets/kllm.svg"
+            alt="kLLM"
+            width={28}
+            height={28}
+            className="inline-flex rounded-md"
+          />
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <Pill tone={!enabled ? 'muted' : stale ? 'warning' : reachable ? 'success' : 'error'} dot>
+              {!enabled
+                ? 'Disabled'
+                : stale
+                  ? 'Stale'
+                  : reachable
+                    ? 'Live'
+                    : 'Unreachable'}
+            </Pill>
+            <button
+              onClick={() => void refreshAll()}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-brand/40 disabled:opacity-50"
+            >
+              {refreshing ? (
+                <LoaderIcon size={14} className="animate-spin" />
+              ) : (
+                <RefreshCwIcon size={14} />
+              )}
+              Refresh
+            </button>
+          </div>
+        }
+      />
+      <SettingsShell />
 
       <div className="mb-6 rounded-xl border border-border bg-surface-1 p-4">
         <p className="text-sm text-muted-foreground">
@@ -429,15 +429,18 @@ export default function KllmPage() {
           <section className="mb-8">
             <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="text-lg font-semibold text-foreground">Models</h2>
-              <span className="text-xs text-muted-foreground">
-                {status.summary.loading_models} loading · {status.summary.failed_models} failed
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {status.summary.loading_models} loading · {status.summary.failed_models} failed
+                </span>
+                <Pill tone="brand">{KLLM_MANAGEMENT_LABEL}</Pill>
+              </div>
             </div>
             <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
               {/* Desktop table */}
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <thead className="bg-surface-2/60 text-left text-xs text-muted-foreground">
                     <tr>
                       <th className="px-4 py-2.5 font-medium">Model</th>
                       <th className="px-4 py-2.5 font-medium">Readiness</th>
@@ -450,9 +453,13 @@ export default function KllmPage() {
                       <tr key={model.key} className="border-t border-border/70">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2 min-w-0">
-                            <ProviderIcon slug="kllm" size={15} />
+                            <ModelIcon
+                              model={{ key: model.key, provider: KLLM_PROVIDER }}
+                              size={15}
+                              className="shrink-0"
+                            />
                             <span className="truncate font-medium text-foreground" title={model.key}>
-                              {model.key}
+                              {modelDisplayName({ key: model.key })}
                             </span>
                             {model.vision && <Pill tone="info">Vision</Pill>}
                           </div>
@@ -494,12 +501,16 @@ export default function KllmPage() {
                     <div key={model.key} className="px-4 py-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <ProviderIcon slug="kllm" size={15} />
+                          <ModelIcon
+                              model={{ key: model.key, provider: KLLM_PROVIDER }}
+                              size={15}
+                              className="shrink-0"
+                            />
                           <span
                             className="truncate font-medium text-foreground"
                             title={model.key}
                           >
-                            {model.key}
+                            {modelDisplayName({ key: model.key })}
                           </span>
                         </div>
                         <Pill
@@ -590,7 +601,7 @@ export default function KllmPage() {
 
             {status.pending.length > 0 && (
               <div className="mt-3 rounded-xl border border-border bg-surface-1 p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2">
                   Starting
                 </h3>
                 <ul className="space-y-1.5 text-sm">
@@ -753,7 +764,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 text-xl font-bold text-foreground">{value}</p>
@@ -781,7 +792,7 @@ function Metric({
           : 'text-foreground';
   return (
     <div>
-      <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
+      <span className="block text-[11px] text-muted-foreground">
         {label}
       </span>
       <span className={`block font-medium ${toneClass}`}>{value}</span>

@@ -133,7 +133,6 @@ export function CalendarPicker({
 
 /* ─── Time Picker ─── */
 export function TimePicker({
-  value,
   onChange,
   label,
 }: {
@@ -155,7 +154,7 @@ export function TimePicker({
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</span>
+      <span className="text-[10px] text-muted-foreground">{label}</span>
       <select
         value={hour}
         onChange={e => handleChange(e.target.value, minute, period)}
@@ -213,9 +212,9 @@ export function DateRangeFilter({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <CalendarIcon size={14} className={hasFilter ? 'text-brand' : 'text-muted-foreground'} />
-          <span className="text-sm font-semibold text-foreground">Date Range Filter</span>
+          <span className="text-sm font-semibold text-foreground">Date range filter</span>
           {hasFilter && (
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-brand text-brand-foreground uppercase tracking-wide">Active</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-brand text-brand-foreground">Active</span>
           )}
         </div>
         <div className="flex items-center gap-3">

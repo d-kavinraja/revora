@@ -1,4 +1,4 @@
-﻿import { API_BASE } from '@/lib/api-transport';
+import { API_BASE } from '@/lib/api-transport';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
   extractSseFrames,
@@ -19,6 +19,8 @@ export interface ChatCompletionMessage {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
 
+export type ChatProviderId = 'kllm' | 'hosted-ollama';
+
 export interface ChatCompletionPayload {
   model: string;
   messages: ChatCompletionMessage[];
@@ -26,6 +28,12 @@ export interface ChatCompletionPayload {
   max_tokens?: number;
   temperature?: number;
   reasoning_effort?: ReasoningEffort;
+  // Optional assertion only: the model key prefix stays authoritative and the
+  // backend rejects a mismatch instead of falling back to another provider.
+  provider?: ChatProviderId;
+  // In-memory chat identity for per-chat single-flight admission. Additive and
+  // unauthenticated: the backend never persists it or treats it as ownership.
+  chat_id?: string;
 }
 
 export class ChatRequestError extends Error {

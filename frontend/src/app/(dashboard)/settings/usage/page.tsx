@@ -10,6 +10,8 @@ import { UsageChart } from '@/components/usage/usage-chart';
 import { KpiTile, RankedList, StatGroup } from '@/components/admin/metrics';
 import { AdminLoading, QueryError } from '@/components/admin/states';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 import {
   ProviderBadge,
   ProviderMark,
@@ -101,27 +103,28 @@ export default function UsagePage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usage & Costs</h1>
-          <p className="text-sm text-muted-foreground">Token consumption, cost and request activity from recorded usage.</p>
-        </div>
-        <div className="flex gap-2">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                period === p.key
-                  ? 'border-brand bg-brand/10 text-brand'
-                  : 'border-border text-foreground/70 hover:bg-surface-2'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Usage & costs"
+        support="Token consumption, cost and request activity from recorded usage."
+        actions={
+          <div className="flex gap-2">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  period === p.key
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-border text-foreground/70 hover:bg-surface-2'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
+      <SettingsShell />
 
       {analyticsStatus && !analyticsStatus.enabled && (
         <div className="rounded-lg border border-border bg-surface-1 p-4 text-sm text-muted-foreground">

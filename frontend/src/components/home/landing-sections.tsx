@@ -69,7 +69,7 @@ export function SampleReview() {
     >
       <Reveal>
         <div className="mb-8 space-y-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ember-ink)]">
+          <p className="text-xs font-semibold text-[var(--ember-ink)]">
             Sample review
           </p>
           <h2
@@ -105,7 +105,7 @@ export function SampleReview() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
                 Sample
               </span>
               <span className="verified-badge">
@@ -160,7 +160,7 @@ export function LandingFaq() {
     >
       <Reveal>
         <div className="mb-8 space-y-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ember-ink)]">
+          <p className="text-xs font-semibold text-[var(--ember-ink)]">
             FAQ
           </p>
           <h2
@@ -199,8 +199,8 @@ export function FinalCtaBand() {
     <section aria-labelledby="final-cta-title" className="mx-auto max-w-5xl px-6 pb-24">
       <Reveal>
         <div className="final-cta rounded-2xl px-6 py-12 text-center sm:py-14">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ember-ink)]">
-            Open source · Bring your own key
+          <p className="text-xs font-semibold text-[var(--ember-ink)]">
+            Open source, bring your own key
           </p>
           <h2
             id="final-cta-title"

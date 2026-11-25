@@ -210,6 +210,18 @@ async def lifespan(app: FastAPI):
             await kllm_client.aclose()
         except Exception:
             logger.exception("kLLM client shutdown failed")
+        try:
+            from app.ai import hosted_ollama_client
+
+            await hosted_ollama_client.aclose()
+        except Exception:
+            logger.exception("Hosted Ollama client shutdown failed")
+        try:
+            from app.services import hosted_monitor
+
+            await hosted_monitor.cancel_pending()
+        except Exception:
+            logger.exception("Hosted monitor shutdown failed")
 
 
 _is_dev = settings.APP_ENV in ("development", "testing")
@@ -262,6 +274,24 @@ async def _feature_disabled_handler(request, exc: FeatureDisabledError) -> JSONR
 
 
 app.add_exception_handler(FeatureDisabledError, _feature_disabled_handler)
+
+from app.services.speech_errors import SpeechAPIError
+
+
+async def _speech_error_handler(request, exc: SpeechAPIError) -> JSONResponse:
+    """Speech failures are flat `{code, message}` and never cacheable."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "message": exc.message},
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+app.add_exception_handler(SpeechAPIError, _speech_error_handler)
 # Maintenance gate: added FIRST so Starlette LIFO makes it the innermost
 # middleware — it executes after CORS/Correlation/SizeLimit/OriginCheck/
 # SlowAPI and immediately before route dispatch (§12.3 placement note).

@@ -150,7 +150,7 @@ export default function AdminMaintenancePage() {
 
       {data && current && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
+          <section className="min-w-0 rounded-lg border border-border bg-surface-1 p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-2">
@@ -164,7 +164,7 @@ export default function AdminMaintenancePage() {
                     {data.changed_at
                       ? `Changed ${formatDateTime(data.changed_at)}`
                       : 'Never changed'}
-                    {' · v'}
+                    {', version '}
                     {data.version}
                   </p>
                   {data.changed_at && (
@@ -273,17 +273,28 @@ export default function AdminMaintenancePage() {
                 />
               </Field>
 
-              <AdminButton
-                variant="primary"
-                disabled={!hasChanges || updateMutation.isPending}
-                onClick={() => setConfirming(true)}
-              >
-                Save changes
-              </AdminButton>
+              <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-b-lg border-t border-border bg-surface-1 px-5 py-3">
+                <p className="admin-label flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      hasChanges ? 'bg-warning' : 'bg-muted-foreground/40'
+                    }`}
+                  />
+                  {hasChanges ? 'Unsaved changes' : 'No changes yet'}
+                </p>
+                <AdminButton
+                  variant="primary"
+                  disabled={!hasChanges || updateMutation.isPending}
+                  onClick={() => setConfirming(true)}
+                >
+                  Save changes
+                </AdminButton>
+              </div>
             </div>
           </section>
 
-          <section className="min-w-0 rounded-xl border border-border bg-surface-1 p-5">
+          <section className="min-w-0 rounded-lg border border-border bg-surface-1 p-5">
             <h2 className="text-sm font-semibold text-foreground">
               User-facing preview
             </h2>

@@ -2,17 +2,21 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
-import { api, Review, DashboardStats } from '@/lib/api';
+import { api } from '@/lib/api';
 import Link from 'next/link';
-import { FolderIcon, GitBranchIcon, TriangleAlertIcon, CircleCheckIcon, MessageCircleIcon, MoveRightIcon } from '@animateicons/react/lucide';
-import { StatusBadge } from '@/components/shared/status-badge';
-import { timeAgo, formatDateTimeWithRelative } from '@/components/shared/time-ago';
+import { FolderIcon, GitBranchIcon, TriangleAlertIcon, CircleCheckIcon, MoveRightIcon } from '@animateicons/react/lucide';
+import { timeAgo } from '@/components/shared/time-ago';
 import { EmptyState } from '@/components/shared/empty-state';
 import { SkeletonCard, SkeletonList } from '@/components/shared/skeleton';
+import { ErrorBanner } from '@/components/shared/error-banner';
+import { SeverityRail } from '@/components/shared/severity-rail';
+import { metricDisplay } from '@/lib/metric-display';
 import { useQuery } from '@tanstack/react-query';
 
-function StatCard({ label, value, icon: Icon, accent, sub }: { label: string; value: number | string; icon: any; accent: string; sub?: ReactNode }) {
-  const iconRef = useRef<any>(null);
+type IconHandle = { startAnimation: () => void; stopAnimation: () => void };
+
+function StatCard({ label, value, icon: Icon, accent, sub }: { label: string; value: number | string; icon: React.ComponentType<{ ref?: React.Ref<IconHandle>; size?: number; isAnimated?: boolean }>; accent: string; sub?: ReactNode }) {
+  const iconRef = useRef<IconHandle>(null);
   return (
     <div
       onMouseEnter={() => iconRef.current?.startAnimation()}
@@ -22,7 +26,7 @@ function StatCard({ label, value, icon: Icon, accent, sub }: { label: string; va
       <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent}`} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">{label}</p>
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
           <p className="mt-2 text-3xl font-heading font-bold tracking-tight text-foreground">{value}</p>
           {sub && (
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{sub}</p>
@@ -37,7 +41,7 @@ function StatCard({ label, value, icon: Icon, accent, sub }: { label: string; va
 }
 
 function ViewAllLink() {
-  const arrowRef = useRef<any>(null);
+  const arrowRef = useRef<IconHandle>(null);
   return (
     <Link
       href="/reviews"
@@ -59,19 +63,17 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [timeText, setTimeText] = useState('just now');
 
-  const { data: stats, isLoading: statsLoading, error: statsError, dataUpdatedAt: statsUpdated } = useQuery({
+  const { data: stats, isLoading: statsLoading, error: statsError, dataUpdatedAt: statsUpdated, refetch: statsRefetch } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: api.getStats,
     refetchInterval: 5000,
   });
 
-  const { data: reviews = [], isLoading: reviewsLoading, error: reviewsError } = useQuery({
+  const { data: reviews = [], isLoading: reviewsLoading, error: reviewsError, refetch: reviewsRefetch } = useQuery({
     queryKey: ['dashboard-reviews'],
     queryFn: () => api.getReviews(10),
     refetchInterval: 5000,
   });
-
-  const loading = statsLoading || reviewsLoading;
 
   useEffect(() => {
     if (!statsUpdated) return;
@@ -83,22 +85,20 @@ export default function Dashboard() {
 
   const hasActiveReviews = reviews.some((r) => r.status === 'running' || r.status === 'pending');
   const issuesCaughtValue = !stats
-    ? 0
+    ? '—'
     : stats.issues_caught_available
       ? stats.total_issues_caught
       : '—';
-  const issuesCaughtSub = !stats
+  const issuesCaughtSub = !stats || stats.issues_caught_available
     ? undefined
-    : !stats.issues_caught_available
-      ? stats.issues_caught_reason ?? 'Findings data unavailable'
-      : `Critical ${stats.critical_count} · High ${stats.high_count} · Medium ${stats.medium_count} · Low ${stats.low_count} · Suggestions ${stats.suggestions_count}`;
+    : stats.issues_caught_reason ?? 'Findings data unavailable';
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl md:text-3xl font-heading font-bold tracking-tight text-foreground">
             Welcome back, {user?.name?.split(' ')[0]}
           </h1>
           <p className="mt-1 text-muted-foreground">
@@ -117,10 +117,35 @@ export default function Dashboard() {
       </div>
 
       {(statsError || reviewsError) && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/30 rounded-lg flex items-center gap-3">
-          <TriangleAlertIcon size={20} className="text-error" />
-          <p className="text-sm text-error">Failed to load some dashboard data. Retrying...</p>
-        </div>
+        <ErrorBanner
+          message="Failed to load some dashboard data."
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                void statsRefetch();
+                void reviewsRefetch();
+              }}
+              className="cursor-pointer rounded-lg border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+            >
+              Retry
+            </button>
+          }
+        />
+      )}
+
+      {/* Findings severity rail — the product's subject as the page's spine */}
+      {stats?.issues_caught_available && (
+        <SeverityRail
+          className="mb-8"
+          counts={{
+            critical: stats.critical_count,
+            high: stats.high_count,
+            medium: stats.medium_count,
+            low: stats.low_count,
+            suggestions: stats.suggestions_count,
+          }}
+        />
       )}
 
       {/* Stat Cards */}
@@ -129,28 +154,28 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard
-            label="Connected Repos"
-            value={stats?.connected_repos ?? 0}
-            accent="bg-gradient-to-r from-blue-500 to-cyan-500"
+            label="Connected repositories"
+            value={metricDisplay(stats?.connected_repos)}
+            accent="bg-info"
             icon={FolderIcon}
           />
           <StatCard
-            label="PRs Reviewed"
-            value={stats?.total_prs_reviewed ?? 0}
-            accent="bg-gradient-to-r from-brand to-brand-hover"
+            label="PRs reviewed"
+            value={metricDisplay(stats?.total_prs_reviewed)}
+            accent="bg-brand"
             icon={GitBranchIcon}
           />
           <StatCard
-            label="Issues Caught"
+            label="Issues caught"
             value={issuesCaughtValue}
-            accent="bg-gradient-to-r from-warning to-amber-500"
+            accent="bg-warning"
             icon={TriangleAlertIcon}
             sub={issuesCaughtSub}
           />
           <StatCard
-            label="Completed Reviews"
-            value={stats?.total_completed_reviews ?? 0}
-            accent="bg-gradient-to-r from-success to-emerald-500"
+            label="Completed reviews"
+            value={metricDisplay(stats?.total_completed_reviews)}
+            accent="bg-success"
             icon={CircleCheckIcon}
           />
         </div>

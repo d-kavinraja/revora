@@ -66,7 +66,7 @@ export default function MaintenancePage() {
             <Wrench className="h-7 w-7" aria-hidden="true" />
           </div>
 
-          <h1 className="mt-6 text-2xl font-bold tracking-tight md:text-3xl">
+          <h1 className="mt-6 text-2xl font-heading font-bold tracking-tight md:text-3xl">
             {maintenance?.title ?? 'Under maintenance'}
           </h1>
 
@@ -85,7 +85,7 @@ export default function MaintenancePage() {
             </p>
           )}
 
-          <p className="mt-8 font-mono text-[11px] uppercase tracking-widest opacity-60">
+          <p className="mt-8 text-[11px] tracking-wide opacity-60">
             This page refreshes automatically
           </p>
         </div>

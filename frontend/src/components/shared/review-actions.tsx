@@ -118,7 +118,7 @@ export function ReviewActions({ review, onAction, isActioning = false, actioning
   return (
     <div className="rounded-xl border border-border bg-surface-1 p-4 mb-5">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lifecycle Actions</span>
+        <span className="text-xs font-semibold text-muted-foreground">Lifecycle actions</span>
         {tooltip && (
           <span className="text-[10px] text-error/80 font-medium ml-auto">{tooltip}</span>
         )}

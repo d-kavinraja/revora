@@ -25,7 +25,7 @@ export function AdminPage({
         <div className="min-w-0 max-w-3xl">
           {eyebrow && <p className="admin-eyebrow">{eyebrow}</p>}
           <h1
-            className={`mt-1 text-2xl font-bold tracking-tight text-foreground md:text-3xl ${
+            className={`mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground md:text-3xl ${
               icon ? 'flex items-center gap-2' : ''
             }`}
           >
@@ -71,11 +71,11 @@ export function AdminSection({
 }: AdminSectionProps) {
   return (
     <section
-      className={`flex min-w-0 flex-col rounded-xl border border-border bg-surface-1 ${
+      className={`flex min-w-0 flex-col rounded-lg border border-border bg-surface-1 ${
         className ?? ''
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pb-3 pt-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border px-5 pb-3 pt-4">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           {subtitle && (
@@ -86,7 +86,7 @@ export function AdminSection({
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
-      <div className={`min-w-0 flex-1 px-5 pb-5 pt-3 ${bodyClassName ?? ''}`}>
+      <div className={`min-w-0 flex-1 px-5 pb-5 pt-4 ${bodyClassName ?? ''}`}>
         {children}
       </div>
     </section>
@@ -102,7 +102,7 @@ export function AdminPanel({
 }) {
   return (
     <section
-      className={`min-w-0 rounded-xl border border-border bg-surface-1 p-5 ${
+      className={`min-w-0 rounded-lg border border-border bg-surface-1 p-5 ${
         className ?? ''
       }`}
     >
@@ -123,7 +123,7 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
-        <h2 className="admin-eyebrow">{title}</h2>
+        <h2 className="admin-label font-semibold text-foreground">{title}</h2>
         {description && (
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         )}

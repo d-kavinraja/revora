@@ -1,18 +1,26 @@
-﻿'use client';
+'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CheckIcon, CopyIcon, RefreshCwIcon } from 'lucide-react';
+import { CheckIcon, CopyIcon, PencilIcon, RefreshCwIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
+  CHAT_MAX_MESSAGE_CHARS,
   computePrefillPercent,
   computeTokensPerSecond,
+  finishNotice,
+  messageAttribution,
+  modelDisplayName,
+  responseModelIdentity,
   type ChatMessage,
+  type ModelIdentity,
   type ResponseMetrics,
   type ResponsePhase,
 } from '@/lib/chat-state';
+
+import { ModelIcon } from '@/components/ui/model-icon';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -20,6 +28,12 @@ interface MessageBubbleProps {
   onRetry?: () => void;
   onRegenerate?: () => void;
   canRegenerate?: boolean;
+  /** Shell owns which message is being edited so stale editors cannot survive a chat switch. */
+  editing?: boolean;
+  canEdit?: boolean;
+  onBeginEdit?: (messageId: string) => void;
+  onCancelEdit?: () => void;
+  onEdit?: (messageId: string, content: string) => void;
 }
 
 const PHASE_LABEL: Record<ResponsePhase, string> = {
@@ -49,7 +63,13 @@ function formatElapsed(ms?: number): string | null {
 }
 
 /** Compact live processing header: real telemetry only, no fabricated values. */
-function ResponseProcessing({ metrics }: { metrics: ResponseMetrics }) {
+function ResponseProcessing({
+  metrics,
+  modelIdentity,
+}: {
+  metrics: ResponseMetrics;
+  modelIdentity: ModelIdentity | null;
+}) {
   const active =
     metrics.phase === 'preparing' ||
     metrics.phase === 'thinking' ||
@@ -76,6 +96,7 @@ function ResponseProcessing({ metrics }: { metrics: ResponseMetrics }) {
     metrics.contextTotal > 0
       ? Math.min(100, Math.round((metrics.contextUsed / metrics.contextTotal) * 100))
       : null;
+  const modelLabel = modelDisplayName(modelIdentity);
 
   return (
     <div className="mb-2.5 border-b border-border/50 pb-2">
@@ -86,9 +107,14 @@ function ResponseProcessing({ metrics }: { metrics: ResponseMetrics }) {
             className={cn('h-1.5 w-1.5 shrink-0 rounded-full', PHASE_DOT[metrics.phase])}
           />
           <span className="chat-ink text-xs font-medium">{PHASE_LABEL[metrics.phase]}</span>
-          {metrics.model ? (
-            <span className="chat-ink max-w-[160px] truncate text-[11px] opacity-80" title={metrics.model}>
-              · {metrics.model}
+          {modelIdentity ? (
+            <span
+              className="chat-ink inline-flex min-w-0 max-w-[180px] items-center gap-1 text-[11px] leading-4 opacity-80"
+              title={modelLabel}
+            >
+              <span aria-hidden>·</span>
+              <ModelIcon model={modelIdentity} size={13} className="shrink-0" />
+              <span className="min-w-0 truncate">{modelLabel}</span>
             </span>
           ) : null}
         </div>
@@ -198,18 +224,113 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function MessageBubble({ message, metrics, onRetry, onRegenerate, canRegenerate }: MessageBubbleProps) {
+/** Inline editor for one sent user turn. Mounted only while that turn is being edited. */
+function MessageEditor({
+  initialContent,
+  onCancel,
+  onSave,
+}: {
+  initialContent: string;
+  onCancel: () => void;
+  onSave: (content: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialContent);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  }, [draft]);
+
+  return (
+    <div className="w-full">
+      <textarea
+        ref={textareaRef}
+        value={draft}
+        rows={2}
+        maxLength={CHAT_MAX_MESSAGE_CHARS}
+        onChange={(event) => setDraft(event.target.value.slice(0, CHAT_MAX_MESSAGE_CHARS))}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onCancel();
+            return;
+          }
+          if (
+            event.key === 'Enter' &&
+            !event.nativeEvent.isComposing &&
+            (!event.shiftKey || event.metaKey || event.ctrlKey)
+          ) {
+            event.preventDefault();
+            const next = draft.trim();
+            if (next) onSave(next);
+          }
+        }}
+        className="max-h-[min(220px,32dvh)] min-h-[52px] w-full resize-none bg-transparent py-1 text-[15px] leading-6 text-current outline-none placeholder:text-white/50 dark:placeholder:text-slate-900/50"
+        placeholder="Edit your message..."
+        aria-label="Edit message"
+      />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-8 items-center rounded-md border border-white/25 px-3 text-xs font-medium text-white transition hover:bg-white/10 dark:border-slate-900/25 dark:text-slate-900 dark:hover:bg-slate-900/10"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!draft.trim()}
+          onClick={() => onSave(draft.trim())}
+          className="inline-flex h-8 items-center rounded-md bg-brand px-3 text-xs font-medium text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Save &amp; Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function MessageBubble({
+  message,
+  metrics,
+  onRetry,
+  onRegenerate,
+  canRegenerate,
+  editing = false,
+  canEdit = false,
+  onBeginEdit,
+  onCancelEdit,
+  onEdit,
+}: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const isError = message.status === 'error';
   const isStreaming = message.status === 'streaming';
+  const isTruncated = message.status === 'truncated';
+  const isAborted = message.status === 'aborted';
+  const isIncomplete = isError || isTruncated || isAborted;
   const hasContent = !!message.content?.trim();
+  const attribution = messageAttribution(message);
+  const responseModel = responseModelIdentity(message, metrics?.model);
 
   // The same renderer is used for streaming and completed assistant messages:
   // markdown is parsed as soon as its syntax is complete, with no end-of-stream
   // swap. Deferring the source lets React coalesce parses under load, and the
   // memo keeps telemetry-only re-renders from reparsing unchanged content.
-  const markdownSource = message.content || (isError ? 'Response failed.' : '');
+  // The wording comes from the recorded finish reason, so a truncated answer and
+  // a dropped connection can never show the same text.
+  const emptyFallback = hasContent ? '' : finishNotice(message) ?? '';
+  const markdownSource = message.content || emptyFallback;
   const deferredMarkdown = useDeferredValue(markdownSource);
   const renderedMarkdown = useMemo(
     () => (
@@ -246,8 +367,16 @@ export function MessageBubble({ message, metrics, onRetry, onRegenerate, canRege
                 : 'rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-3 text-slate-900 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/85 dark:text-slate-100'
           }`}
         >
-          {!isUser && metrics ? <ResponseProcessing metrics={metrics} /> : null}
-          {isUser ? (
+          {!isUser && metrics ? (
+            <ResponseProcessing metrics={metrics} modelIdentity={responseModel} />
+          ) : null}
+          {isUser && editing ? (
+            <MessageEditor
+              initialContent={message.content}
+              onCancel={() => onCancelEdit?.()}
+              onSave={(content) => onEdit?.(message.id, content)}
+            />
+          ) : isUser ? (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           ) : isStreaming && !hasContent ? (
             <div className="whitespace-pre-wrap break-words text-foreground/95">
@@ -261,12 +390,14 @@ export function MessageBubble({ message, metrics, onRetry, onRegenerate, canRege
           )}
 
           {message.status === 'stopped' && !isUser && (
-            <p className="chat-ink mt-2 text-xs">Generation stopped</p>
+            <p className="chat-ink mt-2 text-xs">{finishNotice(message)}</p>
           )}
 
-          {isError && !isUser && (
+          {isIncomplete && !isUser && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <p className="text-xs text-error">{message.error || 'The model could not complete this response.'}</p>
+              <p className={`text-xs ${isError ? 'text-error' : 'text-muted-foreground'}`}>
+                {finishNotice(message) ?? 'The model could not complete this response.'}
+              </p>
               {onRetry && (
                 <button
                   type="button"
@@ -279,26 +410,48 @@ export function MessageBubble({ message, metrics, onRetry, onRegenerate, canRege
               )}
             </div>
           )}
+
+          {!isUser && attribution.label ? (
+            <p
+              className="chat-ink mt-2 truncate text-[11px] leading-5 opacity-70"
+              title={attribution.title ?? undefined}
+            >
+              {attribution.label}
+            </p>
+          ) : null}
         </div>
 
-        {!isStreaming && !isError && hasContent ? (
-          <div className={`mt-1 flex items-center gap-1 ${isUser ? 'justify-end opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100' : 'justify-start'}`}>
+        {!isStreaming && hasContent && !editing ? (
+          <div className={`mt-1 flex items-center gap-1 ${isUser ? 'justify-end opacity-0 transition-opacity group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 [@media(hover:none)]:opacity-100' : 'justify-start'}`}>
             <button
               type="button"
               onClick={handleCopy}
-              className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground"
+              className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3"
               aria-label={copied ? 'Copied' : 'Copy message'}
               title={copied ? 'Copied' : 'Copy'}
             >
               {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
               <span className="sr-only sm:not-sr-only">{copied ? 'Copied' : 'Copy'}</span>
             </button>
+            {isUser && onBeginEdit ? (
+              <button
+                type="button"
+                onClick={() => onBeginEdit(message.id)}
+                disabled={!canEdit}
+                className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3"
+                aria-label="Edit message"
+                title={canEdit ? 'Edit' : 'Wait for the response to finish'}
+              >
+                <PencilIcon size={13} />
+                <span className="sr-only sm:not-sr-only">Edit</span>
+              </button>
+            ) : null}
             {!isUser && onRegenerate ? (
               <button
                 type="button"
                 onClick={onRegenerate}
                 disabled={!canRegenerate}
-                className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3"
                 aria-label="Regenerate response"
                 title="Regenerate"
               >

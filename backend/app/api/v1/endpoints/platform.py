@@ -24,6 +24,7 @@ from app.db.session import get_db
 from app.models.platform import Announcement, FeatureFlag
 from app.models.provider import ProviderRegistry
 from app.models.user import User
+from app.schemas.persistent_chat import ChatModeSettingsRead
 from app.schemas.platform import (
     DisabledProviderRead,
     PublicAnnouncementRead,
@@ -255,6 +256,22 @@ async def mark_platform_announcement_seen(
     await db.commit()
 
     return {"status": "seen", "id": str(announcement.id)}
+
+
+@router.get("/chat-modes", response_model=ChatModeSettingsRead)
+async def get_public_chat_modes(db: AsyncSession = Depends(get_db)):
+    """Public availability controls for Temporary and Persistent Chat."""
+    try:
+        state = await platform_settings_service.get_chat_modes(db)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Chat settings are unavailable.") from exc
+    return ChatModeSettingsRead(
+        temporary_enabled=bool(state["temporary_enabled"]),
+        persistent_enabled=bool(state["persistent_enabled"]),
+        temporary_message=state.get("temporary_message"),
+        persistent_message=state.get("persistent_message"),
+        version=int(state.get("version") or 0),
+    )
 
 
 @router.get("/features", response_model=dict[str, PublicFeatureState])

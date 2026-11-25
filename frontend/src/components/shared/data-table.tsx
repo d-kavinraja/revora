@@ -19,6 +19,8 @@ interface DataTableProps<T> {
   /** Mobile (< md) card renderer; when omitted the table scrolls horizontally. */
   renderMobileCard?: (row: T) => ReactNode;
   ariaLabel?: string;
+  /** Compact trims row height for dense logs (audit, review stages). */
+  density?: 'default' | 'compact';
 }
 
 function ShimmerBlock({ className }: { className?: string }) {
@@ -29,11 +31,11 @@ function ShimmerBlock({ className }: { className?: string }) {
   );
 }
 
-function ShimmerRow({ cols }: { cols: number }) {
+function ShimmerRow({ cols, cellClass }: { cols: number; cellClass: string }) {
   return (
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
-        <td key={i} className="px-4 py-3.5">
+        <td key={i} className={cellClass}>
           <ShimmerBlock className={`h-4 ${i === 0 ? 'w-40' : 'w-20'}`} />
         </td>
       ))}
@@ -59,6 +61,7 @@ export function DataTable<T>({
   empty,
   renderMobileCard,
   ariaLabel,
+  density = 'default',
 }: DataTableProps<T>) {
   const showEmpty = !isLoading && rows.length === 0 && !!empty;
 
@@ -66,9 +69,14 @@ export function DataTable<T>({
     return <>{empty}</>;
   }
 
+  const headCellClass =
+    'border-b border-border px-4 py-2.5 text-xs font-medium text-muted-foreground';
+  const bodyCellClass =
+    density === 'compact' ? 'px-4 py-2 align-middle' : 'px-4 py-3 align-middle';
+
   const desktopTable = (
     <div
-      className={`w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-surface-1 ${
+      className={`w-full max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-border bg-surface-1 ${
         renderMobileCard ? 'hidden md:block' : ''
       }`}
     >
@@ -79,9 +87,7 @@ export function DataTable<T>({
               <th
                 key={col.key}
                 scope="col"
-                className={`border-b border-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ${
-                  col.className ?? ''
-                }`}
+                className={`${headCellClass} ${col.className ?? ''}`}
               >
                 {col.header}
               </th>
@@ -91,17 +97,21 @@ export function DataTable<T>({
         <tbody className="divide-y divide-border/70">
           {isLoading
             ? Array.from({ length: loadingRows }).map((_, i) => (
-                <ShimmerRow key={i} cols={columns.length} />
+                <ShimmerRow
+                  key={i}
+                  cols={columns.length}
+                  cellClass={bodyCellClass}
+                />
               ))
             : rows.map((row) => (
                 <tr
                   key={keyOf(row)}
-                  className="min-h-11 transition-colors hover:bg-surface-2/60"
+                  className="min-h-11 transition-colors hover:bg-[var(--admin-wash)]"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 align-middle ${col.className ?? ''}`}
+                      className={`${bodyCellClass} ${col.className ?? ''}`}
                     >
                       {col.render(row)}
                     </td>

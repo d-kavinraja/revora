@@ -147,6 +147,9 @@
 }
 
 :root {
+  /* Native scrollbar/UA-widget rendering follows the app theme (matches how
+     .admin-light / .admin-dark below pin their scheme). */
+  color-scheme: light;
   --revora-announcement-height: 0px;
   /* Height of the fixed mobile navigation header (md:hidden). Single source
      of truth shared by the sidebar and the inference loader. */
@@ -221,6 +224,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   /* Base surfaces - subtle blue tint for depth */
   --background: oklch(0.09 0.005 270);
   --foreground: oklch(0.95 0 0);
@@ -727,6 +731,30 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Admin chrome defaults. Shared primitives (tables, filters, controls) are
+ * used outside /admin as well, so the wash/hairline tokens resolve on every
+ * root. The .admin-light / .admin-dark blocks below re-declare them for the
+ * console and win by cascade order.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --admin-wash: oklch(0.145 0 0 / 0.04);
+  --admin-wash-strong: oklch(0.145 0 0 / 0.07);
+  --admin-hairline-strong: oklch(0.145 0 0 / 0.14);
+  --admin-unrecorded: oklch(0.55 0 0 / 0.6);
+  --admin-elev: 0 1px 2px oklch(0.145 0 0 / 0.05),
+    0 18px 40px -32px oklch(0.145 0 0 / 0.35);
+}
+
+.dark {
+  --admin-wash: oklch(1 0 0 / 0.045);
+  --admin-wash-strong: oklch(1 0 0 / 0.075);
+  --admin-hairline-strong: oklch(1 0 0 / 0.16);
+  --admin-unrecorded: oklch(0.78 0 0 / 0.45);
+  --admin-elev: 0 1px 0 oklch(1 0 0 / 0.03), 0 24px 48px -36px oklch(0 0 0 / 0.7);
+}
+
+/* ---------------------------------------------------------------------------
  * Admin console instrument layer.
  * Additive only: the palette above stays the single source of truth. These
  * variables describe admin chrome (rail, topbar, washes) and the readout
@@ -756,6 +784,8 @@
     0 24px 48px -36px oklch(0 0 0 / 0.7);
 }
 
+/* The tracked-caps marker. Reserved for the ONE section marker per screen
+   (topbar section group, login gate) — never for general labels. */
 .admin-eyebrow {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -765,7 +795,25 @@
   color: var(--muted-foreground);
 }
 
+/* Default label voice: sentence case, quiet. Replaces the caps eyebrow on
+   every readout label, nav group and section heading. */
+.admin-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--muted-foreground);
+}
+
 .admin-figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Readout figures carry the instrument voice: Oxanium, tabular numerals,
+   tight tracking. Used for headline numbers, never for prose. */
+.admin-readout {
+  font-family: var(--font-oxanium, var(--font-sans));
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   letter-spacing: -0.02em;
@@ -777,8 +825,38 @@
 
 .admin-frame {
   border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+/* Hero band: the one wide instrument surface per page (status ribbon,
+   login gate). Panels sit one radius step below it. */
+.admin-hero {
+  border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--surface-1);
+}
+
+/* Hairline rule for separating readout rows and nav groups. */
+.admin-rule {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Login backdrop: a fine instrument grid drawn in hairlines. Flat, never a
+   gradient wash. */
+.admin-grid {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--admin-wash) 0 1px,
+      transparent 1px 32px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--admin-wash) 0 1px,
+      transparent 1px 32px
+    );
 }
 
 .admin-frame-elevated {
@@ -843,5 +921,58 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Nav-rail scrollbar — slim, theme-aware scrollbar for the app's navigation
+ * sidebar. Matches the admin console's navigation scrollbar appearance
+ * across Chrome/Safari (::-webkit-scrollbar) and Firefox (scrollbar-width /
+ * scrollbar-color). Track stays transparent so it blends with the sidebar
+ * surface. Thumb reads --muted-foreground, so it adapts to every theme
+ * (:root / .dark / .admin-light / .admin-dark) without extra rules.
+ * --------------------------------------------------------------------------- */
+.nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+  overscroll-behavior: contain;
+}
+
+.nav-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nav-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+
+.nav-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Severity rail: one fill sweep when the rail mounts. Only when the user has
+ * not asked for reduced motion; counts and layout are identical either way.
+ * --------------------------------------------------------------------------- */
+@keyframes severity-rail-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .severity-rail-fill {
+    transform-origin: left;
+    animation: severity-rail-fill 400ms ease-out both;
   }
 }

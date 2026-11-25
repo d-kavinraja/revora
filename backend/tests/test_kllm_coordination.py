@@ -10,6 +10,7 @@ import asyncio
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.services import kllm_autoload as ka
 from app.services.kllm_service import KllmUnavailableError
@@ -26,6 +27,15 @@ def _statement_key(stmt) -> int:
 
 class FakeDialect:
     name = "postgresql"
+    driver = "asyncpg"
+    is_async = True
+
+
+class FakeSyncEngine:
+    """Minimal sync engine stand-in; AsyncEngine proxies ``dialect`` to it."""
+
+    def __init__(self):
+        self.dialect = FakeDialect()
 
 
 class FakeRegistry:
@@ -105,9 +115,15 @@ class FakeConnectionContext:
         await self.connection.close()
 
 
-class FakeEngine:
+class FakeEngine(AsyncEngine):
+    """AsyncEngine subclass whose connect() yields the in-memory fake connection.
+
+    kllm_autoload pins one physical connection for advisory locks and requires
+    a genuine AsyncEngine (a sync Engine would raise MissingGreenlet).
+    """
+
     def __init__(self, registry: FakeRegistry):
-        self.dialect = FakeDialect()
+        super().__init__(FakeSyncEngine())
         self.registry = registry
 
     def connect(self):
@@ -117,6 +133,7 @@ class FakeEngine:
 class FakeDB:
     def __init__(self, registry: FakeRegistry):
         self._engine = FakeEngine(registry)
+        self.bind = self._engine
         self.commits = 0
 
     def get_bind(self):

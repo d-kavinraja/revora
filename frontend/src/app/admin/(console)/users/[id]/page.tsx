@@ -30,6 +30,7 @@ import {
   formatDateTimeWithRelative,
 } from '@/components/shared/time-ago';
 import { AdminButton } from '@/components/admin/controls';
+import { AdminSection } from '@/components/admin/page-shell';
 import { QueryError } from '@/components/admin/states';
 
 const REVIEWS_PAGE_SIZE = 10;
@@ -243,7 +244,7 @@ export default function AdminUserDetailPage({
               repo.removed_at ? 'Removed' : null,
             ]
               .filter(Boolean)
-              .join(' · ')}
+              .join(', ')}
           </p>
         </div>
       ),
@@ -432,7 +433,7 @@ export default function AdminUserDetailPage({
                 : null,
             ]
               .filter(Boolean)
-              .join(' · ') || 'Not recorded'}
+              .join(', ') || 'Not recorded'}
           </p>
           {review.latest_error && (
             <p className="mt-1 max-w-[260px] truncate text-error" title={review.latest_error}>
@@ -463,7 +464,7 @@ export default function AdminUserDetailPage({
         Back to users
       </Link>
 
-      <header className="mt-4 flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-surface-1 p-5">
+      <header className="admin-hero admin-tick mt-4 flex flex-wrap items-start justify-between gap-4 p-5">
         <div className="flex min-w-0 items-center gap-4">
           {profile.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -479,7 +480,7 @@ export default function AdminUserDetailPage({
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">
+              <h1 className="truncate font-heading text-xl font-bold tracking-tight text-foreground md:text-2xl">
                 {profile.name || '—'}
               </h1>
               <Pill
@@ -506,26 +507,6 @@ export default function AdminUserDetailPage({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {profile.status === 'disabled' ? (
-              <AdminButton
-                variant="successSoft"
-                onClick={() => setEnableOpen(true)}
-              >
-                <UserCheck size={16} />
-                Enable account
-              </AdminButton>
-            ) : (
-              <AdminButton variant="dangerSoft" onClick={() => setDisableOpen(true)}>
-                <Ban size={16} />
-                Disable account
-              </AdminButton>
-            )}
-            <AdminButton variant="secondary" onClick={() => setRevokeOpen(true)}>
-              <LogOut size={16} />
-              Revoke sessions
-            </AdminButton>
-          </div>
           <p className="h-4 text-xs text-muted-foreground">
             {isFetching ? 'Refreshing…' : null}
           </p>
@@ -570,6 +551,7 @@ export default function AdminUserDetailPage({
         className="mt-6"
       >
         {tab === 'Profile' && (
+          <>
           <section className="max-w-2xl rounded-xl border border-border bg-surface-1 p-5">
             <dl>
               <ProfileRow label="User ID" value={<span className="font-mono text-xs">{profile.id}</span>} />
@@ -602,6 +584,66 @@ export default function AdminUserDetailPage({
               />
             </dl>
           </section>
+
+          <AdminSection
+            title="Danger zone"
+            subtitle="These actions apply immediately and are recorded in the audit log."
+            className="mt-6 max-w-2xl border-error/30"
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    {profile.status === 'disabled'
+                      ? 'Enable account'
+                      : 'Disable account'}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {profile.status === 'disabled'
+                      ? 'Restores sign-in and reviews for this user.'
+                      : 'Blocks sign-in immediately. Existing sessions stop working.'}
+                  </p>
+                </div>
+                {profile.status === 'disabled' ? (
+                  <AdminButton
+                    variant="successSoft"
+                    onClick={() => setEnableOpen(true)}
+                  >
+                    <UserCheck size={16} />
+                    Enable account
+                  </AdminButton>
+                ) : (
+                  <AdminButton
+                    variant="dangerSoft"
+                    onClick={() => setDisableOpen(true)}
+                  >
+                    <Ban size={16} />
+                    Disable account
+                  </AdminButton>
+                )}
+              </div>
+              <hr className="admin-rule" />
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    Revoke sessions
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    Signs the user out of every device. They can sign in again
+                    unless the account is disabled.
+                  </p>
+                </div>
+                <AdminButton
+                  variant="dangerSoft"
+                  onClick={() => setRevokeOpen(true)}
+                >
+                  <LogOut size={16} />
+                  Revoke sessions
+                </AdminButton>
+              </div>
+            </div>
+          </AdminSection>
+          </>
         )}
 
         {tab === 'Repositories' && (
@@ -621,7 +663,7 @@ export default function AdminUserDetailPage({
                     repo.removed_at ? 'Removed' : null,
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(', ')}
                 </p>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {repo.mapping_provider ? (
@@ -782,7 +824,7 @@ export default function AdminUserDetailPage({
                         : null,
                     ]
                       .filter(Boolean)
-                      .join(' · ') || 'Not recorded'}
+                      .join(', ') || 'Not recorded'}
                   </p>
                   {review.latest_error && (
                     <p className="break-words text-xs text-error">

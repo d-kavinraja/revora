@@ -85,7 +85,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
           ) : (
             <div
               aria-hidden="true"
-              className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-brand to-brand-hover flex items-center justify-center uppercase font-bold text-2xl md:text-3xl text-white border-4 border-surface-1 shadow-md"
+              className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-brand flex items-center justify-center uppercase font-bold text-2xl md:text-3xl text-white border-4 border-surface-1 shadow-md"
             >
               {displayName.charAt(0)}
             </div>
@@ -115,7 +115,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
                 <MailIcon size={14} aria-hidden="true" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight">
+                <span className="block text-[10px] font-semibold text-foreground/70 leading-tight">
                   Email
                 </span>
                 <span className="block text-sm font-medium text-foreground/90 truncate">{user.email}</span>
@@ -130,7 +130,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
                     <GithubMarkIcon size={15} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-foreground/70 leading-tight">
+                    <span className="block text-[10px] font-semibold text-foreground/70 leading-tight">
                       GitHub
                     </span>
                     {githubUrl ? (

@@ -29,19 +29,19 @@ export default function ModelLabPage() {
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="text-xs text-foreground/60">
         <Link href="/dashboard" className="hover:text-foreground transition-colors">
-          Home
+          Dashboard
         </Link>
         <span className="mx-1.5" aria-hidden="true">
           &gt;
         </span>
         <span aria-current="page" className="text-foreground font-medium">
-          Model Lab
+          Model lab
         </span>
       </nav>
 
       {/* Page header */}
       <FadeIn className="mt-3 md:mt-4">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Model Lab</h1>
+        <h1 className="text-2xl md:text-3xl font-heading font-bold tracking-tight">Model lab</h1>
         <p className="text-muted-foreground text-sm mt-1.5 leading-relaxed">
           Explore and test Revora&apos;s own trained AI models, free to use.
         </p>

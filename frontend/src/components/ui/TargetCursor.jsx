@@ -1,6 +1,20 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { gsap } from 'gsap';
 import './TargetCursor.css';
+
+// Client-only viewport detection for the custom cursor. Read through
+// useSyncExternalStore so SSR and hydration render the same tree (false) and
+// the client value flips exactly once afterwards — no setState in an effect.
+const detectMobile = () => {
+  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 768;
+  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+  const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
+  return (hasTouchScreen && isSmallScreen) || mobileRegex.test(userAgent.toLowerCase());
+};
+// Detection is intentionally a one-shot per mount (the previous effect never
+// re-ran on viewport changes), so no subscription is needed.
+const subscribeToViewport = () => () => {};
 
 // A position: fixed element is positioned relative to the viewport UNLESS an
 // ancestor establishes a containing block (transform, perspective, filter,
@@ -52,17 +66,7 @@ const TargetCursor = ({
   const tickerFnRef = useRef(null);
   const activeStrengthRef = useRef(0);
 
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const isSmallScreen = window.innerWidth <= 768;
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
-    const isMobileUserAgent = mobileRegex.test(userAgent.toLowerCase());
-    setIsMobile((hasTouchScreen && isSmallScreen) || isMobileUserAgent);
-  }, []);
+  const isMobile = useSyncExternalStore(subscribeToViewport, detectMobile, () => false);
 
   const constants = useMemo(
     () => ({

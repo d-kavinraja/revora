@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Boxes,
+  Cloud,
   FileText,
   Flag,
   FolderGit2,
@@ -79,6 +80,12 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<NavItem> }
       },
       { href: '/admin/models', label: 'Models', icon: Boxes, exact: false },
       { href: '/admin/kllm', label: 'kLLM', icon: Zap, exact: false },
+      {
+        href: '/admin/hosted-ollama',
+        label: 'Hosted models',
+        icon: Cloud,
+        exact: false,
+      },
       { href: '/admin/features', label: 'Features', icon: Flag, exact: false },
       {
         href: '/admin/maintenance',
@@ -107,6 +114,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/providers': 'Providers',
   '/admin/models': 'Models',
   '/admin/kllm': 'kLLM',
+  '/admin/hosted-ollama': 'Hosted models',
   '/admin/features': 'Features',
   '/admin/maintenance': 'Maintenance',
   '/admin/announcements': 'Announcements',
@@ -250,9 +258,10 @@ export default function AdminConsoleLayout({
 
   const renderNav = (onNavigate?: () => void) => (
     <nav aria-label="Admin sections" className="space-y-5 p-3">
-      {NAV_GROUPS.map((group) => (
+      {NAV_GROUPS.map((group, groupIndex) => (
         <div key={group.label}>
-          <p className="admin-eyebrow px-3 pb-1.5">{group.label}</p>
+          {groupIndex > 0 && <hr className="admin-rule mb-4" />}
+          <p className="admin-label px-3 pb-1.5">{group.label}</p>
           <div className="space-y-1">
             {group.items.map((item) => {
               const active = isActive(pathname, item.href, item.exact);
@@ -262,23 +271,23 @@ export default function AdminConsoleLayout({
                   href={item.href}
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
-                  className={`group flex h-11 items-center gap-3 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  className={`group relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                     active
-                      ? 'border-brand/30 bg-brand/10 text-brand ring-1 ring-inset ring-brand/20'
-                      : 'border-transparent text-foreground/70 hover:bg-[var(--admin-wash)] hover:text-foreground'
+                      ? 'bg-[var(--admin-wash)] text-brand'
+                      : 'text-foreground/70 hover:bg-[var(--admin-wash)] hover:text-foreground'
                   }`}
                 >
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand"
+                    />
+                  )}
                   <item.icon
                     size={17}
                     className={active ? 'text-brand' : 'text-muted-foreground group-hover:text-foreground'}
                   />
                   <span className="min-w-0 truncate">{item.label}</span>
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
-                    />
-                  )}
                 </Link>
               );
             })}
@@ -318,7 +327,7 @@ export default function AdminConsoleLayout({
             <span className="font-heading truncate text-sm font-semibold tracking-tight text-foreground">
               Revora
             </span>
-            <span className="rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <span className="rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
               Admin
             </span>
           </Link>
@@ -335,7 +344,7 @@ export default function AdminConsoleLayout({
               />
               <div className="min-w-0">
                 <p className="admin-eyebrow hidden sm:block">Admin console</p>
-                <p className="truncate text-sm font-semibold text-foreground">
+                <p className="truncate font-heading text-sm font-semibold text-foreground">
                   {section}
                 </p>
               </div>

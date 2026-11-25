@@ -5,11 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarRange,
   Coins,
-  FolderGit2,
-  GitPullRequest,
   Hash,
   RefreshCw,
-  Users,
   Wrench,
 } from 'lucide-react';
 import { adminApi, type AdminOverview, type NumericMetric, type ScalarMetric } from '@/lib/api';
@@ -22,6 +19,7 @@ import {
   KpiTile,
   RankedList,
   SegmentedControl,
+  StatusRibbon,
   type MeterTone,
 } from '@/components/admin/metrics';
 import { IconButton } from '@/components/admin/controls';
@@ -54,37 +52,37 @@ function ProviderHealthList({ rows }: { rows: ProviderHealthRow[] }) {
             <tr className="border-b border-border text-left">
               <th
                 scope="col"
-                className="w-[22%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[22%] pb-2 pr-3 text-xs font-medium text-muted-foreground"
               >
                 Provider
               </th>
               <th
                 scope="col"
-                className="w-[12%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[12%] pb-2 pr-3 text-xs font-medium text-muted-foreground"
               >
                 Status
               </th>
               <th
                 scope="col"
-                className="w-[12%] pb-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[12%] pb-2 pr-3 text-right text-xs font-medium text-muted-foreground"
               >
                 Success
               </th>
               <th
                 scope="col"
-                className="w-[12%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[12%] pb-2 pr-3 text-xs font-medium text-muted-foreground"
               >
                 Circuit
               </th>
               <th
                 scope="col"
-                className="w-[18%] pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[18%] pb-2 pr-3 text-xs font-medium text-muted-foreground"
               >
                 Snapshot
               </th>
               <th
                 scope="col"
-                className="w-[24%] pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                className="w-[24%] pb-2 text-xs font-medium text-muted-foreground"
               >
                 Last error
               </th>
@@ -312,6 +310,31 @@ export default function AdminOverviewPage() {
   const modelFailureRows =
     data?.failure_by_model.filter((row) => row.failed > 0 || row.eligible > 0) ?? [];
 
+  const providerRows = data?.provider_health ?? [];
+  const providersDown = providerRows.filter((row) =>
+    ['down', 'error', 'failed'].includes((row.status ?? '').toLowerCase()),
+  ).length;
+  const providersDegraded = providerRows.filter((row) =>
+    ['degraded', 'stale', 'partial'].includes((row.status ?? '').toLowerCase()),
+  ).length;
+  const processing = outcomes?.processing ?? 0;
+  const verdict =
+    providersDown > 0
+      ? `${providersDown} provider${providersDown === 1 ? '' : 's'} down`
+      : providersDegraded > 0
+        ? `${providersDegraded} provider${providersDegraded === 1 ? '' : 's'} degraded`
+        : processing > 0
+          ? 'Reviews processing'
+          : 'All systems nominal';
+  const verdictHint = [
+    `${providerRows.length} provider${providerRows.length === 1 ? '' : 's'} reporting`,
+    outcomes
+      ? `${outcomes.successful.toLocaleString()} successful, ${outcomes.failed.toLocaleString()} failed, ${outcomes.cancelled.toLocaleString()} cancelled or skipped, ${outcomes.processing.toLocaleString()} processing`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
   return (
     <AdminPage
       eyebrow="Monitor"
@@ -338,19 +361,6 @@ export default function AdminOverviewPage() {
             </span>
           </>
         ) : undefined
-      }
-      actions={
-        <>
-          <SegmentedControl
-            ariaLabel="Time period"
-            options={PERIOD_OPTIONS}
-            value={period}
-            onChange={setPeriod}
-          />
-          <IconButton label="Refresh metrics" onClick={() => refetch()}>
-            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
-          </IconButton>
-        </>
       }
     >
       {isError && !isPending && (
@@ -381,43 +391,54 @@ export default function AdminOverviewPage() {
         </div>
       ) : data ? (
         <>
-          <section aria-label="Key metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiTile
-              label="Users total"
-              value={formatCount(data.users_total)}
-              sub={`+${data.users_new_in_period.toLocaleString()} in period`}
-              icon={<Users size={15} />}
-            />
-            <KpiTile
-              label="Reviews total"
-              value={formatCount(data.reviews_total)}
-              sub={`${data.reviews_in_period.toLocaleString()} in period`}
-              icon={<GitPullRequest size={15} />}
-            />
-            <KpiTile
-              label="Failure rate"
-              value={
-                failure?.unavailable
+          <StatusRibbon
+            label="System state"
+            verdict={verdict}
+            hint={`${verdictHint}.`}
+            readouts={[
+              {
+                key: 'users',
+                label: 'Users total',
+                value: formatCount(data.users_total),
+                sub: `+${data.users_new_in_period.toLocaleString()} in period`,
+              },
+              {
+                key: 'reviews',
+                label: 'Reviews total',
+                value: formatCount(data.reviews_total),
+                sub: `${data.reviews_in_period.toLocaleString()} in period`,
+              },
+              {
+                key: 'failure',
+                label: 'Failure rate',
+                value: failure?.unavailable
                   ? failure.value
-                  : `${((data.failure_rate.value ?? 0) * 100).toFixed(1)}%`
-              }
-              sub={
-                outcomes
-                  ? `${outcomes.successful.toLocaleString()} successful · ${outcomes.failed.toLocaleString()} failed · ${outcomes.cancelled.toLocaleString()} cancelled/skipped · ${outcomes.processing.toLocaleString()} processing${
-                      failureComparison ? ` · ${failureComparison}` : ''
-                    }`
-                  : undefined
-              }
-              reason={failure?.reason}
-              unavailable={failure?.unavailable}
-              icon={<Hash size={15} />}
-            />
-            <KpiTile
-              label="Repositories connected"
-              value={formatCount(data.repos_connected)}
-              icon={<FolderGit2 size={15} />}
-            />
-          </section>
+                  : `${((data.failure_rate.value ?? 0) * 100).toFixed(1)}%`,
+                sub: failure?.unavailable ? failure.reason : failureComparison,
+              },
+              {
+                key: 'repos',
+                label: 'Repositories connected',
+                value: formatCount(data.repos_connected),
+              },
+            ]}
+            actions={
+              <>
+                <SegmentedControl
+                  ariaLabel="Time period"
+                  options={PERIOD_OPTIONS}
+                  value={period}
+                  onChange={setPeriod}
+                />
+                <IconButton label="Refresh metrics" onClick={() => refetch()}>
+                  <RefreshCw
+                    size={16}
+                    className={isFetching ? 'animate-spin' : ''}
+                  />
+                </IconButton>
+              </>
+            }
+          />
 
           <div className="grid gap-4">
             <AdminSection
@@ -558,9 +579,9 @@ export default function AdminOverviewPage() {
                   items={providerFailureRows.map((row) => ({
                     key: String(row.provider ?? 'unknown'),
                     label: row.provider ? providerDisplayName(row.provider) : 'Unrecorded',
-                    secondary: `${row.successful.toLocaleString()} passed · ${row.failed.toLocaleString()} failed${
+                    secondary: `${row.successful.toLocaleString()} passed, ${row.failed.toLocaleString()} failed${
                       row.failure_rate !== null
-                        ? ` · ${(row.failure_rate * 100).toFixed(1)}% failure`
+                        ? `, ${(row.failure_rate * 100).toFixed(1)}% failure`
                         : ''
                     }`,
                     value: row.failed,
@@ -583,9 +604,9 @@ export default function AdminOverviewPage() {
                   items={modelFailureRows.map((row) => ({
                     key: `${row.provider ?? 'unknown'}-${row.model ?? 'unrecorded'}`,
                     label: row.model ?? 'Model not recorded',
-                    secondary: `${row.provider ? providerDisplayName(row.provider) : 'Unrecorded provider'} · ${row.successful.toLocaleString()} passed${
+                    secondary: `${row.provider ? providerDisplayName(row.provider) : 'Unrecorded provider'}, ${row.successful.toLocaleString()} passed${
                       row.failure_rate !== null
-                        ? ` · ${(row.failure_rate * 100).toFixed(1)}% failure`
+                        ? `, ${(row.failure_rate * 100).toFixed(1)}% failure`
                         : ''
                     }`,
                     value: row.failed,
@@ -681,7 +702,7 @@ export default function AdminOverviewPage() {
                       <tr className="border-b border-border text-left">
                         <th
                           scope="col"
-                          className="pb-2 pr-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                          className="pb-2 pr-3 text-xs font-medium text-muted-foreground"
                         >
                           Provider
                         </th>
@@ -690,7 +711,7 @@ export default function AdminOverviewPage() {
                             <th
                               key={label}
                               scope="col"
-                              className="pb-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground last:pr-0"
+                              className="pb-2 pr-3 text-right text-xs font-medium text-muted-foreground last:pr-0"
                             >
                               {label}
                             </th>

@@ -9,6 +9,7 @@ import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBar
 import { HelpCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useEffect, useRef, useState } from 'react';
+import { useChatModes } from '@/lib/use-chat-modes';
 import { usePlatformFeatures, isFeatureEnabled } from '@/lib/use-platform-features';
 
 // `feature` links a nav entry to a platform flag (§11.1); entries without one
@@ -22,20 +23,20 @@ type NavLink = {
 
 const navLinks: NavLink[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGridIcon },
-  { href: '/guide', label: 'Setup Guide', icon: BookOpenIcon, feature: 'guide' },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
   { href: '/reviews', label: 'Reviews', icon: ClipboardIcon },
   { href: '/chat', label: 'Chat', icon: MessageCircleIcon, feature: 'chat' },
-  { href: '/model-lab', label: 'Model Lab', icon: BrainIcon, feature: 'model_lab' },
+  { href: '/model-lab', label: 'Model lab', icon: BrainIcon, feature: 'model_lab' },
+  { href: '/guide', label: 'Setup guide', icon: BookOpenIcon, feature: 'guide' },
 ];
 
 const bottomLinks: NavLink[] = [
-  { href: '/settings/api-keys', label: 'API Keys', icon: KeyIcon },
+  { href: '/settings/api-keys', label: 'API keys', icon: KeyIcon },
   { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
   { href: '/settings/kllm', label: 'kLLM', icon: ZapIcon, feature: 'kllm_page' },
   { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
-  { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
   { href: '/settings/health', label: 'Health', icon: ActivityIcon },
+  { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
   { href: '/settings/analytics', label: 'Analytics', icon: TrendingUpIcon, feature: 'analytics' },
 ];
 
@@ -176,8 +177,11 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
     pathname === href || pathname.startsWith(href + '/');
 
   const { data: features } = usePlatformFeatures();
+  const { data: chatModes } = useChatModes();
   const isDisabled = (feature?: string) =>
-    !!feature && !isFeatureEnabled(features, feature);
+    feature === 'chat'
+      ? !chatModes?.temporary_enabled && !chatModes?.persistent_enabled
+      : !!feature && !isFeatureEnabled(features, feature);
   // All links stay visible; feature availability only affects styling/state.
   const visibleNavLinks = navLinks;
   const visibleBottomLinks = bottomLinks;
@@ -259,9 +263,9 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto nav-scroll">
           {!collapsed && (
-            <div className="text-[11px] font-semibold text-foreground/60 uppercase tracking-wider px-3 mb-2">
+            <div className="text-[11px] font-semibold text-foreground/60 px-3 mb-2">
               Navigation
             </div>
           )}
@@ -279,7 +283,7 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
           ))}
 
           {!collapsed && (
-            <div className="text-[11px] font-semibold text-foreground/60 uppercase tracking-wider px-3 mt-5 mb-2">
+            <div className="text-[11px] font-semibold text-foreground/60 px-3 mt-5 mb-2">
               Settings
             </div>
           )}

@@ -1,16 +1,38 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, BrainIcon, ChevronDownIcon, CheckIcon, SquareIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  BrainIcon,
+  ChevronDownIcon,
+  CheckIcon,
+  LoaderCircleIcon,
+  MicIcon,
+  SquareIcon,
+  XIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select } from "@base-ui/react/select";
 
 import { HandoffBeam, type BeamPhase } from "@/components/ui/handoff-beam";
-import type { KllmStatus } from "@/lib/api";
+import type { ChatCatalog } from "@/lib/api";
 import type { ReasoningEffort } from "@/lib/chat-api";
 import { CHAT_MAX_MESSAGE_CHARS } from "@/lib/chat-state";
+import type { SpeechPhase } from "@/lib/speech";
 
 import { ModelPicker } from "./model-picker";
+
+export interface ComposerSpeechControls {
+  enabled: boolean;
+  phase: SpeechPhase;
+  error: string | null;
+  readiness: 'disabled' | 'ready' | 'unavailable' | 'recovering' | 'authentication_error' | 'configuration_error' | 'error';
+  elapsedMs: number;
+  maxSeconds: number;
+  onStart: () => void;
+  onStop: () => void;
+  onCancel: () => void;
+}
 
 interface ChatComposerProps {
   value: string;
@@ -18,7 +40,7 @@ interface ChatComposerProps {
   sending: boolean;
   canStop: boolean;
   helperText?: string | null;
-  modelStatus: KllmStatus | undefined;
+  modelStatus: ChatCatalog | undefined;
   modelValue: string | null;
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (effort: ReasoningEffort) => void;
@@ -29,6 +51,46 @@ interface ChatComposerProps {
   generationPhase?: 'preparing' | 'thinking' | 'generating' | null;
   openMenu?: 'context' | 'model' | 'effort' | null;
   onOpenMenuChange?: (menu: 'context' | 'model' | 'effort' | null) => void;
+  speech?: ComposerSpeechControls;
+  caretRequest?: number;
+}
+
+const SPEECH_ACTIVE: SpeechPhase[] = [
+  'requesting',
+  'recording',
+  'uploading',
+  'queued',
+  'processing',
+];
+
+function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function speechStatus(phase: SpeechPhase, elapsedMs: number, maxSeconds: number): string | null {
+  if (phase === 'requesting') return 'Waiting for microphone permission…';
+  if (phase === 'recording') {
+    return `Recording ${formatClock(elapsedMs)} of ${formatClock(maxSeconds * 1000)}`;
+  }
+  if (phase === 'uploading') return 'Sending recording…';
+  if (phase === 'queued') return 'Waiting for the transcriber…';
+  if (phase === 'processing') return 'Transcribing…';
+  if (phase === 'done') return 'Transcript added. Review it, then send when ready.';
+  return null;
+}
+
+// The visible recording timer changes four times a second. Keep it out of the
+// live region so a screen reader is not interrupted on every tick; announce
+// only the phase change itself.
+function speechAnnouncement(phase: SpeechPhase): string {
+  if (phase === 'requesting') return 'Waiting for microphone permission.';
+  if (phase === 'recording') return 'Recording. Use Stop recording and transcribe when finished.';
+  if (phase === 'uploading') return 'Sending recording.';
+  if (phase === 'queued') return 'Waiting for the transcriber.';
+  if (phase === 'processing') return 'Transcribing.';
+  if (phase === 'done') return 'Transcript added. Review it, then send when ready.';
+  return '';
 }
 
 const EFFORT_ITEMS: {
@@ -108,6 +170,8 @@ export function ChatComposer({
   generationPhase,
   openMenu,
   onOpenMenuChange,
+  speech,
+  caretRequest = 0,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [focused, setFocused] = useState(false);
@@ -126,6 +190,21 @@ export function ChatComposer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [value]);
 
+  useEffect(() => {
+    if (!caretRequest) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [caretRequest]);
+
+  const speechActive = speech ? SPEECH_ACTIVE.includes(speech.phase) : false;
+  const speechRecording = speech?.phase === 'recording';
+  const speechStatusText = speech
+    ? speechStatus(speech.phase, speech.elapsedMs, speech.maxSeconds)
+    : null;
+
   const phase: BeamPhase = sending
     ? generationPhase === "generating"
       ? "speaking"
@@ -140,7 +219,23 @@ export function ChatComposer({
   return (
     <div className="shrink-0 px-3 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-3">
       <div className="mx-auto w-full max-w-3xl">
-        {helperText ? <p className="chat-ink mb-2 px-2 text-xs">{helperText}</p> : null}
+        {speech?.error ? (
+          <p role="alert" className="chat-ink mb-2 px-2 text-xs text-destructive">
+            {speech.error}
+          </p>
+        ) : speech?.enabled && speech.readiness !== 'ready' ? (
+          <p role="status" className="chat-ink mb-2 px-2 text-xs text-muted-foreground">
+            {speech.readiness === 'recovering'
+              ? 'Voice input is recovering. Try again shortly.'
+              : speech.readiness === 'disabled'
+                ? 'Voice input is turned off by an administrator.'
+                : speech.readiness === 'authentication_error'
+                  ? 'Voice input could not authenticate.'
+                  : 'Voice input is temporarily unavailable. Retrying automatically.'}
+          </p>
+        ) : helperText ? (
+          <p className="chat-ink mb-2 px-2 text-xs">{helperText}</p>
+        ) : null}
 
         <HandoffBeam
           phase={phase}
@@ -175,10 +270,28 @@ export function ChatComposer({
               aria-label="Chat message"
             />
 
+            {speechStatusText ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mt-1 flex min-w-0 items-center gap-2 px-0.5 text-[11px] text-muted-foreground"
+              >
+                <span className="sr-only">{speechAnnouncement(speech?.phase ?? 'idle')}</span>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 rounded-full",
+                    speechRecording ? "bg-brand motion-safe:animate-pulse" : "bg-muted-foreground/60",
+                  )}
+                />
+                <span aria-hidden className="truncate">{speechStatusText}</span>
+              </div>
+            ) : null}
+
             <div className="mt-1 flex items-center justify-between gap-2 pt-1">
               <div className="flex min-w-0 flex-1 items-center gap-1.5 flex-wrap">
                 <ModelPicker
-                  status={modelStatus}
+                  catalog={modelStatus}
                   value={modelValue}
                   disabled={sending}
                   compact
@@ -237,6 +350,69 @@ export function ChatComposer({
               </div>
 
               <div className="flex items-center gap-2">
+                {speech?.enabled ? (
+                  <>
+                    {speechRecording ? (
+                      <button
+                        type="button"
+                        onClick={speech.onStop}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-foreground transition hover:bg-brand/90"
+                        aria-label="Stop recording and transcribe"
+                        title="Stop recording and transcribe"
+                      >
+                        <MicIcon size={16} />
+                      </button>
+                    ) : speechActive ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-muted-foreground"
+                        aria-label={
+                          speech.phase === 'requesting'
+                            ? 'Waiting for microphone permission'
+                            : 'Transcribing voice input'
+                        }
+                        title={
+                          speech.phase === 'requesting'
+                            ? 'Waiting for microphone permission'
+                            : 'Transcribing voice input'
+                        }
+                      >
+                        <LoaderCircleIcon size={16} className="animate-spin" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={speech.onStart}
+                        disabled={disabled || sending || speech.readiness !== 'ready'}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Start voice input"
+                        title={
+                          speech.readiness === 'ready'
+                            ? 'Start voice input'
+                            : speech.readiness === 'disabled'
+                              ? 'Voice input is turned off by an administrator.'
+                              : speech.readiness === 'authentication_error'
+                                ? 'Voice input could not authenticate.'
+                                : 'Voice input is temporarily unavailable. Retrying automatically.'
+                        }
+                      >
+                        <MicIcon size={16} />
+                      </button>
+                    )}
+                    {speechActive ? (
+                      <button
+                        type="button"
+                        onClick={speech.onCancel}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        aria-label="Cancel voice input"
+                        title="Cancel voice input"
+                      >
+                        <XIcon size={15} />
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
                 {showCount ? (
                   <span className={`hidden text-[11px] tabular-nums md:inline ${nearLimit ? "text-warning" : "chat-ink"}`} title="Message length / safety ceiling">
                     {value.length.toLocaleString()}

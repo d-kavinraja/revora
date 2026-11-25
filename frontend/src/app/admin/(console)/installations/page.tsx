@@ -11,7 +11,7 @@ import { Pill, toneForStatus } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
-import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import { AdminButton, FilterBar, SelectFilter } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -252,8 +252,22 @@ export default function AdminInstallationsPage() {
             }
             description={
               filtersActive
-                ? 'Try a different search or clear the lifecycle filter.'
+                ? 'Try a different search or clear the filters.'
                 : 'Installations appear here after a user connects the GitHub App to an account.'
+            }
+            action={
+              filtersActive ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setQ('');
+                    setStatus('');
+                    setOffset(0);
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
             }
           />
         }
@@ -269,7 +283,7 @@ export default function AdminInstallationsPage() {
                     {item.account_login ?? 'Unknown account'}
                   </p>
                   <p className="admin-figure mt-0.5 text-xs text-muted-foreground">
-                    Installation {item.installation_id} · App{' '}
+                    Installation {item.installation_id}, app{' '}
                     {item.app_id ?? 'unknown'}
                   </p>
                 </div>
@@ -311,7 +325,7 @@ export default function AdminInstallationsPage() {
                       ? humanize(item.last_sync_status)
                       : 'Not synced'}
                     {item.last_sync_completed_at
-                      ? ` · ${formatDateTime(item.last_sync_completed_at)}`
+                      ? `, ${formatDateTime(item.last_sync_completed_at)}`
                       : ''}
                   </dd>
                   {item.last_sync_error && (

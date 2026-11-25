@@ -36,11 +36,18 @@ export function QueryError({
   );
 }
 
-export function InlineEmpty({ children }: { children: ReactNode }) {
+export function InlineEmpty({
+  children,
+  action,
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+    <p className="flex flex-wrap items-center gap-2 py-2 text-sm text-muted-foreground">
       <Info size={14} className="shrink-0" aria-hidden="true" />
       <span>{children}</span>
+      {action}
     </p>
   );
 }

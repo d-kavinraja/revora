@@ -82,8 +82,8 @@ export function SetupGuide() {
       <Reveal>
         <div className="mb-10 space-y-3 text-center">
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <div className="inline-flex items-center rounded-full border border-[var(--ember-border)] bg-[var(--ember-soft)] px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--ember-ink)]">
-              Quick Setup Guide
+            <div className="inline-flex items-center rounded-full border border-[var(--ember-border)] bg-[var(--ember-soft)] px-3.5 py-1 text-xs font-semibold text-[var(--ember-ink)]">
+              Quick setup guide
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
               <Clock3 size={12} aria-hidden="true" />

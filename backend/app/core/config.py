@@ -4,8 +4,58 @@ All secrets are required via environment variables.
 No hardcoded defaults for security-sensitive values.
 """
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+import re
+
+
+# --- hosted Ollama keep_alive -----------------------------------------------
+#
+# Ollama parses a *string* keep_alive with Go's time.ParseDuration and a JSON
+# *number* as a whole number of seconds. A negative value keeps the model
+# resident. Both forms are accepted here; a unitless integer is sent back as a
+# number so Ollama does not try (and fail) to parse it as a duration.
+_KEEP_ALIVE_DURATION_RE = re.compile(
+    r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|\u00b5s|\u03bcs|ms|s|m|h)"
+    r"(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|\u00b5s|\u03bcs|ms|s|m|h))*$"
+)
+_KEEP_ALIVE_SECONDS_RE = re.compile(r"^[+-]?\d+$")
+
+KEEP_ALIVE_FORMAT_HINT = (
+    "must be a Go duration (e.g. 5m, 30s, 1h) or a whole number of seconds "
+    "(e.g. 300, -1)"
+)
+
+
+def keep_alive_is_valid(value: object) -> bool:
+    """Return True when ``value`` is a keep_alive Ollama can parse."""
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        # Ollama falls back to its own default for an empty string.
+        return True
+    if _KEEP_ALIVE_SECONDS_RE.fullmatch(text):
+        return True
+    return bool(_KEEP_ALIVE_DURATION_RE.fullmatch(text))
+
+
+def keep_alive_payload_value(value: object) -> str | int:
+    """Return the keep_alive value to send: a number when it has no unit."""
+    text = str(value if value is not None else "").strip()
+    if _KEEP_ALIVE_SECONDS_RE.fullmatch(text):
+        return int(text)
+    return text
+
+
+def validate_keep_alive_duration(value: str) -> str:
+    """Validate ``REVORA_HOSTED_OLLAMA_KEEP_ALIVE`` against Ollama's formats."""
+    if not keep_alive_is_valid(value):
+        # The rejected value is deliberately not echoed: configuration values are
+        # never written to logs. Only the setting name and accepted forms appear.
+        raise ValueError(f"REVORA_HOSTED_OLLAMA_KEEP_ALIVE {KEEP_ALIVE_FORMAT_HINT}.")
+    return value
 
 
 class Settings(BaseSettings):
@@ -96,6 +146,158 @@ class Settings(BaseSettings):
     )
     KLLM_TELEMETRY_TIMEOUT_S: float = Field(
         default=5.0, ge=1.0, description="Timeout for kLLM telemetry reads"
+    )
+
+    # Hosted Ollama (Revora-managed remote inference for Chat only).
+    # A separate namespace from kLLM so enabling/disabling hosted models never
+    # touches the kLLM provider, its readiness or its review pathway. Disabled
+    # by default; an operator must opt in via environment AND the admin
+    # selection toggle. Only runtime-loaded models (/api/ps) are ever exposed.
+    REVORA_HOSTED_OLLAMA_ENABLED: bool = Field(
+        default=False,
+        description="Enable the Revora-managed hosted Ollama provider for Chat",
+    )
+    REVORA_HOSTED_OLLAMA_BASE_URL: str = Field(
+        default="",
+        description="Server-side base URL of the hosted Ollama endpoint (never sent to clients)",
+    )
+    REVORA_HOSTED_OLLAMA_TOKEN: str | None = Field(
+        default=None,
+        description="Optional server-side bearer token for the hosted Ollama endpoint (never exposed)",
+    )
+    REVORA_HOSTED_OLLAMA_URL_TOKEN: str | None = Field(
+        default=None,
+        description="Optional private-port gateway token appended as _token to hosted Ollama requests (server-side only)",
+    )
+    REVORA_HOSTED_OLLAMA_DISCOVERY_TIMEOUT_S: float = Field(
+        default=5.0, ge=1.0, description="Timeout for hosted Ollama discovery reads (/api/ps, /api/tags)"
+    )
+    REVORA_HOSTED_OLLAMA_CONNECT_TIMEOUT_S: float = Field(
+        default=5.0, ge=1.0, description="Connect timeout for hosted Ollama inference requests"
+    )
+    REVORA_HOSTED_OLLAMA_READ_TIMEOUT_S: float = Field(
+        default=300.0, ge=1.0, description="Read timeout backstop for hosted Ollama inference streams"
+    )
+    REVORA_HOSTED_OLLAMA_CACHE_TTL_S: float = Field(
+        default=15.0, ge=1.0, description="TTL for the hosted Ollama discovery cache"
+    )
+    REVORA_HOSTED_OLLAMA_KEEP_ALIVE: str = Field(
+        default="5m",
+        description="keep_alive sent with hosted inference so a served model stays resident",
+    )
+    REVORA_HOSTED_OLLAMA_MAX_CONCURRENT_REQUESTS: int = Field(
+        default=2, ge=1, description="Global cap on concurrent hosted Ollama inference requests"
+    )
+    REVORA_HOSTED_OLLAMA_MAX_CONCURRENT_REQUESTS_PER_MODEL: int = Field(
+        default=1, ge=1, description="Per-model cap on concurrent hosted Ollama inference requests"
+    )
+    REVORA_HOSTED_OLLAMA_QUEUE_TIMEOUT_S: float = Field(
+        default=30.0, ge=0.0, description="Max time a hosted request waits for a concurrency permit"
+    )
+
+    # Private Whisper-Tiny English speech-to-text, used only for the chat
+    # composer. The backend never owns a model or an inference queue: every
+    # request goes to one private service that owns the single global model
+    # slot. Disabled by default at the environment level AND by the admin
+    # Speech toggle; both must be on. No audio or transcript is stored.
+    REVORA_SPEECH_ENABLED: bool = Field(
+        default=False,
+        description="Environment kill switch for private speech-to-text (admin toggle also required)",
+    )
+    REVORA_SPEECH_BASE_URL: str = Field(
+        default="",
+        description="Server-side base URL of the private Whisper service (never exposed)",
+    )
+    REVORA_SPEECH_TOKEN: str | None = Field(
+        default=None,
+        description="Server-side bearer token for the private Whisper service (never exposed)",
+    )
+    REVORA_SPEECH_CONNECT_TIMEOUT_S: float = Field(
+        default=5.0, ge=1.0, le=30.0, description="Connect timeout for the private speech service"
+    )
+    REVORA_SPEECH_READ_TIMEOUT_S: float = Field(
+        default=300.0, ge=10.0, le=300.0, description="Read timeout for a speech stream backstop"
+    )
+    REVORA_SPEECH_WRITE_TIMEOUT_S: float = Field(
+        default=30.0, ge=5.0, le=120.0, description="Write timeout for an audio upload"
+    )
+    REVORA_SPEECH_MAX_CONCURRENT_REQUESTS: int = Field(
+        default=4, ge=1, le=8, description="Per-worker cap on admitted speech requests"
+    )
+    REVORA_SPEECH_QUEUE_TIMEOUT_S: float = Field(
+        default=30.0, ge=5.0, le=60.0, description="Default queue timeout sent to the speech service"
+    )
+    REVORA_SPEECH_RATE_PER_MINUTE: int = Field(
+        default=6, ge=1, le=30, description="Per-user speech request rate limit"
+    )
+    REVORA_SPEECH_MAX_AUDIO_MB: int = Field(
+        default=5, ge=1, le=5, description="Operator ceiling for a speech upload"
+    )
+    REVORA_SPEECH_MAX_RECORDING_SECONDS: int = Field(
+        default=60, ge=5, le=60, description="Operator ceiling for a speech recording"
+    )
+
+    # Chat concurrency and lease lifecycle (in-process, per worker). A user may
+    # stream a bounded number of chats at once; one chat stays single-flight and
+    # other users are always isolated. Expired leases are recovered lazily on the
+    # next admission, so a crashed worker cannot reserve capacity past the TTL.
+    CHAT_MAX_CONCURRENT_REQUESTS_PER_USER: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Maximum concurrent chat generations per user",
+    )
+    CHAT_LEASE_TTL_SECONDS: float = Field(
+        default=900.0,
+        ge=30.0,
+        description="Chat lease TTL; an abandoned lease is recovered after this",
+    )
+
+    # Hosted machine wake / recovery (InstaBox). Optional and off by default.
+    # Revora never changes the remote Ollama binding; it only wakes the machine
+    # and holds an activity lease so an idle pause cannot interrupt a request.
+    REVORA_HOSTED_WAKE_ENABLED: bool = Field(
+        default=False,
+        description="Allow Revora to wake the hosted machine when it is asleep",
+    )
+    REVORA_HOSTED_WAKE_API_BASE_URL: str = Field(
+        default="",
+        description="Server-side base URL of the machine wake API (never sent to clients)",
+    )
+    REVORA_HOSTED_WAKE_MACHINE_ID: str = Field(
+        default="",
+        description="Identifier of the hosted machine to wake (server-side only)",
+    )
+    REVORA_HOSTED_WAKE_API_KEY: str | None = Field(
+        default=None,
+        description="Server-side bearer key for the wake API (never exposed)",
+    )
+    REVORA_HOSTED_WAKE_TIMEOUT_S: float = Field(
+        default=60.0, ge=1.0, description="Timeout for a single wake API call"
+    )
+    REVORA_HOSTED_READY_TIMEOUT_S: float = Field(
+        default=120.0, ge=1.0, description="Max time to wait for the hosted endpoint to become ready after a wake"
+    )
+    REVORA_HOSTED_LEASE_TTL_S: int = Field(
+        default=600, ge=30, le=3600, description="TTL of the activity lease held during hosted inference"
+    )
+
+    # Session-aware hosted monitoring (backend-coordinated, shared).
+    REVORA_HOSTED_MONITOR_ENABLED: bool = Field(
+        default=True,
+        description="Monitor hosted availability while an authenticated session is active",
+    )
+    REVORA_HOSTED_MONITOR_INTERVAL_S: float = Field(
+        default=20.0, ge=5.0, le=600.0,
+        description="Global minimum interval between hosted monitoring cycles",
+    )
+    REVORA_HOSTED_READY_POLL_INTERVAL_S: float = Field(
+        default=0.5, ge=0.1, le=10.0,
+        description="Initial backoff interval while polling readiness after a wake",
+    )
+    REVORA_HOSTED_WAKE_COOLDOWN_S: float = Field(
+        default=300.0, ge=30.0, le=3600.0,
+        description="Local cooldown after a failed wake attempt (API retry-after takes precedence)",
     )
 
     # Redis (optional)
@@ -323,6 +525,12 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator("REVORA_HOSTED_OLLAMA_KEEP_ALIVE")
+    @classmethod
+    def _validate_hosted_keep_alive(cls, value: str) -> str:
+        """Fail fast on a keep_alive Ollama would reject with HTTP 400."""
+        return validate_keep_alive_duration(value)
 
     @model_validator(mode="after")
     def validate_secrets(self) -> "Settings":

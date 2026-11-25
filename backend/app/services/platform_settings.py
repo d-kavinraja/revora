@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 
 MAINTENANCE_KEY = "maintenance"
 USAGE_ANALYTICS_KEY = "usage_analytics"
+CHAT_MODES_KEY = "chat_modes"
+DEFAULT_CHAT_MODES: dict[str, Any] = {
+    "temporary_enabled": True,
+    "persistent_enabled": False,
+    "temporary_message": None,
+    "persistent_message": None,
+}
 CACHE_TTL_SECONDS = 5.0
 
 DEFAULT_USAGE_ANALYTICS: dict[str, Any] = {
@@ -284,6 +291,77 @@ class PlatformSettingsService:
     async def is_feature_enabled(self, key: str, db: AsyncSession | None = None) -> bool:
         flag = await self.get_flag(key, db)
         return flag.get("status") == "enabled"
+
+    # -- independent Temporary / Persistent Chat controls -------------------
+
+    async def get_chat_modes(self, db: AsyncSession) -> dict[str, Any]:
+        """Read chat controls from the database on every call, failing closed.
+
+        Chat modes are security/privacy gates: unlike the general platform
+        feature flags, a DB failure must never silently enable either mode.
+        This intentionally avoids the process-local TTL cache so an admin
+        disable immediately blocks new admissions on every worker.
+        """
+        try:
+            result = await db.execute(
+                select(PlatformSetting).where(PlatformSetting.key == CHAT_MODES_KEY)
+            )
+            row = result.scalars().first()
+        except Exception as exc:
+            await db.rollback()
+            logger.exception("Chat mode settings read failed")
+            raise RuntimeError("Chat mode settings are unavailable.") from exc
+        value = dict(DEFAULT_CHAT_MODES)
+        if row is not None and isinstance(row.value, dict):
+            for key in DEFAULT_CHAT_MODES:
+                if key in row.value:
+                    value[key] = row.value[key]
+        value["version"] = int(row.version or 0) if row is not None else 0
+        return value
+
+    async def set_chat_modes(
+        self,
+        db: AsyncSession,
+        updates: dict[str, Any],
+        *,
+        admin_id: Any = None,
+        expected_version: int | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any], int | None]:
+        await db.flush()
+        result = await db.execute(
+            select(PlatformSetting)
+            .where(PlatformSetting.key == CHAT_MODES_KEY)
+            .with_for_update()
+        )
+        row = result.scalars().first()
+        if row is None:
+            prior = dict(DEFAULT_CHAT_MODES)
+            prior["version"] = 0
+        else:
+            raw = row.value if isinstance(row.value, dict) else {}
+            prior = {**DEFAULT_CHAT_MODES, **raw, "version": int(row.version or 0)}
+        row_version = int(row.version or 0) if row is not None else 0
+        if expected_version is not None and expected_version != row_version:
+            return dict(prior), dict(prior), row_version
+        value = dict(prior)
+        for key in ("temporary_enabled", "persistent_enabled"):
+            if key in updates:
+                value[key] = bool(updates[key])
+        for key in ("temporary_message", "persistent_message"):
+            if key in updates:
+                value[key] = updates[key]
+        version = 1 if row is None else int(row.version or 0) + 1
+        value["version"] = version
+        if row is None:
+            row = PlatformSetting(
+                key=CHAT_MODES_KEY, value=value, updated_by=admin_id, version=version
+            )
+        else:
+            row.value = value
+            row.updated_by = admin_id
+            row.version = version
+        db.add(row)
+        return dict(value), prior, None
 
     # -- usage analytics (master switch) -----------------------------------
     async def _read_ua_row(self, db: AsyncSession) -> tuple[dict[str, Any] | None, int]:

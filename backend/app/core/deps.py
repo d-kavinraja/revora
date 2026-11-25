@@ -159,6 +159,50 @@ async def get_current_user(
     return await _resolve_current_user(request, header_token, db)
 
 
+async def get_current_user_readonly(
+    request: Request,
+    header_token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate without the `last_active_at` write.
+
+    Speech is a hot, privacy-sensitive path: it must not perform a database
+    write merely to transcribe audio. This dependency mirrors
+    `get_current_user`'s validation but is strictly read-only.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        token = await _token_from_request(request, header_token)
+        if not token:
+            raise credentials_exception
+        payload = decode_access_token(token)
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
+            raise credentials_exception
+        user_id = uuid.UUID(user_id_str)
+        token_tv = int(payload.get("tv", 0) or 0)
+    except HTTPException:
+        raise
+    except Exception:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if user is None:
+        raise credentials_exception
+    if (user.status or "active") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
+        )
+    if token_tv != int(getattr(user, "token_version", 0) or 0):
+        raise credentials_exception
+    return user
+
+
 async def get_current_session(
     request: Request,
     header_token: str | None = Depends(oauth2_scheme),

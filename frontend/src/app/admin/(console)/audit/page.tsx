@@ -49,7 +49,7 @@ function humanize(value: string): string {
 function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <dt className="admin-label">
         {label}
       </dt>
       <dd className="mt-1 break-words text-sm text-foreground">{value}</dd>
@@ -277,6 +277,24 @@ export default function AdminAuditPage() {
                 ? 'Try a different search or widen the time range.'
                 : 'Admin actions will appear here as they happen.'
             }
+            action={
+              action || actor || entityType || period || start || end ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setAction('');
+                    setActor('');
+                    setEntityType('');
+                    setPeriod('');
+                    setStart('');
+                    setEnd('');
+                    setOffset(0);
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
+            }
           />
         }
         ariaLabel="Audit log"
@@ -312,9 +330,7 @@ export default function AdminAuditPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               {row.actor_id ?? '—'}
-              {row.actor_type ? ` · ${humanize(row.actor_type)}` : ''}
-              {' · '}
-              {formatDateTime(row.created_at)}
+              {row.actor_type ? ` (${humanize(row.actor_type)})` : ''}, {formatDateTime(row.created_at)}
             </p>
             <button
               type="button"
@@ -397,7 +413,7 @@ export default function AdminAuditPage() {
             </dl>
 
             <div className="min-w-0">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="admin-label mb-2">
                 Safe details (no secrets)
               </p>
               <CodeView

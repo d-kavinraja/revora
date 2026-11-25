@@ -298,7 +298,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               <StatusBadge status={review.status} size="md" />
               <span className="text-xs text-muted-foreground">{formatDateTimeWithRelative(review.created_at)}</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold text-foreground leading-snug">{pr?.title}</h1>
+            <h1 className="text-xl md:text-2xl font-heading font-bold text-foreground leading-snug">{pr?.title}</h1>
             <p className="text-brand/80 text-sm mt-1 font-medium">{repo?.full_name}</p>
             <div className="flex items-center gap-2 mt-2">
               {prStateIndicator}
@@ -309,21 +309,21 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         {/* Meta grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-border">
           <div>
-            <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">PR Number</div>
+            <div className="text-[11px] text-muted-foreground font-medium mb-0.5">PR number</div>
             <div className="text-sm font-semibold text-foreground">#{pr?.pr_number}</div>
           </div>
           <div>
-            <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Author</div>
+            <div className="text-[11px] text-muted-foreground font-medium mb-0.5">Author</div>
             <div className="text-sm font-semibold text-foreground">@{pr?.author}</div>
           </div>
           <div>
-            <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Branch</div>
+            <div className="text-[11px] text-muted-foreground font-medium mb-0.5">Branch</div>
             <div className="text-sm font-semibold text-foreground truncate font-mono text-xs">
               {pr?.head_branch} &rarr; {pr?.base_branch}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Changes</div>
+            <div className="text-[11px] text-muted-foreground font-medium mb-0.5">Changes</div>
             <div className="text-sm font-semibold">
               <span className="text-success">+{pr?.additions}</span>
               {' '}
@@ -333,14 +333,14 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           </div>
           {duration !== null && (
             <div>
-              <div className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Review Time</div>
+              <div className="text-[11px] text-muted-foreground font-medium mb-0.5">Review time</div>
               <div className="text-sm font-mono font-semibold text-foreground">{duration}s</div>
             </div>
           )}
           {hasVerifiedFindings && (
             <div>
-              <div className="text-[11px] text-brand font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1">
-                <TriangleAlertIcon size={10} className="text-brand" /> Machine Verified
+              <div className="text-[11px] text-brand font-bold mb-0.5 flex items-center gap-1">
+                <TriangleAlertIcon size={10} className="text-brand" /> Machine verified
               </div>
               <div className="text-sm font-semibold">
                 <span className="text-success font-mono">{verifiedFindings} verified</span>
@@ -359,7 +359,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           separate so a queued/cancelled run never shows a fabricated model. */}
       <div className="grid gap-4 md:grid-cols-2 mb-5">
         <div className="rounded-xl border border-border bg-surface-1 p-4">
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-2">
+          <p className="text-[11px] text-muted-foreground font-medium mb-2">
             Model selection
           </p>
           <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
@@ -394,7 +394,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
         <div className="rounded-xl border border-border bg-surface-1 p-4">
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-2">
+          <p className="text-[11px] text-muted-foreground font-medium mb-2">
             Actual execution
           </p>
           <div className="text-xs text-muted-foreground">
@@ -457,12 +457,12 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
           
           <div className="flex flex-col items-center gap-1.5">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider bg-surface-2 px-2 py-0.5 rounded-md border border-border">
+              <span className="text-[11px] font-mono text-muted-foreground bg-surface-2 px-2 py-0.5 rounded-md border border-border">
                 Execution #{review.current_execution?.execution_number || '?'}
               </span>
-              <span className={`text-[11px] font-semibold flex items-center gap-1 uppercase tracking-wider ${review.status === 'running' ? 'text-info' : 'text-warning'}`}>
+              <span className={`text-[11px] font-semibold flex items-center gap-1 capitalize ${review.status === 'running' ? 'text-info' : 'text-warning'}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${review.status === 'running' ? 'bg-info animate-pulse' : 'bg-warning'}`} />
-                {review.status}
+                {review.status.replace(/_/g, ' ')}
               </span>
             </div>
             <p className="text-foreground font-bold text-lg mt-1 flex items-center gap-2">
@@ -508,7 +508,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-surface-2/50 border border-border rounded-lg p-3 text-xs">
                   {Object.entries(review.stats).map(([key, val]) => (
                     <div key={key} className="flex flex-col">
-                      <span className="text-muted-foreground uppercase text-[11px] tracking-wide">{key.replace(/_/g, ' ')}</span>
+                      <span className="text-muted-foreground text-[11px]">{key.replace(/_/g, ' ')}</span>
                       <span className="font-semibold text-foreground mt-0.5">{String(val)}</span>
                     </div>
                   ))}
@@ -647,9 +647,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                       {/* Provider/model cell: own line on mobile, grid column 4 at sm+.
                           Icon is shrink-proof; only the model name truncates. */}
                       {(e.model || e.provider) ? (
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs uppercase tracking-wider font-semibold text-foreground/80 w-max max-w-full min-w-0 sm:justify-self-start" title={e.model || undefined}>
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.06] border border-white/[0.05] text-xs font-semibold text-foreground/80 w-max max-w-full min-w-0 sm:justify-self-start" title={e.model || undefined}>
                           {e.provider && <ProviderIcon slug={e.provider} size={14} className="shrink-0" />}
-                          {e.provider && <span className="shrink-0">{e.provider} &middot; </span>}
+                          {e.provider && <span className="shrink-0">{e.provider}</span>}
                           <span className="truncate min-w-0">{e.model}</span>
                         </div>
                       ) : (

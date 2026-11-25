@@ -17,7 +17,7 @@ const NAV = [
   { label: 'Setup', href: '#setup' },
   { label: 'Docs', href: REVORA.github.readme },
   { label: 'Install', href: REVORA.github.app },
-  { label: 'Sign In', href: '/login' },
+  { label: 'Sign in', href: '/login' },
 ];
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -171,6 +171,7 @@ export function DataSignalHero() {
           Reference Display / Reference Sans (fictional names). */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      {/* eslint-disable-next-line @next/next/no-page-custom-font -- hero typography depends on these exact variable-axis families; migrating to next/font would change sourcing and rendering */}
       <link
         href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@100..900&family=Source+Serif+4:opsz,wght@8..60,200..900&display=swap"
         rel="stylesheet"
@@ -257,7 +258,7 @@ export function DataSignalHero() {
                 <ThemeToggle />
               </span>
               <Link href="/register" className="ds-sign-up">
-                Sign Up
+                Sign up
               </Link>
             </div>
           </div>

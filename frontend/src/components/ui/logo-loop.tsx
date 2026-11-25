@@ -5,7 +5,7 @@ const ANIMATION_CONFIG = { SMOOTH_TAU: 0.25, MIN_COPIES: 2, COPY_HEADROOM: 2 };
 
 const toCssLength = (value: number | string | undefined) => (typeof value === 'number' ? `${value}px` : (value ?? undefined));
 
-const useResizeObserver = (callback: () => void, elements: React.RefObject<Element | null>[], dependencies: any[]) => {
+const useResizeObserver = (callback: () => void, elements: React.RefObject<Element | null>[], dependencies: unknown[]) => {
   useEffect(() => {
     if (!window.ResizeObserver) {
       const handleResize = () => callback();
@@ -26,7 +26,7 @@ const useResizeObserver = (callback: () => void, elements: React.RefObject<Eleme
   }, [callback, elements, dependencies]);
 };
 
-const useImageLoader = (seqRef: React.RefObject<Element | null>, onLoad: () => void, dependencies: any[]) => {
+const useImageLoader = (seqRef: React.RefObject<Element | null>, onLoad: () => void, dependencies: unknown[]) => {
   useEffect(() => {
     const images = seqRef.current?.querySelectorAll('img') ?? [];
     if (images.length === 0) {
@@ -278,6 +278,7 @@ export const LogoLoop = memo(
             {item.node}
           </span>
         ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- logo items carry srcSet/sizes from arbitrary CDNs; next/image cannot express them
           <img
             src={item.src}
             srcSet={item.srcSet}

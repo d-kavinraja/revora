@@ -16,7 +16,7 @@ import { Pill, toneForStatus } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
-import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import { AdminButton, FilterBar, SelectFilter } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
@@ -200,8 +200,22 @@ export default function AdminUsersPage() {
             title={q || status ? 'No matching users' : 'No users yet'}
             description={
               q || status
-                ? 'Try a different search or clear the status filter.'
+                ? 'Try a different search or clear the filters.'
                 : 'No users have registered yet.'
+            }
+            action={
+              q || status ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setQ('');
+                    setStatus('');
+                    setOffset(0);
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
             }
           />
         }
@@ -230,7 +244,7 @@ export default function AdminUsersPage() {
               </div>
             </dl>
             <p className="admin-figure mt-2 text-xs text-muted-foreground">
-              Joined {formatDateTime(user.created_at)} · Last login{' '}
+              Joined {formatDateTime(user.created_at)}, last login{' '}
               {user.last_login_at ? formatDateTime(user.last_login_at) : '—'}
             </p>
           </div>

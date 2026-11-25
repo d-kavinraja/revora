@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { api, Review } from '@/lib/api';
-import { GitBranchIcon, TriangleAlertIcon } from '@animateicons/react/lucide';
+import { api } from '@/lib/api';
+import { GitBranchIcon } from '@animateicons/react/lucide';
 import { CalendarIcon, ChevronDown, FolderGit2, GitPullRequest, RotateCcw, LockIcon } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ErrorBanner } from '@/components/shared/error-banner';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { SkeletonList } from '@/components/shared/skeleton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,7 +17,7 @@ import { useToast } from '@/components/ui/toaster';
 import { useReviewStream, reviewsStreamUrl } from '@/lib/events';
 
 const filterOptions = [
-  { label: 'All Statuses', value: 'all' },
+  { label: 'All statuses', value: 'all' },
   { label: 'Queued', value: 'queued' },
   { label: 'Running', value: 'running' },
   { label: 'Completed', value: 'completed' },
@@ -24,7 +25,7 @@ const filterOptions = [
   { label: 'Pending', value: 'pending' },
   { label: 'Cancelled', value: 'cancelled' },
   { label: 'Stopped', value: 'stopped' },
-  { label: 'Timed Out', value: 'timed_out' },
+  { label: 'Timed out', value: 'timed_out' },
 ];
 
 /* ─── Main Page ─── */
@@ -49,7 +50,7 @@ export default function ReviewsPage() {
   const [showDateFilter, setShowDateFilter] = useState(false);
 
   // Fetch reviews — SSE pushes status changes, 30s polling is the fallback
-  const { data: reviews = [], isLoading, error } = useQuery({
+  const { data: reviews = [], isLoading, error, refetch } = useQuery({
     queryKey: ['reviews'],
     queryFn: () => api.getReviews(100),
     refetchInterval: 30000,
@@ -75,8 +76,12 @@ export default function ReviewsPage() {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       toast({ title: 'Rerun initiated', type: 'success' });
     },
-    onError: (err: any) => {
-      toast({ title: 'Rerun failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    onError: (err: unknown) => {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      toast({ title: 'Rerun failed', description: response?.data?.detail || message, type: 'error' });
     },
   });
 
@@ -86,8 +91,12 @@ export default function ReviewsPage() {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       toast({ title: 'Retry initiated', type: 'success' });
     },
-    onError: (err: any) => {
-      toast({ title: 'Retry failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    onError: (err: unknown) => {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      toast({ title: 'Retry failed', description: response?.data?.detail || message, type: 'error' });
     },
   });
 
@@ -97,8 +106,12 @@ export default function ReviewsPage() {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       toast({ title: 'Restart initiated', type: 'success' });
     },
-    onError: (err: any) => {
-      toast({ title: 'Restart failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    onError: (err: unknown) => {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      toast({ title: 'Restart failed', description: response?.data?.detail || message, type: 'error' });
     },
   });
 
@@ -108,8 +121,12 @@ export default function ReviewsPage() {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       toast({ title: 'Review cancelled', type: 'success' });
     },
-    onError: (err: any) => {
-      toast({ title: 'Cancel failed', description: err.response?.data?.detail || err.message, type: 'error' });
+    onError: (err: unknown) => {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      toast({ title: 'Cancel failed', description: response?.data?.detail || message, type: 'error' });
     },
   });
 
@@ -294,8 +311,8 @@ export default function ReviewsPage() {
       {/* Header Bar */}
       <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Reviews</h1>
-          <p className="text-muted-foreground mt-1 text-sm">All AI code reviews across your connected repositories.</p>
+          <h1 className="text-2xl md:text-3xl font-heading font-bold tracking-tight text-foreground">Reviews</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Your latest AI code reviews across connected repositories (up to 100 shown).</p>
         </div>
         <div className="flex items-center gap-2">
           {hasActiveFilters && (
@@ -304,7 +321,7 @@ export default function ReviewsPage() {
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-1 border border-border text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer"
             >
               <RotateCcw size={13} />
-              Reset Filters
+              Reset filters
             </button>
           )}
           {/* Calendar toggle button */}
@@ -317,26 +334,13 @@ export default function ReviewsPage() {
             }`}
           >
             <CalendarIcon size={15} />
-            Date Filter
+            Date filter
             {hasDateFilter && (
               <span className="ml-1 w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
             )}
           </button>
         </div>
       </div>
-
-      {/* Date Range Filter Panel */}
-      {showDateFilter && (
-        <DateRangeFilter
-          fromDate={fromDate} toDate={toDate}
-          fromTime={fromTime} toTime={toTime}
-          useTime={useTime}
-          onFromDate={setFromDate} onToDate={setToDate}
-          onFromTime={setFromTime} onToTime={setToTime}
-          onToggleTime={() => setUseTime(u => !u)}
-          onClear={clearDateFilter}
-        />
-      )}
 
       {/* Primary Filter Controls Bar */}
       <div className="space-y-3 mb-6">
@@ -369,7 +373,7 @@ export default function ReviewsPage() {
                 selectedRepo !== 'all' ? 'border-brand/50 text-brand bg-brand/5 font-medium' : 'border-border'
               }`}
             >
-              <option value="all">All Connected Repositories</option>
+              <option value="all">All connected repositories</option>
               {repoOptions.map((repo) => (
                 <option key={repo} value={repo}>
                   {repo}
@@ -394,7 +398,7 @@ export default function ReviewsPage() {
               }`}
             >
               <option value="all">
-                {selectedRepo !== 'all' ? 'All PRs in Repo' : 'All Pull Requests'}
+                {selectedRepo !== 'all' ? 'All PRs in repo' : 'All pull requests'}
               </option>
               {prOptions.map((pr) => (
                 <option key={`${pr.repo}#${pr.pr_number}`} value={String(pr.pr_number)}>
@@ -444,6 +448,21 @@ export default function ReviewsPage() {
         </div>
       </div>
 
+      {/* Date Range Filter Panel — sits with the filters it applies to */}
+      {showDateFilter && (
+        <div className="mb-6">
+          <DateRangeFilter
+            fromDate={fromDate} toDate={toDate}
+            fromTime={fromTime} toTime={toTime}
+            useTime={useTime}
+            onFromDate={setFromDate} onToDate={setToDate}
+            onFromTime={setFromTime} onToTime={setToTime}
+            onToggleTime={() => setUseTime(u => !u)}
+            onClear={clearDateFilter}
+          />
+        </div>
+      )}
+
       {!initiationEnabled && (
         <div className="mb-6 rounded-lg border border-border bg-surface-1 p-4 text-sm text-muted-foreground">
           {initiationState.message || 'New review initiation is paused. Existing reviews and details remain available.'}
@@ -451,10 +470,18 @@ export default function ReviewsPage() {
       )}
 
       {error && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg flex items-center gap-3">
-          <TriangleAlertIcon size={20} className="text-error" />
-          <p className="text-sm text-error">Failed to load reviews. Retrying...</p>
-        </div>
+        <ErrorBanner
+          message="Failed to load reviews."
+          action={
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="cursor-pointer rounded-lg border border-error/30 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10"
+            >
+              Retry
+            </button>
+          }
+        />
       )}
 
       {isLoading ? (

@@ -18,7 +18,7 @@ import { modelSelectionView } from '@/lib/review-model-selection';
 import { TextFilter } from '@/components/shared/text-filter';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
-import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import { AdminButton, FilterBar, SelectFilter } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
@@ -129,7 +129,7 @@ export default function AdminReviewsPage() {
       header: 'Repository mapping',
       render: (review) => (
         <div className="min-w-0 max-w-[240px] text-xs">
-          <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
+          <span className="admin-label block">
             {review.repository_mapping_status === 'mapped'
               ? 'Mapped'
               : review.repository_mapping_status === 'not_mapped'
@@ -231,7 +231,7 @@ export default function AdminReviewsPage() {
                   : null,
               ]
                 .filter(Boolean)
-                .join(' · ') || '—'}
+                .join(', ') || '—'}
             </p>
           </div>
         );
@@ -372,6 +372,25 @@ export default function AdminReviewsPage() {
               user || repo || provider || model || status || error || period
                 ? 'No reviews match the current filters.'
                 : 'No reviews have been created yet.'
+            }
+            action={
+              user || repo || provider || model || status || error || period ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setUser('');
+                    setRepo('');
+                    setProvider('');
+                    setModel('');
+                    setStatus('');
+                    setError('');
+                    setPeriod('');
+                    setOffset(0);
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
             }
           />
         }

@@ -16,12 +16,14 @@ from app.api.v1.endpoints import (
     mouthmap,
     operations,
     platform,
+    persistent_chat,
     providers,
     repositories,
     review_lifecycle,
     review_stream,
     reviews,
     routing,
+    stt,
     ui_settings,
     usage,
     verification,
@@ -60,6 +62,8 @@ api_router.include_router(
 )
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+api_router.include_router(persistent_chat.router, prefix="/persistent-chat", tags=["persistent-chat"])
+api_router.include_router(stt.router, prefix="/stt", tags=["stt"])
 api_router.include_router(kllm.router, prefix="/kllm", tags=["kllm"])
 api_router.include_router(mouthmap.router, prefix="/mouthmap", tags=["mouthmap"])
 api_router.include_router(botaniq.router, prefix="/botaniq", tags=["botaniq"])

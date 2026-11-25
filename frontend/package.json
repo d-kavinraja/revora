@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/safe-redirect.test.mjs src/lib/kllm-presence.test.mjs src/lib/kllm-heartbeat-queue.test.mjs src/lib/review-model-selection.test.mjs src/lib/api-transport.test.mjs src/lib/chat-state.test.mjs src/lib/chat-stream-parser.test.mjs"
+    "test": "node --test src/lib/safe-redirect.test.mjs src/lib/kllm-presence.test.mjs src/lib/kllm-heartbeat-queue.test.mjs src/lib/review-model-selection.test.mjs src/lib/api-transport.test.mjs src/lib/chat-state.test.mjs src/lib/chat-store-core.test.mjs src/lib/stream-lifecycle.test.mjs src/lib/chat-stream-parser.test.mjs src/lib/metric-display.test.mjs src/lib/speech-core.test.mjs src/lib/ui-integrity.test.mjs"
   },
   "dependencies": {
     "@animateicons/react": "^0.3.4",

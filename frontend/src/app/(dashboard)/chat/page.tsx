@@ -2,19 +2,46 @@
 
 import SideRays from '@/components/ui/SideRays';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
-import { featureState, usePlatformFeatures } from '@/lib/use-platform-features';
+import { useChatModes } from '@/lib/use-chat-modes';
 import { useThemeStore } from '@/store/useThemeStore';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChatShell } from './_components/chat-shell';
+import { PersistentChatShell } from './_components/persistent-chat-shell';
+
+// Stable snapshots for the hydration gate. React uses the server snapshot while
+// hydrating and switches to the client snapshot once the tree is attached.
+const subscribeMounted = () => () => {};
+const getClientMounted = () => true;
+const getServerMounted = () => false;
 
 export default function ChatPage() {
-  const { data: features } = usePlatformFeatures();
-  const { status, message } = featureState(features, 'chat');
+  const modesQuery = useChatModes();
+  const modes = modesQuery.data;
+  const [selectedMode, setSelectedMode] = useState<'temporary' | 'persistent' | null>(null);
+  // The query cache can already hold data on the first client render (cached
+  // RSC payload or a client navigation back to /chat), while SSR always renders
+  // the pending branch. useSyncExternalStore gives hydration the server snapshot
+  // (false) for the first render and the client snapshot (true) immediately
+  // afterwards, so both trees start from the same deterministic loading markup.
+  const mounted = useSyncExternalStore(subscribeMounted, getClientMounted, getServerMounted);
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
   const [kllmUnavailable, setKllmUnavailable] = useState(false);
-  const chatEnabled = status === 'enabled';
+  const defaultMode = modes?.persistent_enabled
+    ? 'persistent'
+    : modes?.temporary_enabled
+      ? 'temporary'
+      : 'persistent';
+  const activeMode = selectedMode === 'temporary' && modes?.temporary_enabled
+    ? 'temporary'
+    : selectedMode === 'persistent'
+      ? 'persistent'
+      : defaultMode;
+  const modeAvailable = activeMode === 'temporary'
+    ? modes?.temporary_enabled === true
+    : modes?.persistent_enabled === true;
+  const chatEnabled = !!modes && (modeAvailable || activeMode === 'persistent');
 
   // Keep the /chat shell exactly as tall as the visible viewport above the
   // mobile virtual keyboard. `100dvh` does NOT track the keyboard on iOS
@@ -53,13 +80,13 @@ export default function ChatPage() {
     };
   }, [chatEnabled]);
 
-  if (status !== 'enabled') {
+  if (!mounted || modesQuery.isPending || modesQuery.isError || !modes) {
     return (
       <div className="mx-auto w-full max-w-[1200px] p-4 md:p-6 lg:p-8">
         <FeatureUnavailable
-          status={status}
-          message={message}
-          title="Chat is unavailable"
+          status={!mounted || modesQuery.isPending ? 'under_testing' : 'disabled'}
+          message={modesQuery.isError ? 'Chat mode settings are unavailable. Please try again later.' : 'Loading Chat availability…'}
+          title={modesQuery.isError ? 'Chat is unavailable' : 'Loading Chat'}
           variant="page"
         />
       </div>
@@ -101,7 +128,27 @@ export default function ChatPage() {
       </div>
 
       <div className="relative z-10 flex h-full min-h-0 w-full flex-col">
-        <ChatShell onKllmStatusChange={setKllmUnavailable} />
+        <div className={`min-h-0 flex-1 ${activeMode === 'temporary' ? '' : 'hidden'}`}>
+          <ChatShell
+            onKllmStatusChange={setKllmUnavailable}
+            activeMode="temporary"
+            isActive={activeMode === 'temporary'}
+            temporaryEnabled={modes.temporary_enabled}
+            persistentEnabled={modes.persistent_enabled}
+            onModeChange={setSelectedMode}
+          />
+        </div>
+        <div className={`min-h-0 flex-1 ${activeMode === 'persistent' ? '' : 'hidden'}`}>
+          <PersistentChatShell
+            enabled={modes.persistent_enabled}
+            activeMode="persistent"
+            isActive={activeMode === 'persistent'}
+            temporaryEnabled={modes.temporary_enabled}
+            persistentEnabled={modes.persistent_enabled}
+            onModeChange={setSelectedMode}
+            onKllmStatusChange={setKllmUnavailable}
+          />
+        </div>
       </div>
     </div>
   );

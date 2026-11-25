@@ -12,6 +12,8 @@ import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { Pill, type PillTone } from '@/components/shared/pill';
 import { formatDateTime } from '@/components/shared/time-ago';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 
 const STATUS_META: Record<string, { label: string; tone: PillTone }> = {
   available: { label: 'Available', tone: 'success' },
@@ -67,17 +69,12 @@ export default function ProvidersPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <GlobeIcon size={28} className="text-brand" />
-            Provider Registry
-          </h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            View LLM providers and their capabilities. Availability is managed by the platform team.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Provider registry"
+        support="View LLM providers and their capabilities. Availability is managed by the platform team."
+        icon={<GlobeIcon size={28} className="text-brand" />}
+      />
+      <SettingsShell />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {providers.map((provider) => {
@@ -91,7 +88,7 @@ export default function ProvidersPage() {
               key={provider.slug}
               className="cursor-target rounded-xl border border-border bg-surface-1 p-5 relative overflow-hidden transition-all hover:border-brand/30"
             >
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand to-brand-hover opacity-50" />
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-brand opacity-50" />
 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">

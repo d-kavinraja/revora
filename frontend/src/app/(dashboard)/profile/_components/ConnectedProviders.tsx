@@ -29,8 +29,8 @@ export function ConnectedProviders({ providers, loading }: ConnectedProvidersPro
             <ZapIcon size={17} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              Connected AI Providers
+            <h2 className="text-sm font-bold text-foreground">
+              Connected AI providers
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               Manage your AI provider integrations for code review.
@@ -42,7 +42,7 @@ export function ConnectedProviders({ providers, loading }: ConnectedProvidersPro
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-brand border border-brand/30 bg-brand/5 hover:bg-brand/10 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <SettingsIcon size={15} aria-hidden="true" />
-          Manage Providers
+          Manage providers
         </Link>
       </div>
 
@@ -69,7 +69,7 @@ export function ConnectedProviders({ providers, loading }: ConnectedProvidersPro
                   <span className="text-sm font-bold text-foreground truncate max-w-full">
                     {provider.display_name || provider.name}
                   </span>
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-success bg-success/10 border border-success/25 px-2 py-0.5 rounded-full">
+                  <span className="shrink-0 text-[10px] font-bold text-success bg-success/10 border border-success/25 px-2 py-0.5 rounded-full">
                     Active
                   </span>
                 </div>

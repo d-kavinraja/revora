@@ -1,5 +1,9 @@
 @echo off
 echo Starting Revora Application Services...
+echo Starting the managed private Whisper tunnel supervisor on 127.0.0.1:18010...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-whisper-tunnel.ps1" start
+if errorlevel 1 echo WARNING: the managed Whisper tunnel did not start. Voice input will fail closed until it is started. Run scripts\dev-whisper-tunnel.ps1 status for details.
+
 echo Applying migrations and starting FastAPI Backend (embedded review worker, up to 5 reviews) on port 8000...
 start "Revora Backend" cmd /k "cd backend && set PYTHONPATH=.&& venv\Scripts\alembic upgrade head && venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
 

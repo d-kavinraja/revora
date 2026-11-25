@@ -144,6 +144,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'revora-auth',
+      skipHydration: true,
       // SECURITY: the JWT is NEVER persisted to localStorage (XSS-stealable).
       // Only the non-secret profile survives reloads; the live credential is
       // the backend-set HttpOnly cookie, restored via /auth/me below.

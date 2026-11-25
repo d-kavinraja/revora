@@ -27,6 +27,13 @@ export interface ScrollStackProps {
   onStackComplete?: () => void;
 }
 
+type CardTransform = {
+  translateY: number;
+  scale: number;
+  rotation: number;
+  blur: number;
+};
+
 const ScrollStack = ({
   children,
   className = '',
@@ -47,7 +54,7 @@ const ScrollStack = ({
   const animationFrameRef = useRef<number | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
   const cardsRef = useRef<HTMLElement[]>([]);
-  const lastTransformsRef = useRef<Map<number, any>>(new Map());
+  const lastTransformsRef = useRef<Map<number, CardTransform>>(new Map());
   const isUpdatingRef = useRef(false);
 
   const calculateProgress = useCallback((scrollTop: number, start: number, end: number) => {
@@ -225,7 +232,7 @@ const ScrollStack = ({
         lerp: 0.1,
         syncTouch: true,
         syncTouchLerp: 0.075
-      } as any);
+      } as ConstructorParameters<typeof Lenis>[0]);
 
       lenis.on('scroll', handleScroll);
 
@@ -257,7 +264,7 @@ const ScrollStack = ({
         syncTouch: true,
         syncTouchLerp: 0.075,
         touchInertia: 0.6
-      } as any);
+      } as ConstructorParameters<typeof Lenis>[0]);
 
       lenis.on('scroll', handleScroll);
 

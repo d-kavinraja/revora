@@ -137,7 +137,7 @@ export default function PixelCard({
   const canvasRef = useRef(null);
   const pixelsRef = useRef([]);
   const animationRef = useRef(null);
-  const timePreviousRef = useRef(performance.now());
+  const timePreviousRef = useRef(null);
   const lastSizeRef = useRef({ width: 0, height: 0 });
   const reducedMotion = useRef(
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -181,9 +181,11 @@ export default function PixelCard({
     pixelsRef.current = pxs;
   };
 
-  const doAnimate = fnName => {
-    animationRef.current = requestAnimationFrame(() => doAnimate(fnName));
-    const timeNow = performance.now();
+  // `timeNow` is the requestAnimationFrame timestamp — reading
+  // performance.now() during render is impure (react-hooks/purity).
+  const doAnimate = (fnName, timeNow) => {
+    animationRef.current = requestAnimationFrame((ts) => doAnimate(fnName, ts));
+    if (timePreviousRef.current === null) timePreviousRef.current = timeNow;
     const timePassed = timeNow - timePreviousRef.current;
     const timeInterval = 1000 / 60;
 
@@ -210,7 +212,7 @@ export default function PixelCard({
 
   const handleAnimation = name => {
     cancelAnimationFrame(animationRef.current);
-    animationRef.current = requestAnimationFrame(() => doAnimate(name));
+    animationRef.current = requestAnimationFrame((ts) => doAnimate(name, ts));
   };
 
   useEffect(() => {

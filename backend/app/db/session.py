@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import sqlalchemy
 from sqlalchemy import event
+from sqlalchemy.dialects import registry as dialect_registry
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import make_url
@@ -21,8 +22,18 @@ from sqlalchemy.ext.compiler import compiles
 
 from app.core import config as config_module
 from app.db.base import Base
+from app.db.pg_dialect import RevoraAsyncpgDialect
 
 logger = logging.getLogger(__name__)
+
+# Pre-ping must invalidate a pooled connection whenever its liveness probe
+# fails, including asyncpg's client-side protocol-state errors after the
+# server terminates an idle backend. See app/db/pg_dialect.py.
+dialect_registry.register(
+    "postgresql.asyncpg",
+    RevoraAsyncpgDialect.__module__,
+    RevoraAsyncpgDialect.__name__,
+)
 
 try:
     import asyncpg
@@ -31,6 +42,7 @@ try:
         asyncpg.exceptions.InterfaceError,
         asyncpg.exceptions.PostgresConnectionError,
         asyncpg.exceptions.ConnectionDoesNotExistError,
+        asyncpg.exceptions.InternalClientError,
     )
 except Exception:
     _ASYNCPG_ERRORS = ()

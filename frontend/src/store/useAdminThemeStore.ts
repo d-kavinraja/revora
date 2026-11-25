@@ -18,6 +18,7 @@ export const useAdminThemeStore = create<ThemeState>()(
     }),
     {
       name: 'revora-admin-theme',
+      skipHydration: true,
     }
   )
 );

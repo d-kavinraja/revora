@@ -5,7 +5,13 @@ import { usePathname } from 'next/navigation';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useAdminThemeStore } from '@/store/useAdminThemeStore';
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  preferencesHydrated,
+}: {
+  children: React.ReactNode;
+  preferencesHydrated: boolean;
+}) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin') ?? false;
   const theme = useThemeStore((s) => s.theme);
@@ -19,7 +25,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // can distinguish a user-initiated toggle from the auto-switch on entry.
   // Unsubscribes when leaving /chat.
   useEffect(() => {
-    if (pathname !== '/chat') return;
+    if (!preferencesHydrated || pathname !== '/chat') return;
     const unsubscribe = useThemeStore.subscribe((state, prev) => {
       if (state.theme === prev.theme) return;
       if (chatThemeRef.current === null) return;
@@ -29,12 +35,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       chatThemeRef.current = state.theme;
     });
     return unsubscribe;
-  }, [pathname]);
+  }, [pathname, preferencesHydrated]);
 
   // Route-transition effect: auto-switch on entering /chat, restore on leaving.
   // Dependencies are strictly [pathname] (never [theme]) so manual toggles
   // never trigger infinite loops or immediate reverts.
   useEffect(() => {
+    if (!preferencesHydrated) return;
     const prev = prevPathnameRef.current;
     prevPathnameRef.current = pathname ?? null;
 
@@ -61,9 +68,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       savedPreChatThemeRef.current = null;
       chatThemeRef.current = null;
     }
-  }, [pathname]);
+  }, [pathname, preferencesHydrated]);
 
   useEffect(() => {
+    if (!preferencesHydrated) return;
     const root = document.documentElement;
     root.classList.remove('light', 'dark', 'admin-light', 'admin-dark');
     if (isAdmin) {
@@ -71,10 +79,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.add(theme);
     }
-  }, [theme, adminTheme, isAdmin]);
+  }, [theme, adminTheme, isAdmin, preferencesHydrated]);
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (!preferencesHydrated || isAdmin) return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => {
       const stored = localStorage.getItem('revora-theme');
@@ -84,7 +92,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
-  }, [isAdmin]);
+  }, [isAdmin, preferencesHydrated]);
 
   return <>{children}</>;
 }

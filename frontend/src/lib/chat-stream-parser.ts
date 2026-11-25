@@ -20,7 +20,7 @@
       gen_tps?: number;
       cache_n?: number;
     }
-  | { type: 'status'; status: 'thinking' }
+  | { type: 'status'; status: 'thinking' | 'waking' | 'queued' }
   | {
       type: 'progress';
       cache?: number;
@@ -96,10 +96,13 @@ export function parseSseFrame(frame: string): ChatSseEvent | null {
         ...optionalNumber(parsed, 'cache_n'),
       };
     }
-    // Only a neutral status is exposed. Raw reasoning_content is never parsed
+    // Only neutral statuses are exposed. Raw reasoning_content is never parsed
     // or forwarded to the UI.
-    if (parsed.type === 'status' && parsed.status === 'thinking') {
-      return { type: 'status', status: 'thinking' };
+    if (
+      parsed.type === 'status' &&
+      (parsed.status === 'thinking' || parsed.status === 'waking' || parsed.status === 'queued')
+    ) {
+      return { type: 'status', status: parsed.status };
     }
     if (parsed.type === 'progress') {
       return {

@@ -22,6 +22,7 @@ yarn-error.log*
 
 # Env
 .env
+.secrets/
 .env.instabox
 .env.local
 .env.development.local

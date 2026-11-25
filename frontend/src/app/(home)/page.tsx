@@ -111,7 +111,7 @@ export default function LandingPage() {
         {/* Supported AI Models Loop */}
         <section className="w-full overflow-hidden pb-12 pt-4">
           <div className="max-w-7xl mx-auto px-6 mb-8 text-center">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
+            <p className="text-sm font-medium text-muted-foreground">
               Powered by industry-leading AI models
             </p>
           </div>
@@ -140,7 +140,7 @@ export default function LandingPage() {
         {/* Features */}
         <section className="max-w-5xl mx-auto px-6 pb-24 scroll-mt-24" id="features">
           <Reveal className="mb-8 space-y-3 text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-[var(--ember-ink)]">Why Revora</p>
+            <p className="text-xs font-semibold text-[var(--ember-ink)]">Why Revora</p>
             <h2 className="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>
               Review intelligence, not guesswork.
             </h2>

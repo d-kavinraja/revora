@@ -348,8 +348,8 @@ export default function SetupGuidePage() {
       <div className="mx-auto w-full max-w-6xl px-6 pt-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-              Setup Guide
+            <h1 className="text-2xl font-heading font-bold tracking-tight text-foreground md:text-3xl">
+              Setup guide
             </h1>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Connect your GitHub repositories, configure your AI review

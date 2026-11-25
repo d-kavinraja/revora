@@ -1,12 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { motion } from 'framer-motion';
 import { SoftAurora } from '@/components/ui/SoftAurora';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { cn } from "@/lib/utils";
-import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/toaster';
 import { InfoIcon } from '@animateicons/react/lucide';
 import Image from 'next/image';
@@ -16,10 +13,36 @@ import { useThemeStore } from '@/store/useThemeStore';
 import { isSafeInternalPath } from '@/lib/safe-redirect';
 import { startGitHubOAuth } from '@/lib/github-oauth';
 
+// The ?reason=disabled flag is one-shot: it is read exactly once per page
+// load, because the effect below rewrites the URL immediately afterwards.
+// The snapshot must stay stable afterwards or the banner would disappear on
+// the next render.
+let cachedDisabledReason: boolean | null = null;
+function readDisabledReason(): boolean {
+  if (cachedDisabledReason === null) {
+    cachedDisabledReason =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('reason') === 'disabled';
+  }
+  return cachedDisabledReason;
+}
+function subscribeToUrl(): () => void {
+  // Static for the lifetime of this page; no subscription needed.
+  return () => {};
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [loadingConfig, setLoadingConfig] = useState(false);
-  const [disabledMessage, setDisabledMessage] = useState<string | null>(null);
+  // Client-only banner state with an SSR snapshot of false: React flips it
+  // after hydration without a mismatch, and no effect sets state.
+  const showDisabledReason = useSyncExternalStore(
+    subscribeToUrl,
+    readDisabledReason,
+    () => false,
+  );
+  const disabledMessage = showDisabledReason
+    ? 'Your account has been disabled. Please contact the administrator for assistance.'
+    : null;
   const { toast } = useToast();
   // True once we have handed the browser off to GitHub. Used to tell an
   // in-flight start apart from a stale spinner after the user comes back.
@@ -67,9 +90,6 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('reason') === 'disabled') {
-      setDisabledMessage(
-        'Your account has been disabled. Please contact the administrator for assistance.',
-      );
       params.delete('reason');
       const qs = params.toString();
       window.history.replaceState(

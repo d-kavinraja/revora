@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Network, Video } from 'lucide-react';
+import { ArrowRight, Video } from 'lucide-react';
 
 export function ModelCard() {
   return (

@@ -57,6 +57,38 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Private Whisper connectivity. The Instabox forward runs inside the
+  # Compose network and publishes no host port; only Revora containers can
+  # reach it. restart: unless-stopped also brings it back after a host reboot.
+  whisper-tunnel:
+    build:
+      context: ./docker/whisper-tunnel
+      dockerfile: Dockerfile
+    environment:
+      - INSTABOX_API_KEY=${INSTABOX_API_KEY:-}
+      - INSTABOX_API_KEY_FILE=/run/secrets/instabox_api_key
+      - INSTABOX_NO_TELEMETRY=1
+    volumes:
+      - ${INSTABOX_SECRETS_DIR:-./.secrets}:/run/secrets:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "code=$$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18010/health || true); [ \"$$code\" = 200 ] || [ \"$$code\" = 401 ]"]
+      interval: 15s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   backend:
     build:
       context: ./backend
@@ -76,11 +108,16 @@ services:
       - GITHUB_APP_ID=${GITHUB_APP_ID}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - REVORA_SPEECH_ENABLED=${REVORA_SPEECH_ENABLED:-false}
+      - REVORA_SPEECH_BASE_URL=http://whisper-tunnel:18010
+      - REVORA_SPEECH_TOKEN=${REVORA_SPEECH_TOKEN:-}
     depends_on:
       pgbouncer:
         condition: service_started
       redis:
         condition: service_healthy
+      whisper-tunnel:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
       interval: 30s
@@ -104,9 +141,9 @@ services:
       # Browser uses the same-origin /api/v1 proxy; the Next server reaches
       # the backend over the Docker network. The internal service name is
       # never emitted to the browser.
-      - NEXT_PUBLIC_USE_API_PROXY=true
-      - BACKEND_ORIGIN=http://backend:8000
-      - NEXT_PUBLIC_API_URL=/api/v1
+      NEXT_PUBLIC_USE_API_PROXY: "true"
+      BACKEND_ORIGIN: "http://backend:8000"
+      NEXT_PUBLIC_API_URL: "/api/v1"
     depends_on:
       - backend
     deploy:

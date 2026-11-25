@@ -31,7 +31,7 @@ export function FinalResultCard({ result }: FinalResultCardProps) {
         </div>
       </div>
       <div className="flex-1 flex flex-col justify-center">
-        <p className="text-xs font-medium text-foreground/70 uppercase tracking-widest mb-1">Identified as</p>
+        <p className="text-xs font-medium text-foreground/70 mb-1">Identified as</p>
         <h2 className={`text-2xl md:text-3xl font-bold tracking-tight leading-tight ${greenText} mb-2`}>
           {result.prediction}
         </h2>

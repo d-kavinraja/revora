@@ -11,6 +11,7 @@ import { isSafeInternalPath } from '@/lib/safe-redirect';
 import { startGitHubOAuth } from '@/lib/github-oauth';
 import { restoreSession } from '@/lib/api';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 
 const NO_CODE_MESSAGE =
   'No GitHub sign-in information was found. This happens when the sign-in page is refreshed, was already used, or was opened directly. Please sign in again from the login page.';
@@ -193,9 +194,11 @@ function CallbackHandler() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="w-full max-w-md p-8 bg-white/10 dark:bg-black/20 backdrop-blur-2xl border border-white/30 dark:border-white/10 rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-10 ring-1 ring-white/20 dark:ring-white/5 text-center space-y-6"
     >
-      <img
+      <Image
         src="/revora-logo.png"
         alt="Revora Logo"
+        width={56}
+        height={56}
         className="w-14 h-14 rounded-2xl object-contain mx-auto"
       />
 
@@ -274,9 +277,11 @@ export default function AuthCallbackPage() {
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="w-full max-w-md p-8 bg-white/10 dark:bg-black/20 backdrop-blur-2xl border border-white/30 dark:border-white/10 rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-10 ring-1 ring-white/20 dark:ring-white/5 text-center space-y-6"
         >
-          <img
+          <Image
             src="/revora-logo.png"
             alt="Revora Logo"
+            width={56}
+            height={56}
             className="w-14 h-14 rounded-2xl object-contain mx-auto"
           />
           <div className="space-y-4">

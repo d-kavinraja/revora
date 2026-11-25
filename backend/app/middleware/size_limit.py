@@ -34,6 +34,34 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=413, content={"detail": "Payload too large"}
                 )
+        if path == "/api/v1/stt/transcribe":
+            content_length = request.headers.get("content-length")
+            if content_length is not None:
+                try:
+                    declared = int(content_length)
+                except (TypeError, ValueError):
+                    return JSONResponse(
+                        status_code=422,
+                        content={
+                            "code": "invalid_audio",
+                            "message": "Invalid audio length.",
+                        },
+                    )
+                ceiling = max(
+                    1, min(5, int(settings.REVORA_SPEECH_MAX_AUDIO_MB))
+                ) * 1024 * 1024
+                if declared > ceiling:
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "code": "audio_too_large",
+                            "message": "The recording is too large.",
+                        },
+                        headers={
+                            "Cache-Control": "no-store, max-age=0",
+                            "X-Content-Type-Options": "nosniff",
+                        },
+                    )
         if path in self.mouthmap_paths or path.endswith("/mouthmap/inference"):
             content_length = request.headers.get("content-length")
             if content_length is None:

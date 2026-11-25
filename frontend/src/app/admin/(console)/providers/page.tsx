@@ -344,6 +344,20 @@ export default function AdminProvidersPage() {
                 ? 'Try a different search or clear the filters.'
                 : 'The provider registry is empty. Seed it via the platform migrations.'
             }
+            action={
+              filtersActive ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('');
+                    setEnabledFilter('');
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
+            }
           />
         }
         renderMobileCard={(provider) => {

@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { UsageChart } from '@/components/usage/usage-chart';
+import { PageHeader } from '@/components/shared/page-header';
+import { SettingsShell } from '@/components/shared/settings-shell';
 import { KpiTile, RankedList, StatGroup } from '@/components/admin/metrics';
 import { AdminLoading, QueryError } from '@/components/admin/states';
 import {
@@ -84,8 +86,11 @@ export default function AnalyticsPage() {
   const trend = trendQuery.data ?? [];
 
   const totalRequests = featureUsage.reduce((sum, f) => sum + f.request_count, 0) || requests.length;
-  const totalErrors = errors?.total_errors ?? 0;
-  const errorRate = errors?.error_rate ?? 0;
+  // Unknown (loading or failed) renders as "—", never a fabricated zero;
+  // genuine zeros pass through once the query has data (same pattern as p50).
+  const requestsLoaded = featureQuery.data !== undefined || requestsQuery.data !== undefined;
+  const totalErrors = errors?.total_errors;
+  const errorRate = errors?.error_rate;
 
   const featureItems = featureUsage.map((f) => ({
     key: f.feature,
@@ -111,12 +116,11 @@ export default function AnalyticsPage() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
-        <p className="text-sm text-muted-foreground">
-          Request, error, latency and feature adoption analytics from recorded usage (last {requests.length} requests shown).
-        </p>
-      </div>
+      <PageHeader
+        title="Analytics"
+        support={`Request, error, latency and feature adoption analytics from recorded usage (last ${requests.length} requests shown).`}
+      />
+      <SettingsShell />
 
       {requestsQuery.isError && <QueryError message="Could not load analytics." onRetry={() => requestsQuery.refetch()} />}
 
@@ -129,9 +133,9 @@ export default function AnalyticsPage() {
       )}
 
       <StatGroup label="Overview" columns={4}>
-        <KpiTile label="Total requests" value={totalRequests.toLocaleString()} icon={<Hash size={16} />} />
-        <KpiTile label="Errors" value={totalErrors.toLocaleString()} icon={<AlertTriangle size={16} />} tone="error" />
-        <KpiTile label="Error rate" value={`${(errorRate * 100).toFixed(1)}%`} />
+        <KpiTile label="Total requests" value={requestsLoaded ? totalRequests.toLocaleString() : '—'} icon={<Hash size={16} />} />
+        <KpiTile label="Errors" value={totalErrors !== undefined ? totalErrors.toLocaleString() : '—'} icon={<AlertTriangle size={16} />} tone="error" />
+        <KpiTile label="Error rate" value={errorRate !== undefined ? `${(errorRate * 100).toFixed(1)}%` : '—'} />
         <KpiTile label="p50 latency" value={latency ? `${Math.round(latency.p50)} ms` : '—'} icon={<Clock size={16} />} />
         <KpiTile label="p90 latency" value={latency ? `${Math.round(latency.p90)} ms` : '—'} />
         <KpiTile label="p99 latency" value={latency ? `${Math.round(latency.p99)} ms` : '—'} />

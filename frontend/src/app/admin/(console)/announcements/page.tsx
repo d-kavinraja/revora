@@ -375,6 +375,22 @@ export default function AdminAnnouncementsPage() {
                     ? 'Try a different search or clear the filters.'
                     : 'Create one to surface a site-wide banner on all user-facing pages, never in the admin console.'
                 }
+                action={
+                  filtersActive ? (
+                    <AdminButton
+                      size="sm"
+                      onClick={() => {
+                        setSearch('');
+                        setKindFilter('');
+                        setStateFilter('');
+                        setEnabledFilter('');
+                        setOffset(0);
+                      }}
+                    >
+                      Clear filters
+                    </AdminButton>
+                  ) : undefined
+                }
               />
             ) : undefined
           }

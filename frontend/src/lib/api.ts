@@ -618,6 +618,159 @@ export interface KllmStatus {
   autoscale: boolean;
 }
 
+// Unified Chat model catalog (kLLM + Revora-managed hosted Ollama).
+export interface ChatCatalogModel {
+  key: string;
+  provider: 'kllm' | 'hosted-ollama' | string;
+  category: 'kllm' | 'hosted' | string;
+  display_name: string;
+  status: string;
+  loaded: boolean;
+  ready: boolean;
+  installed: boolean;
+  admin_loadable: boolean;
+  digest: string | null;
+  last_verified_at: string | null;
+  runtime_unknown: boolean;
+  partial: boolean;
+  load_state: string | null;
+  readiness: string;
+  reason_code: string;
+  context_window: number | null;
+  vision: boolean;
+  tags: string[];
+  resident: boolean;
+  backend_count: number;
+}
+
+export interface ChatCatalogProvider {
+  provider: string;
+  enabled: boolean;
+  configured: boolean;
+  reachable: boolean;
+  stale: boolean;
+  error: string | null;
+  wake_enabled: boolean;
+  waking: boolean;
+  installed_count: number;
+  loaded_count: number;
+  last_verified_at: string | null;
+  discovery_partial: boolean;
+  state: string;
+  reason: string;
+  discovery_ok: boolean;
+  last_success_at: string | null;
+  cooldown_until: string | null;
+}
+
+export interface ChatCatalog {
+  enabled: boolean;
+  reachable: boolean;
+  stale: boolean;
+  generated_at: string;
+  providers: ChatCatalogProvider[];
+  models: ChatCatalogModel[];
+}
+
+export interface SpeechConfig {
+  enabled: boolean;
+  max_recording_seconds: number;
+  max_audio_mb: number;
+}
+
+export interface SpeechStatus {
+  enabled: boolean;
+  state: 'disabled' | 'ready' | 'unavailable' | 'recovering' | 'authentication_error' | 'configuration_error' | 'error';
+  ready: boolean;
+  max_recording_seconds: number;
+  max_audio_mb: number;
+}
+
+export interface AdminSpeechEngine {
+  model: string;
+  device: string;
+  compute_type: string;
+  language: string;
+  max_concurrent_inferences: number;
+}
+
+export interface AdminSpeechService {
+  configured: boolean;
+  reachable: boolean;
+  ready: boolean;
+  active: number;
+  queued: number;
+  capacity: number;
+  error: string | null;
+}
+
+export interface AdminSpeechStatus {
+  enabled: boolean;
+  environment_enabled: boolean;
+  version: number;
+  max_recording_seconds: number;
+  max_audio_mb: number;
+  queue_timeout_s: number;
+  engine: AdminSpeechEngine;
+  service: AdminSpeechService;
+}
+
+export interface AdminSpeechUpdate {
+  enabled: boolean;
+  max_recording_seconds?: number;
+  max_audio_mb?: number;
+  queue_timeout_s?: number;
+  version: number;
+}
+
+// Admin hosted-Ollama controls.
+export interface AdminHostedModel {
+  key: string;
+  model: string;
+  status: string;
+  loaded: boolean;
+  ready: boolean;
+  readiness: string;
+  reason_code: string;
+  context_window: number | null;
+  vision: boolean;
+  tags: string[];
+  resident: boolean;
+}
+
+export interface AdminHostedConcurrency {
+  max_concurrent_requests: number;
+  max_concurrent_requests_per_model: number;
+  queue_timeout_s: number;
+  inflight: number;
+  queued: number;
+  inflight_by_model: Record<string, number>;
+  distributed: boolean;
+}
+
+export interface AdminHostedWake {
+  enabled: boolean;
+  configured: boolean;
+  waking: boolean;
+  last_error: string | null;
+}
+
+export interface AdminHostedStatus {
+  enabled: boolean;
+  env_enabled: boolean;
+  selection_enabled: boolean;
+  configured: boolean;
+  reachable: boolean;
+  stale: boolean;
+  generated_at: string;
+  age_seconds: number;
+  error: string | null;
+  version: string | null;
+  models: AdminHostedModel[];
+  concurrency: AdminHostedConcurrency;
+  wake: AdminHostedWake;
+}
+
 export interface KllmAutoloadGroup {
   enabled: boolean;
   allowed_models: string[];
@@ -1069,6 +1222,34 @@ export const api = {
     apiClient.get<DiscoveredModel[]>(`/providers/${slug}/models`).then((r) => r.data),
 
   // Managed local kLLM (server-owned; proxied through the Revora backend)
+  getChatModels: (signal?: AbortSignal) =>
+    apiClient
+      .get<ChatCatalog>('/chat/models', { signal })
+      .then((r) => r.data),
+  getChatModes: (signal?: AbortSignal) =>
+    apiClient.get<ChatModeSettings>('/platform/chat-modes', { signal }).then((r) => r.data),
+  listPersistentChats: () =>
+    apiClient.get<PersistentConversationSummary[]>('/persistent-chat/conversations').then((r) => r.data),
+  getPersistentChat: (id: string) =>
+    apiClient.get<PersistentConversation>(`/persistent-chat/conversations/${id}`).then((r) => r.data),
+  createPersistentChat: (data: { title?: string; model?: string | null }) =>
+    apiClient.post<PersistentConversation>('/persistent-chat/conversations', data).then((r) => r.data),
+  renamePersistentChat: (id: string, title: string) =>
+    apiClient.patch<PersistentConversationSummary>(`/persistent-chat/conversations/${id}`, { title }).then((r) => r.data),
+  deletePersistentChat: (id: string) =>
+    apiClient.delete<void>(`/persistent-chat/conversations/${id}`).then((r) => r.data),
+  editPersistentMessage: (chatId: string, messageId: string, data: { content: string; model?: string }) =>
+    apiClient.put(`/persistent-chat/conversations/${chatId}/messages/${messageId}`, data),
+  regeneratePersistentMessage: (chatId: string, messageId: string, model?: string) =>
+    apiClient.post(`/persistent-chat/conversations/${chatId}/messages/${messageId}/regenerate`, { model }),
+  getSpeechConfig: (signal?: AbortSignal) =>
+    apiClient
+      .get<SpeechConfig>('/stt/config', { signal })
+      .then((r) => r.data),
+  getSpeechStatus: (signal?: AbortSignal) =>
+    apiClient
+      .get<SpeechStatus>('/stt/status', { signal })
+      .then((r) => r.data),
   getKllmStatus: (signal?: AbortSignal) =>
     apiClient
       .get<KllmStatus>('/kllm/status', { signal })
@@ -1478,6 +1659,38 @@ export interface PublicFeatureState {
 }
 
 export type PlatformFeatures = Record<string, PublicFeatureState>;
+
+export interface ChatModeSettings {
+  temporary_enabled: boolean;
+  persistent_enabled: boolean;
+  temporary_message: string | null;
+  persistent_message: string | null;
+  version: number;
+}
+
+export interface PersistentChatMessage {
+  id: string;
+  position: number;
+  role: 'user' | 'assistant';
+  content: string;
+  status: string;
+  model: string | null;
+  finish_reason: string | null;
+  created_at: string;
+}
+
+export interface PersistentConversation {
+  id: string;
+  title: string;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+  messages: PersistentChatMessage[];
+}
+
+export interface PersistentConversationSummary extends Omit<PersistentConversation, 'messages'> {
+  message_count: number;
+}
 
 export interface AdminFeatureFlag {
   key: string;
@@ -1903,6 +2116,10 @@ export const adminApi = {
   // Phase 6 — feature flags / model overrides
   features: () =>
     apiClient.get<AdminFeatureFlag[]>('/admin/features').then((r) => r.data),
+  chatModes: () =>
+    apiClient.get<ChatModeSettings>('/admin/chat-modes').then((r) => r.data),
+  updateChatModes: (data: ChatModeSettings) =>
+    apiClient.put<ChatModeSettings>('/admin/chat-modes', data).then((r) => r.data),
   updateFeature: (key: string, data: { status: string; message?: string | null }) =>
     apiClient
       .put<AdminFeatureFlag>(`/admin/features/${key}`, data)
@@ -1997,6 +2214,32 @@ export const adminApi = {
   updateKllmAutoload: (data: Partial<KllmAutoloadPolicy>) =>
     apiClient
       .put<KllmAutoloadPolicy>('/admin/kllm/autoload', data)
+      .then((r) => r.data),
+
+  // Hosted Ollama controls (admin namespace only; isolated from kLLM)
+  hostedOllama: () =>
+    apiClient
+      .get<AdminHostedStatus>('/admin/hosted-ollama')
+      .then((r) => r.data),
+  setHostedSelection: (enabled: boolean) =>
+    apiClient
+      .put<AdminHostedStatus>('/admin/hosted-ollama/selection', { enabled })
+      .then((r) => r.data),
+  refreshHosted: () =>
+    apiClient
+      .post<AdminHostedStatus>('/admin/hosted-ollama/refresh')
+      .then((r) => r.data),
+  wakeHosted: () =>
+    apiClient
+      .post<AdminHostedStatus>('/admin/hosted-ollama/wake')
+      .then((r) => r.data),
+  hostedSpeech: (signal?: AbortSignal) =>
+    apiClient
+      .get<AdminSpeechStatus>('/admin/hosted-ollama/speech', { signal })
+      .then((r) => r.data),
+  updateHostedSpeech: (data: AdminSpeechUpdate) =>
+    apiClient
+      .put<AdminSpeechStatus>('/admin/hosted-ollama/speech', data)
       .then((r) => r.data),
 };
 

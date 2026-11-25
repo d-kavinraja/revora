@@ -15,7 +15,7 @@ import { TextFilter } from '@/components/shared/text-filter';
 import { ProviderBadge } from '@/components/ui/provider-brand';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { AdminPage } from '@/components/admin/page-shell';
-import { FilterBar, SelectFilter } from '@/components/admin/controls';
+import { AdminButton, FilterBar, SelectFilter } from '@/components/admin/controls';
 import { QueryError } from '@/components/admin/states';
 
 const PAGE_SIZE = 25;
@@ -70,7 +70,7 @@ function RepoIdentity({ repo }: { repo: AdminRepositoryItem }) {
           repo.removed_at ? 'Removed' : null,
         ]
           .filter(Boolean)
-          .join(' · ')}
+          .join(', ')}
       </p>
     </div>
   );
@@ -253,6 +253,21 @@ export default function AdminRepositoriesPage() {
                 ? 'No repositories match the current filters.'
                 : 'No repositories have been connected yet.'
             }
+            action={
+              user || provider || mapping ? (
+                <AdminButton
+                  size="sm"
+                  onClick={() => {
+                    setUser('');
+                    setProvider('');
+                    setMapping('');
+                    setOffset(0);
+                  }}
+                >
+                  Clear filters
+                </AdminButton>
+              ) : undefined
+            }
           />
         }
         renderMobileCard={(repo) => (
@@ -291,7 +306,7 @@ export default function AdminRepositoriesPage() {
               <span className={repo.recent_failures_7d > 0 ? 'text-error' : ''}>
                 {repo.recent_failures_7d} failures (7d)
               </span>
-              {repo.installation_suspended_at ? ' · Suspended' : ''}
+              {repo.installation_suspended_at ? ', installation suspended' : ''}
             </p>
           </div>
         )}

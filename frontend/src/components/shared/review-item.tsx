@@ -61,15 +61,15 @@ export function ReviewItem({ review, queuePosition }: { review: Review; queuePos
               {selection.mappedVsExecutingDiffer ? (
                 <>
                   <span className="flex w-full items-center gap-1.5 py-1 text-xs text-muted-foreground md:w-auto">
-                    <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mr-1">Mapped:</span>
+                    <span className="text-[10px] text-muted-foreground/60 font-semibold mr-1">Mapped:</span>
                     <span className="truncate">
-                      {selection.repositoryProvider} &middot; {selection.repositoryModel}
+                      {selection.repositoryProvider} / {selection.repositoryModel}
                     </span>
                   </span>
-                  <span className="flex w-full items-center gap-1.5 py-1 text-xs uppercase tracking-wider font-semibold text-foreground md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
+                  <span className="flex w-full items-center gap-1.5 py-1 text-xs font-semibold text-foreground md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
                     <ProviderIcon slug={selection.providerSlug ?? undefined} size={16} />
                     <span className="truncate">
-                      {selection.providerLabel} &middot; {selection.model}
+                      {selection.providerLabel} / {selection.model}
                     </span>
                   </span>
                   {selection.fallbackUsed && (
@@ -81,10 +81,10 @@ export function ReviewItem({ review, queuePosition }: { review: Review; queuePos
               ) : (
                 <>
                   <span className="hidden text-border md:inline">&#183;</span>
-                  <span className="flex w-full items-center gap-1.5 py-1 text-xs uppercase tracking-wider font-semibold text-foreground/80 md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
+                  <span className="flex w-full items-center gap-1.5 py-1 text-xs font-semibold text-foreground/80 md:w-auto md:rounded-md md:border md:border-white/[0.05] md:bg-white/[0.06] md:px-2">
                     <ProviderIcon slug={selection.providerSlug ?? undefined} size={16} />
                     <span className="truncate">
-                      {selection.providerLabel} &middot; {selection.model}
+                      {selection.providerLabel} / {selection.model}
                     </span>
                   </span>
                   <span className="text-[11px] text-muted-foreground">

@@ -20,7 +20,7 @@ export default function RegisterPage() {
           <div className="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-brand to-brand-hover flex items-center justify-center font-bold text-2xl mb-4 text-white">
             R
           </div>
-          <h2 className="text-2xl font-bold text-foreground">Get Started</h2>
+          <h2 className="text-2xl font-bold text-foreground">Get started</h2>
           <p className="text-muted-foreground mt-2">Create your Revora account</p>
         </div>
 

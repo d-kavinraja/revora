@@ -255,7 +255,7 @@ class LLMService:
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         timeout: float | None = None,
-    ) -> tuple[str, int, int]:
+    ) -> tuple[str, int, int, str | None]:
         """Non-streaming completion via the direct kLLM relay client.
 
         The kLLM Chat pathway deliberately bypasses LiteLLM: kLLM already
@@ -272,7 +272,14 @@ class LLMService:
             reasoning_effort=reasoning_effort,
             timeout=timeout,
         )
-        return result.content, result.prompt_tokens, result.completion_tokens
+        # The provider finish reason is returned, never inferred: the endpoint
+        # must not report a clean stop for a length/filter termination.
+        return (
+            result.content,
+            result.prompt_tokens,
+            result.completion_tokens,
+            getattr(result, "finish_reason", None),
+        )
 
     async def stream_managed_completion(
         self,
@@ -296,6 +303,70 @@ class LLMService:
             max_tokens=max_tokens,
             temperature=temperature,
             reasoning_effort=reasoning_effort,
+        ):
+            yield item
+
+    async def complete_hosted(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        context_window: int | None = None,
+    ) -> tuple[str, int, int, str | None]:
+        """Non-streaming completion via the hosted Ollama client.
+
+        ``model`` is the bare Ollama name (the namespaced hosted key is resolved
+        by the caller). The caller must validate readiness with
+        hosted_ollama_service.ensure_model_ready() first; this never autoloads.
+        """
+        from app.ai import hosted_ollama_client
+
+        result = await hosted_ollama_client.hosted_ollama_client.complete(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+            # Diagnostic only: lets a rejection log compare the prompt size with
+            # the runner's real window. Never sent upstream.
+            context_window=context_window,
+        )
+        # Same contract as complete_managed: the provider reason travels with
+        # the content instead of being replaced downstream.
+        return (
+            result.content,
+            result.prompt_tokens,
+            result.completion_tokens,
+            getattr(result, "finish_reason", None),
+        )
+
+    async def stream_hosted_completion(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        context_window: int | None = None,
+    ) -> AsyncIterator[kllm_client.ContentDelta | kllm_client.StreamMeta]:
+        """Stream normalized hosted Ollama events as ContentDelta / StreamMeta.
+
+        Reuses the same event types as the kLLM pathway so the SSE contract is
+        unchanged. The caller must validate readiness first; this never
+        autoloads or persists data.
+        """
+        from app.ai import hosted_ollama_client
+
+        async for item in hosted_ollama_client.hosted_ollama_client.stream(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            # Diagnostic only: see complete_hosted().
+            context_window=context_window,
         ):
             yield item
 

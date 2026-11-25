@@ -16,6 +16,7 @@ import {
 } from '@/lib/api';
 import { apiErrorMessage, isApiTransportError } from '@/lib/api-transport';
 import { AdminPage } from '@/components/admin/page-shell';
+import { StatusRibbon } from '@/components/admin/metrics';
 import {
   AdminButton,
   AdminSwitch,
@@ -26,9 +27,11 @@ import {
 import { QueryError } from '@/components/admin/states';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { ModelIcon } from '@/components/ui/model-icon';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useToast } from '@/components/ui/toaster';
 import { LoaderIcon } from '@/components/ui/loader-icon';
+import { KLLM_MANAGEMENT_LABEL, KLLM_PROVIDER, modelDisplayName } from '@/lib/chat-state';
 
 const REFRESH_INTERVAL_MS = 15_000;
 
@@ -243,49 +246,59 @@ export default function AdminKllmPage() {
           Refresh
         </AdminButton>
       }
-      meta={
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill
-            tone={
-              !data.enabled
-                ? 'muted'
-                : data.stale
-                  ? 'warning'
-                  : data.reachable
-                    ? 'success'
-                    : 'error'
-            }
-            dot
-          >
-            {!data.enabled
-              ? 'Disabled'
-              : data.stale
-                ? 'Stale'
-                : data.reachable
-                  ? 'Live'
-                  : 'Unreachable'}
-          </Pill>
-          <Pill tone="muted">
-            {data.summary.ready_models} ready · {data.summary.loading_models} loading
-          </Pill>
-          <Pill tone="muted">
-            {data.summary.backends} backends · {data.summary.sessions} sessions
-          </Pill>
-          <Pill tone={data.active_sessions > 0 ? 'success' : 'muted'}>
-            {data.active_sessions} active Revora session{data.active_sessions === 1 ? '' : 's'}
-          </Pill>
-          <Pill tone={!data.always_on_verified ? 'warning' : 'muted'}>
-            Always-on:{' '}
-            {data.always_on_verified ? data.always_on_size : 'Unknown'}
-          </Pill>
-        </div>
-      }
     >
-      <div className="mt-6 space-y-8">
+      <StatusRibbon
+        label="Runtime state"
+        verdict={
+          !data.enabled
+            ? 'Disabled'
+            : data.stale
+              ? 'Stale'
+              : data.reachable
+                ? 'Live'
+                : 'Unreachable'
+        }
+        hint={
+          data.always_on_verified
+            ? `Always-on pool verified at ${data.always_on_size} models.`
+            : 'Always-on pool size is not verified.'
+        }
+        readouts={[
+          {
+            key: 'models',
+            label: 'Ready models',
+            value: String(data.summary.ready_models),
+            sub: `${data.summary.loading_models} loading`,
+          },
+          {
+            key: 'backends',
+            label: 'Backends',
+            value: String(data.summary.backends),
+            sub: `${data.summary.sessions} sessions`,
+          },
+          {
+            key: 'sessions',
+            label: 'Active Revora sessions',
+            value: String(data.active_sessions),
+          },
+          {
+            key: 'always-on',
+            label: 'Always-on size',
+            value: data.always_on_verified
+              ? String(data.always_on_size)
+              : 'Unknown',
+            sub: data.always_on_verified ? undefined : 'Not verified',
+          },
+        ]}
+      />
+      <div className="space-y-8">
         <section aria-labelledby="kllm-models-heading">
-          <h2 id="kllm-models-heading" className="text-lg font-semibold text-foreground">
-            Models
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="kllm-models-heading" className="text-lg font-semibold text-foreground">
+              Models
+            </h2>
+            <Pill tone="brand">{KLLM_MANAGEMENT_LABEL}</Pill>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Unloading stops every backend and pending launch serving that exact
             model. kLLM offers no drain guarantee, so a model with active
@@ -293,7 +306,7 @@ export default function AdminKllmPage() {
           </p>
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface-1">
             <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-surface-2/60 text-left text-xs font-medium text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Model</th>
                   <th className="px-4 py-2.5 font-medium">Readiness</th>
@@ -311,9 +324,13 @@ export default function AdminKllmPage() {
                     <tr key={model.key} className="border-t border-border/70">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <ProviderIcon slug="kllm" size={15} className="shrink-0" />
+                          <ModelIcon
+                            model={{ key: model.key, provider: KLLM_PROVIDER }}
+                            size={15}
+                            className="shrink-0"
+                          />
                           <span className="truncate font-medium text-foreground" title={model.key}>
-                            {model.key}
+                            {modelDisplayName({ key: model.key })}
                           </span>
                         </div>
                       </td>
@@ -335,7 +352,7 @@ export default function AdminKllmPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {sessions || inflight
-                          ? `${sessions} sessions · ${inflight} in flight`
+                          ? `${sessions} sessions, ${inflight} in flight`
                           : '—'}
                       </td>
                       <td className="px-4 py-3">
@@ -433,7 +450,7 @@ export default function AdminKllmPage() {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {backend.sessions ?? 0} sessions · {backend.inflight ?? 0} in
+                    {backend.sessions ?? 0} sessions, {backend.inflight ?? 0} in
                     flight
                   </p>
                 </div>
@@ -522,8 +539,8 @@ export default function AdminKllmPage() {
           )}
           {data.always_on_verified && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Effective minimum: {data.always_on_size} · desired pool:{' '}
-              {data.always_on_desired_pool} · kLLM min_backends:{' '}
+              Effective minimum {data.always_on_size}, desired pool{' '}
+              {data.always_on_desired_pool}, kLLM min_backends{' '}
               {data.always_on_min_backends}
             </p>
           )}
@@ -932,7 +949,7 @@ function PolicyGroup({
         description={description}
       />
       <div className="mt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="admin-label">
           Approved models
         </p>
         {models.length === 0 ? (

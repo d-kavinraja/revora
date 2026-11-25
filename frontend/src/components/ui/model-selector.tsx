@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, DiscoveredModel } from '@/lib/api';
-import { RefreshCwIcon, CheckIcon, ChevronDownIcon } from 'lucide-react';
+import { RefreshCwIcon, ChevronDownIcon } from 'lucide-react';
 import { useToast } from './toaster';
 
 interface ModelSelectorProps {
@@ -9,29 +9,37 @@ interface ModelSelectorProps {
 
 export function ModelSelector({ providerSlug }: ModelSelectorProps) {
   const [models, setModels] = useState<DiscoveredModel[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Derived loading flag: a load is outstanding until the response for the
+  // current provider has landed — no synchronous state update is needed in
+  // the effect that kicks the request off.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const loading = loadedFor !== providerSlug;
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const loadModels = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getProviderModels(providerSlug);
-      setModels(data);
-      if (data.length > 0) {
-        setLastSynced(new Date(data[0].last_synced_at).toLocaleString());
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadModels = useCallback(
+    () =>
+      api
+        .getProviderModels(providerSlug)
+        .then((data) => {
+          setModels(data);
+          if (data.length > 0) {
+            setLastSynced(new Date(data[0].last_synced_at).toLocaleString());
+          }
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+        })
+        .finally(() => {
+          setLoadedFor(providerSlug);
+        }),
+    [providerSlug],
+  );
 
   useEffect(() => {
-    loadModels();
-  }, [providerSlug]);
+    void loadModels();
+  }, [loadModels]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -42,8 +50,12 @@ export function ModelSelector({ providerSlug }: ModelSelectorProps) {
         setLastSynced(new Date(data[0].last_synced_at).toLocaleString());
       }
       toast({ title: 'Models refreshed successfully', type: 'success' });
-    } catch (err: any) {
-      toast({ title: 'Failed to refresh models', description: err.response?.data?.detail || err.message, type: 'error' });
+    } catch (err) {
+      const { response, message } = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      toast({ title: 'Failed to refresh models', description: response?.data?.detail || message, type: 'error' });
     } finally {
       setSyncing(false);
     }
