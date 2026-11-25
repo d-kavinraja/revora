@@ -465,7 +465,10 @@ export function PersistentChatShell({
           onContextOpenChange={(open) => setOpenMenu(open ? 'context' : null)}
           onRefreshModels={() => { void catalog.refetch(); }}
           rightSlot={(
-            <span className="hidden rounded-full border border-brand/20 bg-brand/5 px-2 py-1 text-[10px] font-medium text-brand sm:inline-flex">Saved to your account</span>
+            <span className="inline-flex shrink-0 items-center rounded-full border border-brand/20 bg-brand/5 px-2 py-1 text-[10px] font-medium text-brand">
+              <span className="sm:hidden">Saved</span>
+              <span className="hidden sm:inline">Saved to your account</span>
+            </span>
           )}
         />
 

@@ -25,7 +25,7 @@ export function ChatModeSwitch({
         aria-selected={activeMode === 'temporary'}
         disabled={!temporaryEnabled}
         onClick={() => onSelect('temporary')}
-        className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${activeMode === 'temporary' ? 'bg-brand text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+        className={`min-h-8 shrink-0 rounded-md px-2 py-1 text-[10px] font-medium transition sm:px-2.5 sm:py-1.5 sm:text-[11px] disabled:cursor-not-allowed disabled:opacity-45 ${activeMode === 'temporary' ? 'bg-brand text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
       >
         Temporary
       </button>
@@ -35,7 +35,7 @@ export function ChatModeSwitch({
         aria-selected={activeMode === 'persistent'}
         onClick={() => onSelect('persistent')}
         title={persistentEnabled ? 'Saved to your account' : 'Persistent Chat is read-only'}
-        className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium transition ${activeMode === 'persistent' ? 'bg-brand text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+        className={`min-h-8 shrink-0 rounded-md px-2 py-1 text-[10px] font-medium transition sm:px-2.5 sm:py-1.5 sm:text-[11px] ${activeMode === 'persistent' ? 'bg-brand text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
       >
         Persistent
         {!persistentEnabled ? <span className="ml-1 opacity-70">· read only</span> : null}

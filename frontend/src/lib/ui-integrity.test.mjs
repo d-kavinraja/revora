@@ -29,6 +29,7 @@ const persistentChatShell = read('../app/(dashboard)/chat/_components/persistent
 const chatContextUsage = read('../app/(dashboard)/chat/_components/chat-context-usage.tsx');
 const chatTopBar = read('../app/(dashboard)/chat/_components/chat-top-bar.tsx');
 const chatProviderStatusBanners = read('../app/(dashboard)/chat/_components/chat-provider-status-banners.tsx');
+const modelIdentityBadge = read('../app/(dashboard)/chat/_components/model-identity-badge.tsx');
 const rootLayout = read('../app/layout.tsx');
 const providers = read('../app/providers.tsx');
 const chatStore = read('../store/useChatStore.ts');
@@ -276,16 +277,23 @@ test('persistent context is derived per conversation from shared helpers', () =>
 // Temporary/Persistent header parity: model badge stays left of the mode switcher,
 // and provider reachability banners render in persistent chat too.
 test('chat top bar keeps model badge after mode switcher on the left', () => {
-  const leftGroup = chatTopBar.match(
-    /<div className="min-w-0 flex items-center gap-2">([\s\S]*?)<\/div>\s*<div className="flex items-center gap-1\.5">/,
-  );
-  assert.ok(leftGroup, 'ChatTopBar should have left and right header groups');
-  const left = leftGroup[1];
-  const switchIndex = left.indexOf('<ChatModeSwitch');
-  const badgeIndex = left.indexOf('<ModelIdentityBadge');
-  assert.ok(switchIndex >= 0, 'Left group should render ChatModeSwitch');
-  assert.ok(badgeIndex >= 0, 'Left group should render ModelIdentityBadge');
-  assert.ok(switchIndex < badgeIndex, 'ModelIdentityBadge should come after ChatModeSwitch in left group');
+  const switchIndex = chatTopBar.indexOf('<ChatModeSwitch');
+  const badgeIndex = chatTopBar.indexOf('<ModelIdentityBadge');
+  assert.ok(switchIndex >= 0, 'ChatTopBar should render ChatModeSwitch');
+  assert.ok(badgeIndex >= 0, 'ChatTopBar should render ModelIdentityBadge');
+  assert.ok(switchIndex < badgeIndex, 'ModelIdentityBadge should come after ChatModeSwitch');
+  assert.match(chatTopBar, /md:flex-row/);
+  assert.match(chatTopBar, /md:justify-between/);
+});
+
+test('chat sub-header controls remain visible on mobile', () => {
+  assert.doesNotMatch(modelIdentityBadge, /hidden md:inline-flex/);
+  assert.match(modelIdentityBadge, /inline-flex/);
+  assert.match(modelIdentityBadge, /min-w-0/);
+  assert.match(modelIdentityBadge, /truncate/);
+  assert.doesNotMatch(persistentChatShell, /hidden rounded-full border border-brand\/20 bg-brand\/5 px-2 py-1 text-\[10px\] font-medium text-brand sm:inline-flex/);
+  assert.match(chatTopBar, /min-h-8/);
+  assert.match(chatTopBar, /min-w-8/);
 });
 
 test('provider reachability banners are shared and rendered in persistent chat', () => {

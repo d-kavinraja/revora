@@ -967,7 +967,7 @@ export function ChatShell({
               type="button"
               onClick={() => activeChat && onClearChat(activeChat.id)}
               disabled={!activeChat || activeChat.messages.length === 0 || isGenerating}
-              className="chat-ink inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+              className="chat-ink inline-flex h-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
               title="Clear chat"
             >
               <Trash2Icon size={14} />
