@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Crop, ScanEye } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { MODEL_INPUT } from './types';
 
@@ -128,7 +129,7 @@ export function MouthRegionViz({ blob, frameSize, mode }: MouthRegionVizProps) {
     const video = videoRef.current;
     if (!video) return;
     const url = URL.createObjectURL(blob);
-    video.src = url;
+    video.src = DOMPurify.sanitize(url);
     // New video: immediately drop stale pixels underneath the loader
     // overlay (status was already reset to loading during render).
     clearCanvases();

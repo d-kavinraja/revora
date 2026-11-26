@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle2, Clapperboard, Database, Proportions, Upload, Video, XCircle } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import type { Phase, PrepPhase, SelectedVideo } from './types';
 import { fmtBytes, fmtDuration } from './types';
@@ -59,7 +60,7 @@ export function OriginalVideoCard({
     const video = videoRef.current;
     if (!video) return;
     const url = URL.createObjectURL(selected.blob);
-    video.src = url;
+    video.src = DOMPurify.sanitize(url);
     video.load();
     return () => {
       video.pause();
