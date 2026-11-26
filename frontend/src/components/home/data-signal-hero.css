@@ -173,9 +173,24 @@ html.light .ds-header.is-scrolled .ds-theme-wrap button {
   color: rgba(0, 0, 0, 0.68);
 }
 
+/* Solid white header: give the theme toggle a visible boundary and a dark icon. */
+html.light .ds-header.is-scrolled:not(.menu-open) .ds-theme-wrap button {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+html.light .ds-header.is-scrolled:not(.menu-open) .ds-theme-wrap svg {
+  color: rgba(0, 0, 0, 0.72);
+}
+
 html.light .ds-header.is-scrolled .ds-theme-wrap button:hover {
   color: #000000;
   background: rgba(0, 0, 0, 0.06);
+}
+
+html.light .ds-header.is-scrolled:not(.menu-open) .ds-theme-wrap button:hover svg {
+  color: #000000;
 }
 
 /* Keep the dark mobile/tablet dropdown legible when the scrolled header is white. */
@@ -201,7 +216,9 @@ html.light .ds-header.is-scrolled.menu-open .ds-theme-wrap button {
   color: rgba(255, 255, 255, 0.77);
 }
 
-html.light .ds-theme-wrap svg {
+/* Icon colour over the dark hero video; the scrolled white header sets its own above. */
+html.light .ds-header:not(.is-scrolled) .ds-theme-wrap svg,
+html.light .ds-header.is-scrolled.menu-open .ds-theme-wrap svg {
   color: #e5e5e6;
 }
 
@@ -369,8 +386,8 @@ html.light .ds-theme-wrap svg {
 }
 
 .ds-menu-toggle {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -761,7 +778,14 @@ html.motion-pending .ds-demo-card {
   }
 
   .ds-toggle-wrap {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ds-entrance-brand {
+    display: flex;
+    align-items: center;
   }
 
   .ds-header-actions {
@@ -840,7 +864,14 @@ html.motion-pending .ds-demo-card {
   }
 
   .ds-toggle-wrap {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ds-entrance-brand {
+    display: flex;
+    align-items: center;
   }
 
   .ds-header-actions {
@@ -1003,10 +1034,8 @@ html.motion-pending .ds-demo-card {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  vertical-align: middle;
-  height: 46px;
-  min-width: 46px;
-  margin-right: 10px;
+  height: 44px;
+  min-width: 44px;
   padding: 0 14px;
   border-radius: 11px;
   border: 1px solid rgba(255, 255, 255, 0.21);
