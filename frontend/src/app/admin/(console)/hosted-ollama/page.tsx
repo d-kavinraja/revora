@@ -14,7 +14,8 @@ import { ModelIcon } from '@/components/ui/model-icon';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useToast } from '@/components/ui/toaster';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { HOSTED_PROVIDER, modelDisplayName, REVORA_MANAGEMENT_LABEL } from '@/lib/chat-state';
+import { HOSTED_PROVIDER, modelDisplayName } from '@/lib/chat-state';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { HostedTabs } from './hosted-tabs';
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -282,7 +283,7 @@ export default function AdminHostedOllamaPage() {
       <AdminSection
         title="Runtime-loaded models"
         subtitle="Discovered from Ollama /api/ps. Downloaded-but-unloaded models are never listed."
-        actions={<Pill tone="brand">{REVORA_MANAGEMENT_LABEL}</Pill>}
+        actions={<ManagedByRevora size="xs" />}
       >
         {models.length === 0 ? (
           <p className="text-sm text-muted-foreground">

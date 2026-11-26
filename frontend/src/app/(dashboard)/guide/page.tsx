@@ -76,7 +76,7 @@ const GUIDE_STEPS: GuideStep[] = [
       'Pick the engine that powers your reviews. Revora never substitutes a model silently — whatever you configure is what actually runs.',
     bullets: [
       'Open Settings → Providers and choose your review engine.',
-      'Add an API key, or point Revora at a local kLLM instance.',
+      'Add an API key for your provider, or use kLLM — kLLM is managed by Revora and needs no API key.',
       'Revora validates the key and lists the models it can reach.',
       'Choose a default review model for new repositories.',
     ],

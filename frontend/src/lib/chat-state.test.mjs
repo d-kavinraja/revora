@@ -383,8 +383,8 @@ test('groupCatalogModels partitions by provider then readiness', () => {
 
 test('hosted category label is the managed-by-Revora wording', () => {
   assert.equal(HOSTED_CATEGORY_LABEL, 'Hosted models managed by Revora');
-  assert.equal(HOSTED_PROVIDER_LABEL, 'Hosted models managed by Revora');
-  assert.equal(KLLM_PROVIDER_LABEL, 'kLLM models');
+  assert.equal(HOSTED_PROVIDER_LABEL, 'Hosted Models');
+  assert.equal(KLLM_PROVIDER_LABEL, 'kLLM');
 });
 
 test('provider sections are derived from backend identity, not hardcoded names', () => {

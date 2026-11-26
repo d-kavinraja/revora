@@ -6,6 +6,7 @@ import { LoaderIcon } from '@/components/ui/loader-icon';
 import { FolderIcon, ClipboardIcon, SettingsIcon, XIcon } from '@animateicons/react/lucide';
 import { Star, AlertTriangle, Lock, RefreshCw, CheckCircle2, ShieldAlert, GitFork, CircleDot, Users, ExternalLink } from 'lucide-react';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { PageHeader } from '@/components/shared/page-header';
 import { ErrorBanner } from '@/components/shared/error-banner';
 import { SkeletonList } from '@/components/shared/skeleton';
@@ -367,9 +368,14 @@ function ConfigModal({
             {/* API Key Selector */}
             {isManagedProvider ? (
               <div className="p-3 rounded-lg bg-brand/10 border border-brand/20 text-xs text-foreground/80 leading-relaxed">
-                <strong className="text-foreground">Managed provider.</strong> Revora
-                runs this model on the local kLLM server. No API key is required
-                and none is stored for your account.
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  <strong className="text-foreground">
+                    {selectedProvider === 'kllm' ? 'kLLM' : 'Hosted model'}
+                  </strong>
+                  <ManagedByRevora size="xs" className="shrink-0" />
+                </span>{' '}
+                Revora manages this model through the Revora platform. No API key
+                is required and none is stored for your account.
               </div>
             ) : providerKeys.length > 0 ? (
               <div>

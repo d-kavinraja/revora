@@ -15,6 +15,7 @@ import { Pill, type PillTone } from '@/components/shared/pill';
 import { TextFilter } from '@/components/shared/text-filter';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { ProviderBadge } from '@/components/ui/provider-brand';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { useToast } from '@/components/ui/toaster';
 import {
   formatDateTime,
@@ -182,11 +183,14 @@ export default function AdminProvidersPage() {
       key: 'provider',
       header: 'Provider',
       render: (provider) => (
-        <ProviderBadge
-          slug={provider.slug}
-          label={provider.display_name}
-          className="max-w-56"
-        />
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <ProviderBadge
+            slug={provider.slug}
+            label={provider.display_name}
+            className="max-w-56"
+          />
+          {provider.slug === 'kllm' && <ManagedByRevora size="xs" className="shrink-0" />}
+        </span>
       ),
     },
     {

@@ -11,6 +11,7 @@ import { LoaderIcon } from '@/components/ui/loader-icon';
 import { useToast } from '@/components/ui/toaster';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { Pill, type PillTone } from '@/components/shared/pill';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { formatDateTime } from '@/components/shared/time-ago';
 import { PageHeader } from '@/components/shared/page-header';
 import { SettingsShell } from '@/components/shared/settings-shell';
@@ -100,6 +101,9 @@ export default function ProvidersPage() {
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground border border-border">
                       {provider.litellm_provider}
                     </span>
+                    {(provider.slug === 'kllm' || provider.is_managed) && (
+                      <ManagedByRevora size="xs" className="shrink-0" />
+                    )}
                     <Pill tone={statusMeta.tone}>
                       {statusMeta.tone === 'success' && <CircleCheckIcon size={12} />}
                       {(statusMeta.tone === 'warning' || statusMeta.tone === 'error') && (

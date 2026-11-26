@@ -4,7 +4,7 @@ import type { ChatCatalog, ChatCatalogProvider } from '@/lib/api';
 import { HOSTED_PROVIDER, KLLM_PROVIDER } from '@/lib/chat-state';
 
 function providerBannerText(providerId: string, provider: ChatCatalogProvider): string | null {
-  const label = providerId === HOSTED_PROVIDER ? 'Hosted models' : 'kLLM';
+  const label = providerId === HOSTED_PROVIDER ? 'Hosted Models' : 'kLLM';
   if (!provider.enabled) return null;
   if (provider.waking) return 'Starting hosted models… This can take a moment.';
   if (!provider.configured) return `${label} are not configured on this server.`;

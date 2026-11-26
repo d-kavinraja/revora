@@ -870,8 +870,8 @@ export interface KllmModelLike {
 export const HOSTED_PROVIDER = 'hosted-ollama';
 export const KLLM_PROVIDER = 'kllm';
 export const HOSTED_CATEGORY_LABEL = 'Hosted models managed by Revora';
-export const HOSTED_PROVIDER_LABEL = 'Hosted models managed by Revora';
-export const KLLM_PROVIDER_LABEL = 'kLLM models';
+export const HOSTED_PROVIDER_LABEL = 'Hosted Models';
+export const KLLM_PROVIDER_LABEL = 'kLLM';
 
 export function isHostedModel(model: KllmModelLike | null | undefined): boolean {
   return !!model && (model.provider === HOSTED_PROVIDER || model.category === 'hosted');
@@ -1060,7 +1060,17 @@ export function modelProviderSlug(
 
 /** Management attribution shown beside an active model name. */
 export const REVORA_MANAGEMENT_LABEL = 'Managed by Revora';
-export const KLLM_MANAGEMENT_LABEL = 'Managed by kLLM';
+/**
+ * kLLM is integrated and managed through Revora. Kept as a named constant for
+ * call-site clarity; value matches {@link REVORA_MANAGEMENT_LABEL}. Never use
+ * this for third-party or independently managed providers.
+ */
+export const KLLM_MANAGEMENT_LABEL = REVORA_MANAGEMENT_LABEL;
+/** kLLM identity + management attribution, e.g. for service-level headings. */
+export const KLLM_IDENTITY_LABEL = `kLLM — ${REVORA_MANAGEMENT_LABEL}`;
+/** Supporting contextual description for kLLM surfaces. */
+export const KLLM_SUPPORT_DESCRIPTION =
+  'kLLM is integrated and managed through Revora. Model availability, configuration, and access are controlled through the Revora platform.';
 
 export function managementLabelForModel(model: ModelIdentity | null | undefined): string {
   const slug = modelProviderSlug(model);

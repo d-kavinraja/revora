@@ -47,9 +47,9 @@ export const FEATURE_META: Record<string, { label: string; description: string }
     description: 'The onboarding setup guide page.',
   },
   kllm_page: {
-    label: 'kLLM Dashboard',
+    label: 'kLLM Service',
     description:
-      'The kLLM dashboard view and its real-time data visualization. Backend execution, background PR reviews and repository routing are not affected by this flag.',
+      'The kLLM dashboard view (kLLM managed by Revora) and its real-time data visualization. Backend execution, background PR reviews and repository routing are not affected by this flag.',
   },
   chat: {
     label: 'Chat',

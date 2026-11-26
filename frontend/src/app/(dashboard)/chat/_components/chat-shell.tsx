@@ -54,6 +54,7 @@ import { useChatStore } from '@/store/useChatStore';
 
 import Image from 'next/image';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { ChatComposer } from './chat-composer';
 import { useSpeechToText } from './use-speech-to-text';
 import { ChatTabs } from './chat-tabs';
@@ -1027,6 +1028,7 @@ export function ChatShell({
                       className="rounded-lg shrink-0 md:w-14 md:h-14"
                     />
                     <span className="font-bold text-2xl tracking-tight text-foreground md:text-3xl">kLLM</span>
+                    <ManagedByRevora size="xs" className="shrink-0" />
                   </div>
                 </div>
                 <p className="text-xl font-medium tracking-tight text-foreground">What can I help with?</p>

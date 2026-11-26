@@ -113,7 +113,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/reviews': 'Reviews',
   '/admin/providers': 'Providers',
   '/admin/models': 'Models',
-  '/admin/kllm': 'kLLM',
+  '/admin/kllm': 'kLLM Management',
   '/admin/hosted-ollama': 'Hosted models',
   '/admin/features': 'Features',
   '/admin/maintenance': 'Maintenance',

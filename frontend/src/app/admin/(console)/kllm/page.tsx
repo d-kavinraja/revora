@@ -31,7 +31,8 @@ import { ModelIcon } from '@/components/ui/model-icon';
 import { ProviderIcon } from '@/components/ui/provider-icon';
 import { useToast } from '@/components/ui/toaster';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { KLLM_MANAGEMENT_LABEL, KLLM_PROVIDER, modelDisplayName } from '@/lib/chat-state';
+import { KLLM_PROVIDER, KLLM_SUPPORT_DESCRIPTION, modelDisplayName } from '@/lib/chat-state';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 
 const REFRESH_INTERVAL_MS = 15_000;
 
@@ -214,8 +215,8 @@ export default function AdminKllmPage() {
     return (
       <AdminPage
         eyebrow="System"
-        title="kLLM"
-        description="Model lifecycle controls for the managed local inference provider."
+        title="kLLM Management"
+        description="Model lifecycle controls for the kLLM service managed through Revora."
       >
         <QueryError
           message={errorMessage(error)}
@@ -229,22 +230,25 @@ export default function AdminKllmPage() {
     <AdminPage
       eyebrow="System"
       icon={<ProviderIcon slug="kllm" size={28} />}
-      title="kLLM lifecycle"
-      description="Load and unload managed models, control backends and configure the automatic-loading policy. kLLM owns serving; Revora never substitutes a model."
+      title="kLLM Management"
+      description={`Load and unload managed models, control backends and configure the automatic-loading policy. ${KLLM_SUPPORT_DESCRIPTION}`}
       actions={
-        <AdminButton
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          variant="secondary"
-          size="sm"
-        >
+        <div className="flex items-center gap-2">
+          <ManagedByRevora size="xs" className="shrink-0" />
+          <AdminButton
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            variant="secondary"
+            size="sm"
+          >
           {isFetching ? (
             <LoaderIcon size={14} className="animate-spin" />
           ) : (
             <RefreshCwIcon size={14} />
           )}
-          Refresh
-        </AdminButton>
+            Refresh
+          </AdminButton>
+        </div>
       }
     >
       <StatusRibbon
@@ -297,7 +301,7 @@ export default function AdminKllmPage() {
             <h2 id="kllm-models-heading" className="text-lg font-semibold text-foreground">
               Models
             </h2>
-            <Pill tone="brand">{KLLM_MANAGEMENT_LABEL}</Pill>
+            <ManagedByRevora size="xs" className="shrink-0" />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Unloading stops every backend and pending launch serving that exact

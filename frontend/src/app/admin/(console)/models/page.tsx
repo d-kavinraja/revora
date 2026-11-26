@@ -16,6 +16,7 @@ import { TextFilter } from '@/components/shared/text-filter';
 import { ModelIcon } from '@/components/ui/model-icon';
 import { ProviderBadge } from '@/components/ui/provider-brand';
 import { KLLM_MANAGEMENT_LABEL, REVORA_MANAGEMENT_LABEL } from '@/lib/chat-state';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { useToast } from '@/components/ui/toaster';
 import { AdminPage, AdminSection } from '@/components/admin/page-shell';
 import {
@@ -261,11 +262,7 @@ export default function AdminModelsPage() {
                             muted
                             className="max-w-56"
                           />
-                          {managementLabel ? (
-                            <Pill tone="brand" className="text-[10px]">
-                              {managementLabel}
-                            </Pill>
-                          ) : null}
+                          {managementLabel ? <ManagedByRevora size="xs" className="shrink-0" /> : null}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

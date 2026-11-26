@@ -25,14 +25,17 @@ export function Pill({
   children,
   className,
   dot = false,
+  title,
 }: {
   tone?: PillTone;
   children: ReactNode;
   className?: string;
   dot?: boolean;
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${
         TONE_CLASSES[tone]
       } ${className ?? ''}`}

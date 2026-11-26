@@ -23,6 +23,7 @@ import {
 } from "@/lib/chat-state";
 
 import { ModelIcon } from "@/components/ui/model-icon";
+import { ManagedByRevora } from "@/components/shared/managed-by-revora";
 
 interface ModelPickerProps {
   catalog: ChatCatalog | undefined;
@@ -256,8 +257,11 @@ export function ModelPicker({
       <Fragment key={section.provider}>
         {index > 0 && <Select.Separator className="my-1.5 border-t border-border/60" />}
         {/* Provider heading: status groups below it belong to this provider only. */}
-        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/85">
-          <span className="truncate">{section.label}</span>
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/85">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate">{section.label}</span>
+            <ManagedByRevora size="xs" className="shrink-0" />
+          </span>
           {section.notice ? (
             <span className="shrink-0 rounded bg-surface-2/70 px-1.5 py-0.5 text-[10px] font-medium normal-case text-muted-foreground whitespace-nowrap">
               {section.notice}

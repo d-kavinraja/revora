@@ -7,7 +7,8 @@ import { api, KllmActivityItem, KllmStatus, KllmTelemetry } from '@/lib/api';
 import { LoaderIcon } from '@/components/ui/loader-icon';
 import { ModelIcon } from '@/components/ui/model-icon';
 import { Pill, type PillTone } from '@/components/shared/pill';
-import { KLLM_MANAGEMENT_LABEL, KLLM_PROVIDER, modelDisplayName } from '@/lib/chat-state';
+import { KLLM_PROVIDER, KLLM_SUPPORT_DESCRIPTION, modelDisplayName } from '@/lib/chat-state';
+import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { timeAgo } from '@/components/shared/time-ago';
 import { useBrowserSessionId } from '@/hooks/use-kllm-session-presence';
@@ -326,7 +327,7 @@ export default function KllmPage() {
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-6 lg:p-8">
       <PageHeader
         title="kLLM"
-        support="Local, server-owned inference. kLLM owns serving and lifecycle; Revora proxies a sanitized, read-only view and never exposes backend identities."
+        support={KLLM_SUPPORT_DESCRIPTION}
         icon={
           <Image
             src="/assets/kllm.svg"
@@ -337,7 +338,8 @@ export default function KllmPage() {
           />
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ManagedByRevora size="xs" className="shrink-0" />
             <Pill tone={!enabled ? 'muted' : stale ? 'warning' : reachable ? 'success' : 'error'} dot>
               {!enabled
                 ? 'Disabled'
@@ -433,7 +435,7 @@ export default function KllmPage() {
                 <span className="text-xs text-muted-foreground">
                   {status.summary.loading_models} loading · {status.summary.failed_models} failed
                 </span>
-                <Pill tone="brand">{KLLM_MANAGEMENT_LABEL}</Pill>
+                <ManagedByRevora size="xs" className="shrink-0" />
               </div>
             </div>
             <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
