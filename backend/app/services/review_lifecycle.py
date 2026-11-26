@@ -632,7 +632,7 @@ class ReviewLifecycleService:
         try:
             return UUID(value)
         except ValueError:
-            logger.warning(f"Invalid UUID value: {value}")
+            logger.warning("Invalid UUID value")
             return None
 
     async def _audit(

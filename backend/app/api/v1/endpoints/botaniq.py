@@ -266,7 +266,7 @@ async def run_inference_url(
         if not os.path.splitext(url_stem.lower())[1]:
             url_stem = url_stem + ext
 
-        fd, tmp_path = tempfile.mkstemp(prefix="botaniq_url_", suffix=ext)
+        fd, tmp_path = tempfile.mkstemp(prefix="botaniq_url_", suffix=".img")
         fd_open = False
         content_type: str | None = None
         try:
@@ -420,8 +420,7 @@ async def run_inference(
     tmp_path: str | None = None
     size_bytes = 0
     try:
-        ext = os.path.splitext((filename or "image").lower())[1]
-        fd, tmp_path = tempfile.mkstemp(prefix="botaniq_up_", suffix=ext or ".bin")
+        fd, tmp_path = tempfile.mkstemp(prefix="botaniq_up_", suffix=".img")
         with os.fdopen(fd, "wb") as fh:
             while True:
                 chunk = await image.read(chunk_size)

@@ -415,15 +415,13 @@ class LLMService:
         try:
             async with AsyncSessionLocal() as db:
                 if api_key_id:
-                    logger.info(
-                        f"Resolving API key by id={api_key_id} for user={user_id}"
-                    )
+                    logger.info("Resolving API key by id")
                     from app.core.security import encryption_service
 
                     try:
                         key_uuid = uuid.UUID(api_key_id)
                     except ValueError:
-                        logger.warning(f"Invalid API key ID format: {api_key_id}")
+                        logger.warning("Invalid API key ID format")
                         return None
 
                     db_key = await api_key_service.get_by_id(db, key_uuid)
@@ -439,10 +437,7 @@ class LLMService:
                             f"(provider={db_key.provider})"
                         )
                         return decrypted
-                    logger.warning(
-                        f"API key id={api_key_id} not found or not valid "
-                        f"for user={user_id}"
-                    )
+                    logger.warning("API key not found or not valid for user")
                     return None
                 else:
                     logger.info(

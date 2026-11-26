@@ -13,6 +13,31 @@ test('generates a non-empty session identifier', () => {
   assert.ok(generateBrowserSessionId().length > 8);
 });
 
+test('uses secure random bytes when randomUUID is unavailable', () => {
+  const originalCrypto = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: {
+      getRandomValues(bytes) {
+        bytes.fill(1);
+        return bytes;
+      },
+    },
+  });
+
+  try {
+    assert.match(
+      generateBrowserSessionId(),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: originalCrypto,
+    });
+  }
+});
+
 test('does not create browser storage during server rendering', () => {
   assert.equal(getBrowserSessionId(), null);
 });

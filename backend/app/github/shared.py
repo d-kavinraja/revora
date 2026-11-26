@@ -104,8 +104,8 @@ async def resolve_provider_config(
                 return provider, model, api_key_id, config_source
             # Key was deleted or invalid — auto-clean the stale mapping and fall through
             logger.warning(
-                f"MODE 1 key id={api_key_id} not found or invalid for user={user_id}. "
-                f"Clearing stale repo mapping and falling through to MODE 2."
+                "MODE 1 key not found or invalid. Clearing stale repo mapping "
+                "and falling through to MODE 2."
             )
             try:
                 merged_repo = await db_session.merge(db_repo)

@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Crop, ScanEye } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { LoaderIcon } from '@/components/ui/loader-icon';
-import { MODEL_INPUT, isSafeMediaUrl } from './types';
+import { MODEL_INPUT } from './types';
 
 export type VizMode = 'crop' | 'full';
 
 interface MouthRegionVizProps {
-  /** Object URL of the actual selected video (same bytes sent to inference). */
-  objectUrl: string;
+  /** Selected video bytes; a local object URL is created for the media element. */
+  blob: Blob;
   /** Natural frame size, when known (for bounds checking + rect scaling). */
   frameSize: { w: number; h: number } | null;
   /** Which panels to show: both (frame + crop) or only the original frame. */
@@ -23,23 +24,15 @@ interface MouthRegionVizProps {
  * preprocessing crop — never presented as detected landmarks.
  * Card chrome, title, and tabs live in ModelInputRegionCard.
  */
-export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizProps) {
+export function MouthRegionViz({ blob, frameSize, mode }: MouthRegionVizProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLCanvasElement>(null);
   const cropRef = useRef<HTMLCanvasElement>(null);
-  // Per-video paint state. Render-phase reset when the video identity
-  // changes (the approved alternative to setState inside an effect).
-  // Trust boundary (CodeQL js/xss-through-dom): only allowlisted media
-  // URLs reach the hidden <video> src below. Anything else keeps status
-  // at 'error', so the existing error UI renders instead (fail-closed).
-  const safeSrc = isSafeMediaUrl(objectUrl) ? objectUrl : null;
-  const [paintUrl, setPaintUrl] = useState(safeSrc);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
-    safeSrc ? 'loading' : 'error',
-  );
-  if (paintUrl !== safeSrc) {
-    setPaintUrl(safeSrc);
-    setStatus(safeSrc ? 'loading' : 'error');
+  const [sourceBlob, setSourceBlob] = useState(blob);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  if (sourceBlob !== blob) {
+    setSourceBlob(blob);
+    setStatus('loading');
   }
 
   const clearCanvases = useCallback(() => {
@@ -135,6 +128,8 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const url = URL.createObjectURL(blob);
+    video.src = DOMPurify.sanitize(url);
     // New video: immediately drop stale pixels underneath the loader
     // overlay (status was already reset to loading during render).
     clearCanvases();
@@ -196,6 +191,7 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
     video.addEventListener('play', kick);
     video.addEventListener('pause', stopLoop);
     document.addEventListener('visibilitychange', onVisibility);
+    video.load();
     // Initial paint; the loop only starts if already playing.
     kick();
     return () => {
@@ -207,8 +203,11 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
       video.removeEventListener('play', kick);
       video.removeEventListener('pause', stopLoop);
       document.removeEventListener('visibilitychange', onVisibility);
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(url);
     };
-  }, [objectUrl, draw, clearCanvases]);
+  }, [blob, draw, clearCanvases]);
 
   const inBounds =
     !frameSize ||
@@ -234,17 +233,14 @@ export function MouthRegionViz({ objectUrl, frameSize, mode }: MouthRegionVizPro
   return (
     <div className="rounded-lg bg-surface-2 p-3">
       {/* Hidden source video: same bytes as the selected video. */}
-      {safeSrc ? (
-        <video
-          ref={videoRef}
-          src={safeSrc}
-          preload="auto"
-          muted
-          playsInline
-          aria-hidden="true"
-          className="hidden"
-        />
-      ) : null}
+      <video
+        ref={videoRef}
+        preload="auto"
+        muted
+        playsInline
+        aria-hidden="true"
+        className="hidden"
+      />
 
       {!inBounds && (
         <p className="mb-2 text-xs text-warning leading-relaxed" role="note">

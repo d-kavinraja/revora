@@ -3,22 +3,34 @@ from typing import Any
 
 import aiofiles
 
+from app.utils.security import safe_join
+
 MAX_FILE_READ_BYTES = 1024 * 1024  # 1MB limit
 
 
 class EvidenceEngine:
     """Generates evidence for verified findings."""
 
-    def _find_actual_file(self, repo_path: str, file_path: str) -> str:
-        full_path = os.path.join(repo_path, file_path)
+    def _find_actual_file(self, repo_path: str, file_path: str) -> str | None:
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return None
         if os.path.exists(full_path):
-            return file_path
+            return os.path.relpath(full_path, os.path.realpath(repo_path))
 
         basename = os.path.basename(file_path)
+        if not basename:
+            return None
         for root, dirs, files in os.walk(repo_path):
             if basename in files:
-                return os.path.relpath(os.path.join(root, basename), repo_path)
-        return file_path
+                candidate = os.path.join(root, basename)
+                try:
+                    candidate = safe_join(repo_path, os.path.relpath(candidate, repo_path))
+                except ValueError:
+                    continue
+                return os.path.relpath(candidate, os.path.realpath(repo_path))
+        return None
 
     async def generate(
         self, finding: dict[str, Any], repo_path: str
@@ -30,7 +42,12 @@ class EvidenceEngine:
             return None
 
         file_path = self._find_actual_file(repo_path, file_path)
-        full_path = os.path.join(repo_path, file_path)
+        if file_path is None:
+            return None
+        try:
+            full_path = safe_join(repo_path, file_path)
+        except ValueError:
+            return None
         if not os.path.exists(full_path):
             return None
 

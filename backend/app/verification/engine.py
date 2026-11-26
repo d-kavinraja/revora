@@ -20,6 +20,7 @@ from app.models.verification import (
     VerificationResultModel,
 )
 from app.security.error_sanitizer import sanitize_error_message
+from app.utils.security import safe_join
 from app.verification.cache import verification_cache
 from app.verification.models import VerificationResult, VerifiedFinding
 from app.verification.pipeline import pipeline
@@ -286,7 +287,8 @@ class VerificationEngine:
         return PersistenceOutcome(persisted=False, attempts=attempts)
 
     def _pending_file_path(self, review_id: uuid.UUID) -> Path:
-        return PENDING_VERIFICATION_DIR / f"{review_id}.json"
+        filename = f"{review_id.hex}.json"
+        return Path(safe_join(str(PENDING_VERIFICATION_DIR), filename))
 
     def _write_pending_file(
         self,
@@ -614,6 +616,108 @@ class VerificationEngine:
 
         return list(deps)
 
+    @staticmethod
+    def _split_fallback_blocks(section: str) -> list[str]:
+        blocks: list[str] = []
+        current: list[str] = []
+
+        for line in section.splitlines():
+            item = line.lstrip()
+            marker_length = 0
+
+            digit_end = 0
+            while digit_end < len(item) and item[digit_end].isdigit():
+                digit_end += 1
+            if (
+                digit_end
+                and digit_end + 1 < len(item)
+                and item[digit_end] == "."
+                and item[digit_end + 1].isspace()
+            ):
+                marker_length = digit_end + 1
+            else:
+                for marker in ("**", "*", "-", "•"):
+                    if item.startswith(marker) and len(item) > len(marker) and item[
+                        len(marker)
+                    ].isspace():
+                        marker_length = len(marker)
+                        break
+
+            if marker_length:
+                if current:
+                    blocks.append("\n".join(current))
+                current = [item[marker_length:].lstrip()]
+            else:
+                current.append(line)
+
+        if current:
+            blocks.append("\n".join(current))
+        return blocks or [section]
+
+    @staticmethod
+    def _extract_fallback_file_path(block: str) -> str | None:
+        extensions = {
+            "py", "js", "ts", "tsx", "jsx", "go", "java", "rs", "rb", "php",
+            "swift", "kt", "scala", "c", "cpp", "h", "hpp", "sh", "yaml",
+            "yml", "json", "tf", "sql", "md", "txt", "cfg", "ini", "toml",
+            "env",
+        }
+        allowed_characters = set(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./\\-"
+        )
+        for token in block.split():
+            candidate = token.strip("`'\"()[]{}<>,;:!")
+            possible_line_suffix = candidate.rsplit(":", 1)
+            if len(possible_line_suffix) == 2 and possible_line_suffix[1].isdigit():
+                candidate = possible_line_suffix[0]
+            candidate = candidate.rstrip(".")
+            suffix = candidate.rsplit(".", 1)
+            if (
+                len(suffix) == 2
+                and suffix[1].lower() in extensions
+                and candidate
+                and all(character in allowed_characters for character in candidate)
+            ):
+                return candidate
+        return None
+
+    @staticmethod
+    def _extract_fallback_line_number(block: str) -> int | None:
+        for token in block.split():
+            candidate = token.strip("`'\"()[]{}<>,;!")
+            location = candidate.rsplit(":", 1)
+            if (
+                len(location) == 2
+                and "." in location[0]
+                and location[1].isdigit()
+                and len(location[1]) <= 10
+            ):
+                return int(location[1])
+
+        lowered = block.lower()
+        cursor = 0
+        while True:
+            index = lowered.find("line", cursor)
+            if index < 0:
+                return None
+            cursor = index + 4
+            if index and (lowered[index - 1].isalnum() or lowered[index - 1] == "_"):
+                continue
+
+            end = cursor
+            while end < len(block) and block[end].isspace():
+                end += 1
+            if end < len(block) and block[end] == ":":
+                end += 1
+                while end < len(block) and block[end].isspace():
+                    end += 1
+
+            start = end
+            while end < len(block) and block[end].isdigit():
+                end += 1
+            if start < end and end - start <= 10:
+                return int(block[start:end])
+
     def _parse_findings(self, response: str) -> list[dict[str, Any]]:
         """
         Robust implementation of the Review Parser.
@@ -702,17 +806,14 @@ class VerificationEngine:
             if "summary" in section_lower and len(section_lower.split()) < 200:
                 continue
 
-            blocks = re.split(r"\n\s*(?:\d+\.|\*|-|\*\*|•)\s+", "\n" + section)
+            blocks = self._split_fallback_blocks(section)
             for block in blocks:
                 block = block.strip()
                 if not block or len(block) < 10:
                     continue
 
-                file_match = re.search(
-                    r"`?([a-zA-Z0-9_\-\./\\]+\.(?:py|js|ts|tsx|jsx|go|java|rs|rb|php|swift|kt|scala|c|cpp|h|hpp|sh|yaml|yml|json|tf|sql|md|txt|cfg|ini|toml|env))`?",
-                    block,
-                )
-                line_match = re.search(r"line\s*:?\s*(\d+)", block, re.IGNORECASE)
+                file_path = self._extract_fallback_file_path(block)
+                line_number = self._extract_fallback_line_number(block)
                 severity_match = re.search(
                     r"(critical|high|medium|low)", block, re.IGNORECASE
                 )
@@ -737,10 +838,8 @@ class VerificationEngine:
                         {
                             "id": str(uuid.uuid4())[:8],
                             "title": title[:255],
-                            "file_path": file_match.group(1) if file_match else "",
-                            "line_number": (
-                                int(line_match.group(1)) if line_match else None
-                            ),
+                            "file_path": file_path or "",
+                            "line_number": line_number,
                             "category": category,
                             "severity": (
                                 severity_match.group(1).upper()
