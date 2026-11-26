@@ -68,7 +68,14 @@ export default function LandingPage() {
       {/* Top Banner */}
       <StickyBanner sticky={false} className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 font-mono text-xs md:text-sm">
         <p className="mx-0 max-w-[90%] flex items-center justify-center gap-2 flex-wrap text-center py-1">
-          <span>🚀 <strong>Connect Revora in seconds:</strong> Sign in with GitHub, install <code className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-xs">Revora-PR</code> app & select repositories!</span>
+          <span>
+            🚀{' '}
+            <strong className="hidden sm:inline">Connect Revora in seconds:</strong>{' '}
+            <span className="hidden sm:inline">Sign in with GitHub, install </span>
+            <span className="sm:hidden">Install </span>
+            <code className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-xs">Revora-PR</code>
+            <span className="hidden sm:inline"> app & select repositories!</span>
+          </span>
           <a
             href="https://github.com/apps/revora-pr"
             target="_blank"
@@ -164,7 +171,7 @@ export default function LandingPage() {
                       <Icon size={20} aria-hidden="true" />
                     </div>
                     <h3 className={cn("font-semibold transition-colors", isLight ? "text-foreground" : "text-zinc-100")}>{feature.title}</h3>
-                    <p className={cn("text-sm font-mono leading-relaxed transition-colors", isLight ? "text-muted-foreground" : "text-zinc-400")}>{feature.description}</p>
+                    <p className={cn("text-[15px] leading-relaxed transition-colors", isLight ? "text-muted-foreground" : "text-zinc-400")}>{feature.description}</p>
                   </article>
                 </Reveal>
               );

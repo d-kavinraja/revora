@@ -21,7 +21,7 @@
   --hero-bottom: clamp(34px, 5.19vh, 64px);
   --display-size: clamp(58px, 7.64vh, 88px);
   --display-leading: clamp(72px, 9.34vh, 106px);
-  --copy-size: clamp(14px, 1.7vh, 19px);
+  --copy-size: clamp(16px, 1.7vh, 19px);
   --copy-leading: clamp(19px, 2.17vh, 24px);
   --title-copy-gap: clamp(15px, 2.08vh, 24px);
   --copy-cta-gap: clamp(24px, 3.11vh, 36px);
@@ -440,7 +440,7 @@ html.light .ds-theme-wrap svg {
   position: relative;
   left: 1px;
   transform: translateY(var(--copy-optical-shift));
-  color: rgba(226, 229, 228, 0.84);
+  color: rgba(240, 242, 241, 0.94);
   font-size: var(--copy-size);
   line-height: var(--copy-leading);
   font-weight: 350;
@@ -483,8 +483,8 @@ html.light .ds-theme-wrap svg {
   min-height: 44px;
   padding: 0 16px;
   border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.35);
   color: #fff;
   font-size: var(--primary-control-font-size);
   font-weight: 440;
@@ -512,8 +512,8 @@ html.light .ds-theme-wrap svg {
   align-items: center;
   gap: 6px 8px;
   margin-top: 12px;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
@@ -975,6 +975,52 @@ html.motion-pending .ds-demo-card {
     width: 100%;
     max-width: 100%;
   }
+}
+
+/* Readability scrim behind the hero copy and CTAs (the video is busy). */
+.ds-hero-content::before {
+  content: "";
+  position: absolute;
+  inset: -36px -48px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 62% 58% at 36% 50%,
+    rgba(0, 0, 0, 0.62),
+    rgba(0, 0, 0, 0.28) 62%,
+    transparent 82%
+  );
+}
+
+@media (max-width: 1023px) {
+  .ds-hero-content {
+    position: relative;
+  }
+}
+
+/* Mobile: keep a visible sign-in next to the menu button (sign-up stays in the menu). */
+.ds-mobile-signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  height: 46px;
+  min-width: 46px;
+  margin-right: 10px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.21);
+  background: linear-gradient(145deg, rgba(26, 34, 36, 0.86), rgba(16, 29, 33, 0.9));
+  color: #fff;
+  font-size: 15px;
+  font-weight: 460;
+  letter-spacing: -0.2px;
+  text-decoration: none;
+  backdrop-filter: blur(14px);
+}
+
+.ds-header.menu-open .ds-mobile-signin {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

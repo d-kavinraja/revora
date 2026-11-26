@@ -264,6 +264,9 @@ export function DataSignalHero() {
           </div>
 
           <div className="ds-entrance ds-entrance-action ds-toggle-wrap" style={{ animationDelay: '140ms' }}>
+            <Link href="/login" className="ds-mobile-signin" onClick={() => setMenuOpen(false)}>
+              Sign in
+            </Link>
             <button
               type="button"
               className="ds-menu-toggle"
@@ -296,9 +299,9 @@ export function DataSignalHero() {
             </h1>
             <p className="ds-entrance ds-entrance-copy ds-hero-copy">
               Your repo is scattered across files.
-              <br />
+              <br />{' '}
               Revora reads the whole repository, verifies every
-              <br />
+              <br />{' '}
               finding, so every merge is backed by code you trust.
             </p>
             <div className="ds-entrance ds-entrance-action ds-cta-wrap">
