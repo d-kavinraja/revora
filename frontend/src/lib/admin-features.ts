@@ -51,6 +51,11 @@ export const FEATURE_META: Record<string, { label: string; description: string }
     description:
       'The kLLM dashboard view (kLLM managed by Revora) and its real-time data visualization. Backend execution, background PR reviews and repository routing are not affected by this flag.',
   },
+  kllm_cloud_page: {
+    label: 'kLLM Cloud',
+    description:
+      'The kLLM Cloud dashboard view and its status endpoint. Cloud model approval, Chat and Review availability, and background review routing are not affected by this flag.',
+  },
   chat: {
     label: 'Chat',
     description:

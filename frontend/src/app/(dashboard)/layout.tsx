@@ -125,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       )}
 
-      <Sidebar isChat={isChat} onHelpClick={openTour} />
+      <Sidebar />
       <main
         className={
           isChat

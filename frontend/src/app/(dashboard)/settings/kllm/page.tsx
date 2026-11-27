@@ -115,8 +115,6 @@ export default function KllmPage() {
 
   const statusController = useRef<AbortController | null>(null);
   const telemetryController = useRef<AbortController | null>(null);
-  const statusInFlight = useRef(false);
-  const telemetryInFlight = useRef(false);
   const statusBackoff = useRef(STATUS_INTERVAL_MS);
   const telemetryBackoff = useRef(TELEMETRY_INTERVAL_MS);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,6 +147,11 @@ export default function KllmPage() {
   // never overlapping, exponential backoff on failures.
   useEffect(() => {
     let cancelled = false;
+    // Per-effect-instance guard: a component-level ref survives StrictMode's
+    // mount/unmount/mount cycle, so a request aborted by the first cleanup
+    // would leave the flag set and delay the first status load by a full
+    // polling interval on an otherwise empty page.
+    let statusInFlight = false;
 
     function schedule(delay: number) {
       if (cancelled) return;
@@ -157,11 +160,11 @@ export default function KllmPage() {
 
     async function tick() {
       if (cancelled) return;
-      if (document.hidden || statusInFlight.current) {
+      if (document.hidden || statusInFlight) {
         schedule(statusBackoff.current);
         return;
       }
-      statusInFlight.current = true;
+      statusInFlight = true;
       const controller = new AbortController();
       statusController.current = controller;
       try {
@@ -178,7 +181,7 @@ export default function KllmPage() {
           MAX_BACKOFF_MS,
         );
       } finally {
-        statusInFlight.current = false;
+        statusInFlight = false;
         if (!cancelled) setLoading(false);
         schedule(statusBackoff.current);
       }
@@ -245,6 +248,8 @@ export default function KllmPage() {
       return;
     }
     let cancelled = false;
+    // Same per-instance guard for telemetry polling.
+    let telemetryInFlight = false;
 
     function schedule(delay: number) {
       if (cancelled) return;
@@ -253,11 +258,11 @@ export default function KllmPage() {
 
     async function tick() {
       if (cancelled) return;
-      if (document.hidden || telemetryInFlight.current) {
+      if (document.hidden || telemetryInFlight) {
         schedule(telemetryBackoff.current);
         return;
       }
-      telemetryInFlight.current = true;
+      telemetryInFlight = true;
       const controller = new AbortController();
       telemetryController.current = controller;
       try {
@@ -272,7 +277,7 @@ export default function KllmPage() {
           30_000,
         );
       } finally {
-        telemetryInFlight.current = false;
+        telemetryInFlight = false;
         schedule(telemetryBackoff.current);
       }
     }

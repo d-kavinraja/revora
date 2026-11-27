@@ -169,22 +169,38 @@ async def update_admin_provider(
 
     changes = data.model_dump(exclude_unset=True)
 
-    # Managed providers require the runtime flag as well. Refuse to create a
+    # Managed providers require their runtime flag as well. Refuse to create a
     # half-enabled state: the DB row can only be turned on when the operator
-    # has opted in through KLLM_ENABLED (environment, restart required).
-    if provider.is_managed and not settings.KLLM_ENABLED:
-        wants_on = changes.get("is_enabled") is True or changes.get("status") in (
-            "available",
-            "under_testing",
+    # has opted in through the environment (restart required). kLLM and
+    # kLLM Cloud are independent flags and never gate each other.
+    if provider.is_managed:
+        flag_name = (
+            "KLLM_CLOUD_ENABLED"
+            if provider.slug == "kllm-cloud"
+            else "KLLM_ENABLED"
         )
-        if wants_on:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "The kLLM managed provider cannot be enabled right now: "
-                    "it is turned off in the backend environment."
-                ),
+        flag_on = bool(
+            settings.KLLM_CLOUD_ENABLED
+            if provider.slug == "kllm-cloud"
+            else settings.KLLM_ENABLED
+        )
+        if not flag_on:
+            wants_on = changes.get("is_enabled") is True or changes.get("status") in (
+                "available",
+                "under_testing",
             )
+            if wants_on:
+                label = (
+                    "kLLM Cloud" if provider.slug == "kllm-cloud" else "kLLM"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"The {label} managed provider cannot be enabled right "
+                        f"now: it is turned off in the backend environment "
+                        f"({flag_name})."
+                    ),
+                )
 
     if changes.get("status") is not None and changes["status"] not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid provider status")

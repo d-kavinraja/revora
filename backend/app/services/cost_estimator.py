@@ -20,13 +20,38 @@ PROVIDER_COST_TABLE = {
     "mistral": {"input": 0.002, "output": 0.006},  # Mistral Large
     # Managed local kLLM: server-owned GPU capacity, zero marginal cost.
     "kllm": {"input": 0.0, "output": 0.0},
+    # kLLM Cloud: a Revora-managed relay, so the convention above applies and
+    # no per-token rate is invented here. The relay billing model is not
+    # documented in this repository; an operator that is charged per token sets
+    # KLLM_CLOUD_INPUT_COST_PER_1K / KLLM_CLOUD_OUTPUT_COST_PER_1K.
+    "kllm-cloud": {"input": 0.0, "output": 0.0},
 }
+
+
+def _cloud_rates() -> dict[str, float]:
+    """Explicit (never inherited) kLLM Cloud rates from server settings."""
+    from app.core.config import settings
+
+    return {
+        "input": max(0.0, float(settings.KLLM_CLOUD_INPUT_COST_PER_1K)),
+        "output": max(0.0, float(settings.KLLM_CLOUD_OUTPUT_COST_PER_1K)),
+    }
 
 
 class CostEstimator:
     def get_rates(self, provider: str, model: str | None = None) -> dict[str, float]:
         normalized = provider.lower().strip()
-        return PROVIDER_COST_TABLE.get(normalized, {"input": 0.001, "output": 0.003})
+        # Provider display names ("kLLM Cloud") and slugs ("kllm-cloud") must
+        # resolve to the same explicit row; never fall back to a generic rate
+        # for a managed provider.
+        rates = PROVIDER_COST_TABLE.get(normalized) or PROVIDER_COST_TABLE.get(
+            normalized.replace(" ", "-")
+        )
+        if rates is None:
+            return {"input": 0.001, "output": 0.003}
+        if normalized in ("kllm-cloud", "kllm cloud"):
+            return _cloud_rates()
+        return rates
 
     def estimate(self, provider: str, input_tokens: int, output_tokens: int) -> float:
         rates = self.get_rates(provider)

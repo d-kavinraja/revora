@@ -136,7 +136,7 @@ export function coalesceMetricsPatch(
 
 export type ChatRole = 'user' | 'assistant';
 /** Canonical provider ids. Routing is derived from the model key only. */
-export type ChatProviderId = 'kllm' | 'hosted-ollama';
+export type ChatProviderId = 'kllm' | 'kllm-cloud' | 'hosted-ollama';
 /**
  * `streaming` is the only non-terminal status. Every other status is final and
  * keeps whatever content the model (or the user) produced:
@@ -163,6 +163,11 @@ export interface ChatMessage {
    */
   model?: string | null;
   provider?: ChatProviderId | null;
+  /**
+   * Clean catalog name captured when the turn was created, e.g. "Qwen3.8 27B".
+   * Optional: older turns without it fall back to the cleaned key.
+   */
+  displayName?: string | null;
   upstreamModel?: string | null;
   /** Provider finish reason, kept so status wording can name the real cause. */
   finishReason?: string | null;
@@ -170,7 +175,7 @@ export interface ChatMessage {
 
 export type MessageProvenance = Pick<
   ChatMessage,
-  'model' | 'provider' | 'upstreamModel'
+  'model' | 'provider' | 'displayName' | 'upstreamModel'
 >;
 
 export interface TemporaryChat {
@@ -511,17 +516,27 @@ export interface MessageAttribution {
   provider: ChatProviderId | null;
   requested: string | null;
   confirmed: string | null;
+  /** Clean model name: the stored catalog name, else the cleaned key. */
+  name: string | null;
+  /** Readable provider source, e.g. "kLLM Cloud". Never a routing prefix. */
+  source: string | null;
+  /** Management attribution, e.g. "Managed by Revora". */
+  management: string | null;
+  /** `source · name`, with the requested key noted when the provider differs. */
   label: string | null;
   title: string | null;
 }
 
 export function messageAttribution(
-  message: Pick<ChatMessage, 'role' | 'model' | 'provider' | 'upstreamModel'>,
+  message: Pick<ChatMessage, 'role' | 'model' | 'provider' | 'displayName' | 'upstreamModel'>,
 ): MessageAttribution {
   const empty: MessageAttribution = {
     provider: null,
     requested: null,
     confirmed: null,
+    name: null,
+    source: null,
+    management: null,
     label: null,
     title: null,
   };
@@ -533,11 +548,15 @@ export function messageAttribution(
   // so a stored key can never leak into the visible attribution.
   const bare = requested ? stripModelRoutingPrefix(requested) : null;
   const display = confirmed ?? bare;
+  const identity: ModelIdentity = { key: requested, provider };
+  const source = provider || requested ? providerSourceLabel(identity) : null;
+  const management = source ? managementLabelForModel(identity) : null;
   if (!display) {
-    return { provider, requested, confirmed, label: provider, title: null };
+    return { provider, requested, confirmed, name: null, source, management, label: source, title: null };
   }
+  const name = message.displayName?.trim() || display;
   const differs = !!(confirmed && bare && confirmed !== bare);
-  const baseLabel = provider ? `${provider} · ${display}` : display;
+  const baseLabel = source ? `${source} · ${name}` : name;
   const title = [
     `Requested: ${requested ?? 'unknown'}`,
     `Confirmed by provider: ${confirmed ?? 'not reported'}`,
@@ -546,6 +565,9 @@ export function messageAttribution(
     provider,
     requested,
     confirmed,
+    name,
+    source,
+    management,
     label: differs ? `${baseLabel} (requested ${bare})` : baseLabel,
     title,
   };
@@ -865,35 +887,62 @@ export interface KllmModelLike {
   runtime_unknown?: boolean;
   partial?: boolean;
   load_state?: string | null;
+  runtime_state?: string;
+  runtime_reason?: string | null;
 }
 
 export const HOSTED_PROVIDER = 'hosted-ollama';
 export const KLLM_PROVIDER = 'kllm';
+export const CLOUD_PROVIDER = 'kllm-cloud';
 export const HOSTED_CATEGORY_LABEL = 'Hosted models managed by Revora';
+export const CLOUD_CATEGORY_LABEL = 'Cloud models managed by Revora';
 export const HOSTED_PROVIDER_LABEL = 'Hosted Models';
 export const KLLM_PROVIDER_LABEL = 'kLLM';
+export const CLOUD_PROVIDER_LABEL = 'kLLM Cloud';
 
 export function isHostedModel(model: KllmModelLike | null | undefined): boolean {
   return !!model && (model.provider === HOSTED_PROVIDER || model.category === 'hosted');
 }
 
+/**
+ * kLLM Cloud rows carry their own provider and category. A stored key keeps the
+ * namespace even when the catalog row is gone, so the key is accepted too.
+ */
+export function isCloudModel(model: KllmModelLike | null | undefined): boolean {
+  if (!model) return false;
+  if (model.provider === CLOUD_PROVIDER || model.category === CLOUD_PROVIDER) {
+    return true;
+  }
+  const key = (model.key ?? '').trim().toLowerCase();
+  return CLOUD_ROUTING_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 /** Provider section heading for a model, derived from backend identity only. */
 export function providerLabel(model: KllmModelLike | null | undefined): string {
+  if (isCloudModel(model)) return CLOUD_PROVIDER_LABEL;
   return isHostedModel(model) ? HOSTED_PROVIDER_LABEL : KLLM_PROVIDER_LABEL;
 }
 
 /** Canonical provider identity for routing assertions. */
-export function providerOf(model: KllmModelLike | null | undefined): 'hosted-ollama' | 'kllm' {
+export function providerOf(
+  model: KllmModelLike | null | undefined,
+): ChatProviderId {
+  if (isCloudModel(model)) return CLOUD_PROVIDER;
   return isHostedModel(model) ? HOSTED_PROVIDER : KLLM_PROVIDER;
 }
 
 /** Hosted routing prefixes accepted from stored keys, including legacy spellings. */
 const HOSTED_ROUTING_PREFIXES = ['hosted-ollama:', 'hosted_ollama:'] as const;
+/** Cloud routing prefix. The provider also travels separately in the request. */
+const CLOUD_ROUTING_PREFIXES = ['kllm-cloud:', 'kllm_cloud:'] as const;
 
 /** Provider derived from an opaque model key, so routing survives a missing catalog row. */
-export function providerForKey(key: string | null | undefined): 'hosted-ollama' | 'kllm' {
+export function providerForKey(key: string | null | undefined): ChatProviderId {
   if (typeof key !== 'string') return KLLM_PROVIDER;
   const lower = key.trim().toLowerCase();
+  if (CLOUD_ROUTING_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
+    return CLOUD_PROVIDER;
+  }
   return HOSTED_ROUTING_PREFIXES.some((prefix) => lower.startsWith(prefix))
     ? HOSTED_PROVIDER
     : KLLM_PROVIDER;
@@ -911,7 +960,11 @@ export interface ModelIdentity {
  * Revora prefixes a hosted model's routing key with its provider. Strip only
  * those known internal prefixes; never guess about arbitrary model names.
  */
-const MODEL_ROUTING_PREFIXES = [...HOSTED_ROUTING_PREFIXES, 'kllm:'] as const;
+const MODEL_ROUTING_PREFIXES = [
+  ...HOSTED_ROUTING_PREFIXES,
+  ...CLOUD_ROUTING_PREFIXES,
+  'kllm:',
+] as const;
 
 export function stripModelRoutingPrefix(value: string | null | undefined): string {
   const trimmed = (value ?? '').trim();
@@ -936,6 +989,11 @@ export function canonicalModelKey(value: string | null | undefined): string {
   for (const prefix of HOSTED_ROUTING_PREFIXES) {
     if (lower.startsWith(prefix)) {
       return `${HOSTED_PROVIDER}:${trimmed.slice(prefix.length)}`;
+    }
+  }
+  for (const prefix of CLOUD_ROUTING_PREFIXES) {
+    if (lower.startsWith(prefix)) {
+      return `${CLOUD_PROVIDER}:${trimmed.slice(prefix.length)}`;
     }
   }
   if (lower.startsWith('kllm:')) return trimmed.slice('kllm:'.length);
@@ -963,7 +1021,12 @@ export function fallbackModelForKey(key: string): KllmModelLike {
     readiness: 'unknown',
     reason_code: 'not_in_catalog',
     provider,
-    category: provider === HOSTED_PROVIDER ? 'hosted' : 'kllm',
+    category:
+      provider === CLOUD_PROVIDER
+        ? CLOUD_PROVIDER
+        : provider === HOSTED_PROVIDER
+          ? 'hosted'
+          : 'kllm',
   };
 }
 
@@ -1002,7 +1065,12 @@ export function responseModelIdentity(
     key: requested ?? confirmed,
     display_name: confirmed ?? undefined,
     provider,
-    category: provider === HOSTED_PROVIDER ? 'hosted' : undefined,
+    category:
+      provider === CLOUD_PROVIDER
+        ? CLOUD_PROVIDER
+        : provider === HOSTED_PROVIDER
+          ? 'hosted'
+          : undefined,
   };
 }
 
@@ -1044,6 +1112,14 @@ export function modelProviderSlug(
   const provider = (model.provider ?? '').trim().toLowerCase();
   const key = (model.key ?? '').trim().toLowerCase();
   if (
+    model.category === CLOUD_PROVIDER ||
+    provider === CLOUD_PROVIDER ||
+    provider === 'kllm_cloud' ||
+    CLOUD_ROUTING_PREFIXES.some((prefix) => key.startsWith(prefix))
+  ) {
+    return CLOUD_PROVIDER;
+  }
+  if (
     model.category === 'hosted' ||
     provider === HOSTED_PROVIDER ||
     provider === 'hosted_ollama' ||
@@ -1068,15 +1144,56 @@ export const REVORA_MANAGEMENT_LABEL = 'Managed by Revora';
 export const KLLM_MANAGEMENT_LABEL = REVORA_MANAGEMENT_LABEL;
 /** kLLM identity + management attribution, e.g. for service-level headings. */
 export const KLLM_IDENTITY_LABEL = `kLLM — ${REVORA_MANAGEMENT_LABEL}`;
+/** kLLM Cloud identity + management attribution. */
+export const CLOUD_IDENTITY_LABEL = `kLLM Cloud — ${REVORA_MANAGEMENT_LABEL}`;
 /** Supporting contextual description for kLLM surfaces. */
 export const KLLM_SUPPORT_DESCRIPTION =
   'kLLM is integrated and managed through Revora. Model availability, configuration, and access are controlled through the Revora platform.';
+/** Supporting contextual description for kLLM Cloud surfaces. */
+export const CLOUD_SUPPORT_DESCRIPTION =
+  'kLLM Cloud is an independent managed provider. Only models an administrator approves appear here, and Chat and Reviews can be enabled separately for each model.';
 
 export function managementLabelForModel(model: ModelIdentity | null | undefined): string {
   const slug = modelProviderSlug(model);
   if (slug === 'ollama') return REVORA_MANAGEMENT_LABEL;
+  if (slug === CLOUD_PROVIDER) return REVORA_MANAGEMENT_LABEL;
   if (slug === 'kllm') return KLLM_MANAGEMENT_LABEL;
   return `Managed by ${slug}`;
+}
+
+/**
+ * Readable provider source for a model: "kLLM", "Hosted Models" or "kLLM Cloud".
+ * Derived from provider, category or routing prefix, so the same model name from
+ * different providers always gets a different label. Never returns a raw prefix.
+ */
+export function providerSourceLabel(model: ModelIdentity | null | undefined): string {
+  const slug = modelProviderSlug(model);
+  if (slug === CLOUD_PROVIDER) return CLOUD_PROVIDER_LABEL;
+  if (slug === 'ollama') return HOSTED_PROVIDER_LABEL;
+  if (slug === 'kllm') return KLLM_PROVIDER_LABEL;
+  // Unknown provider id: show it as a readable word rather than a slug.
+  return slug
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Provenance stamped on a turn when it is created: the model key, its provider
+ * and the clean catalog name. The catalog name is used only when it belongs to
+ * the same model, so a stale selection never names a turn after another model.
+ */
+export function turnProvenance(
+  chatModel: string | null | undefined,
+  catalogModel: KllmModelLike | null | undefined,
+): MessageProvenance {
+  if (!chatModel) return { model: null, provider: null, displayName: null };
+  const matches =
+    !!catalogModel && canonicalModelKey(catalogModel.key) === canonicalModelKey(chatModel);
+  return {
+    model: chatModel,
+    provider: providerForKey(chatModel),
+    displayName: matches ? modelDisplayName(catalogModel) || null : null,
+  };
 }
 
 /** Consistent short context label, e.g. 4096 tokens -> 4K. */
@@ -1220,7 +1337,9 @@ export interface GroupedModels {
 }
 
 export function isModelSelectable(model: KllmModelLike | null | undefined): boolean {
-  return !!model && model.ready === true && model.readiness === 'ready';
+  // A model is selectable unless it is *confirmed* unavailable. Unverified
+  // models remain selectable but are labelled honestly (not "Ready").
+  return !!model && model.ready === true && model.readiness !== 'unavailable';
 }
 
 export function groupModels(models: KllmModelLike[] | null | undefined): GroupedModels {
@@ -1280,6 +1399,15 @@ const REASON_TEXT: Record<string, string> = {
   hosted_unreachable: 'Hosted Ollama is unreachable.',
   hosted_state_stale: 'Hosted model status is stale.',
   admin_disabled: 'Disabled by an administrator.',
+  kllm_cloud_disabled: 'kLLM Cloud is currently unavailable.',
+  kllm_cloud_unreachable: 'kLLM Cloud is unreachable.',
+  kllm_cloud_catalog_stale: 'The kLLM Cloud catalogue is stale.',
+  kllm_cloud_not_configured: 'kLLM Cloud is not configured on this server.',
+  not_approved: 'An administrator has not approved this model yet.',
+  chat_not_enabled: 'An administrator has not enabled this model for Chat.',
+  review_not_enabled: 'An administrator has not enabled this model for Reviews.',
+  model_disabled: 'This model is temporarily disabled by an administrator.',
+  model_removed: 'This model is no longer offered by kLLM Cloud.',
 };
 
 export function readinessReason(model: KllmModelLike | null | undefined): string | null {
@@ -1293,6 +1421,7 @@ export function readinessReason(model: KllmModelLike | null | undefined): string
 
 export interface CatalogGroups {
   kllm: GroupedModels;
+  cloud: GroupedModels;
   hosted: GroupedModels;
 }
 
@@ -1301,10 +1430,54 @@ export function groupCatalogModels(
   models: KllmModelLike[] | null | undefined,
 ): CatalogGroups {
   const kllm: KllmModelLike[] = [];
+  const cloud: KllmModelLike[] = [];
   const hosted: KllmModelLike[] = [];
   for (const model of models ?? []) {
-    if (isHostedModel(model)) hosted.push(model);
+    if (isCloudModel(model)) cloud.push(model);
+    else if (isHostedModel(model)) hosted.push(model);
     else kllm.push(model);
   }
-  return { kllm: groupModels(kllm), hosted: groupModels(hosted) };
+  return {
+    kllm: groupModels(kllm),
+    cloud: groupModels(cloud),
+    hosted: groupModels(hosted),
+  };
+}
+
+/** Structural catalog shape; keeps this pure state module free of API imports. */
+export interface ChatCatalogLike {
+  models?: KllmModelLike[] | null;
+  providers?: ReadonlyArray<{
+    provider?: string | null;
+    enabled?: boolean;
+    configured?: boolean;
+    reachable?: boolean;
+  }> | null;
+}
+
+/** A managed provider is usable only when it is enabled, configured and reachable. */
+export function isManagedProviderReachable(
+  catalog: ChatCatalogLike | null | undefined,
+  providerId: string,
+): boolean {
+  const provider = catalog?.providers?.find((item) => item.provider === providerId);
+  return !!provider && provider.enabled === true && provider.configured === true && provider.reachable === true;
+}
+
+/**
+ * Models shown in Chat. Offline/unconfigured kLLM and kLLM Cloud models are
+ * hidden entirely; hosted and third-party BYOK models stay visible.
+ */
+export function visibleChatModels(catalog: ChatCatalogLike | null | undefined): KllmModelLike[] {
+  const models = catalog?.models ?? [];
+  const kllmOk = isManagedProviderReachable(catalog, KLLM_PROVIDER);
+  const cloudOk = isManagedProviderReachable(catalog, CLOUD_PROVIDER);
+  return models.filter((model) => {
+    if (isCloudModel(model)) return cloudOk;
+    if (isHostedModel(model)) return true;
+    // Independently configured BYOK providers are not managed by kLLM.
+    const provider = (model.provider ?? '').trim().toLowerCase();
+    if (provider && provider !== KLLM_PROVIDER && provider !== 'ollama') return true;
+    return kllmOk;
+  });
 }

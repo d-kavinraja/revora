@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { LayoutGridIcon, FolderIcon, ClipboardIcon, KeyIcon, GlobeIcon, ChartBarIcon, ActivityIcon, GitBranchIcon, LogoutIcon, MenuIcon, XIcon, TrendingUpIcon, BookOpenIcon, BrainIcon, ZapIcon, MessageCircleIcon } from '@animateicons/react/lucide';
-import { HelpCircle } from 'lucide-react';
+import { CloudLightning } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useEffect, useRef, useState } from 'react';
 import { useChatModes } from '@/lib/use-chat-modes';
@@ -21,6 +21,13 @@ type NavLink = {
   feature?: string;
 };
 
+// lucide's CloudLightning has no animation handle; the nav item still passes
+// `isAnimated` and a ref, so a thin wrapper drops the unsupported prop before
+// it can reach the DOM.
+function CloudNavIcon({ size }: { size?: number; isAnimated?: boolean }) {
+  return <CloudLightning size={size} />;
+}
+
 const navLinks: NavLink[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGridIcon },
   { href: '/repositories', label: 'Repositories', icon: FolderIcon },
@@ -34,6 +41,7 @@ const bottomLinks: NavLink[] = [
   { href: '/settings/api-keys', label: 'API keys', icon: KeyIcon },
   { href: '/settings/providers', label: 'Providers', icon: GlobeIcon },
   { href: '/settings/kllm', label: 'kLLM', icon: ZapIcon, feature: 'kllm_page' },
+  { href: '/settings/kllm-cloud', label: 'kLLM Cloud', icon: CloudNavIcon as unknown as typeof LayoutGridIcon, feature: 'kllm_cloud_page' },
   { href: '/settings/routing', label: 'Routing', icon: GitBranchIcon },
   { href: '/settings/health', label: 'Health', icon: ActivityIcon },
   { href: '/settings/usage', label: 'Usage', icon: ChartBarIcon, feature: 'usage' },
@@ -133,7 +141,7 @@ function BottomLinkItem({ href, label, icon: Icon, isActive, collapsed, isDisabl
   );
 }
 
-export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onHelpClick?: () => void }) {
+export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const router = useRouter();
@@ -190,23 +198,12 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
 
   return (
     <>
-      <div className="md:hidden fixed left-0 right-0 h-[var(--revora-app-header-h)] bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
+      <div className="md:hidden fixed left-0 right-0 h-[var(--revora-app-header-h)] bg-sidebar border-b border-sidebar-border z-40 flex items-center px-4 justify-between pt-[env(safe-area-inset-top,0px)] shadow-sm" style={{ top: 'var(--revora-announcement-height, 0px)' }}>
         <div className="flex items-center gap-2.5">
           <Image src="/revora-logo.png" alt="Revora Logo" width={28} height={28} style={{ width: 28, height: 28 }} className="rounded-lg" />
           <span className="font-bold text-base text-foreground font-heading" style={{ fontFamily: 'var(--font-oxanium, inherit)' }}>Revora</span>
         </div>
         <div className="flex items-center gap-2">
-          {isChat && onHelpClick && (
-            <button
-              type="button"
-              onClick={onHelpClick}
-              aria-label="Open setup tour"
-              title="Setup tour"
-              className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
-            >
-              <HelpCircle size={20} />
-            </button>
-          )}
           <button
             onClick={() => setMobileOpen(true)}
             className="p-2 rounded-lg bg-surface-2 border border-border text-muted-foreground hover:text-foreground transition-colors"
@@ -297,7 +294,7 @@ export function Sidebar({ isChat = false, onHelpClick }: { isChat?: boolean; onH
               isActive={isActive(link.href)}
               collapsed={collapsed}
               isDisabled={isDisabled(link.feature)}
-              isNew={link.href === '/settings/kllm'}
+              isNew={link.href === '/settings/kllm' || link.href === '/settings/kllm-cloud'}
             />
           ))}
         </nav>

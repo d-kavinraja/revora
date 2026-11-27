@@ -23,8 +23,8 @@ export function ManagedByRevora({
 }) {
   const cls =
     size === 'xs'
-      ? `px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal ${className ?? ''}`
-      : className;
+      ? `managed-by-revora-pill px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal ${className ?? ''}`
+      : `managed-by-revora-pill ${className ?? ''}`;
   return (
     <Pill tone="brand" className={cls} title={title ?? REVORA_MANAGEMENT_LABEL}>
       {REVORA_MANAGEMENT_LABEL}

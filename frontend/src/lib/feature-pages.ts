@@ -59,6 +59,11 @@ export const FEATURE_PAGE_ROUTES: readonly FeaturePageRoute[] = [
     gateFeature: 'reviews',
   },
   {
+    prefix: '/settings/kllm-cloud',
+    features: ['kllm_cloud_page'],
+    gateFeature: 'kllm_cloud_page',
+  },
+  {
     prefix: '/settings/kllm',
     features: ['kllm_page'],
     gateFeature: 'kllm_page',

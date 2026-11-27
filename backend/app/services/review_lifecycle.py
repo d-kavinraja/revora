@@ -561,6 +561,10 @@ class ReviewLifecycleService:
                 }
             )
 
+        # The execution list is complete and unpaginated (no limit/offset), so
+        # its length is the authoritative total number of executions for this
+        # review. Clients (the collapsed Review History header) count from it
+        # and must not derive a count from the lifecycle rows above.
         exec_result = await db.execute(
             select(ReviewExecution)
             .where(ReviewExecution.review_id == current_review_id)

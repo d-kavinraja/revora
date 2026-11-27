@@ -8,6 +8,8 @@ export interface ThinkingOrbProps {
   /** Sphere diameter in CSS pixels. */
   size?: number;
   className?: string;
+  /** Override the cycling caption with a truthful, status-driven label. */
+  statusLabel?: string;
 }
 
 /**
@@ -57,7 +59,7 @@ function useDarkMode() {
  * Self-contained 3D dotted thinking orb. No input, no inline SVG, no external
  * styles required: it renders only the particle sphere and its status pill.
  */
-export function ThinkingOrb({ active = true, size = 132, className = "" }: ThinkingOrbProps) {
+export function ThinkingOrb({ active = true, size = 132, className = "", statusLabel }: ThinkingOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const startRef = useRef(0);
   const exitAtRef = useRef<number | null>(null);
@@ -65,11 +67,11 @@ export function ThinkingOrb({ active = true, size = 132, className = "" }: Think
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dark = useDarkMode();
   const [label, setLabel] = useState<string>(STAGES[0]);
-  const displayLabel = active ? label : "Done";
+  const displayLabel = active ? (statusLabel ?? label) : "Done";
 
-  // Stage cycling. The Done label is derived from `active` at render time.
+  // Stage cycling only when no truthful label is supplied.
   useEffect(() => {
-    if (!active) return;
+    if (!active || statusLabel) return;
     let index = 0;
     queueMicrotask(() => setLabel(STAGES[index]));
     const id = window.setInterval(() => {
@@ -77,7 +79,7 @@ export function ThinkingOrb({ active = true, size = 132, className = "" }: Think
       setLabel(STAGES[index]);
     }, 1900);
     return () => window.clearInterval(id);
-  }, [active]);
+  }, [active, statusLabel]);
 
   // Lifecycle: (re)assembly on activation, emerald sweep + condense on deactivation.
   useEffect(() => {

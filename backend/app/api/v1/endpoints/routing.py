@@ -90,34 +90,40 @@ async def get_models_per_provider(
     )
     grouped = dict(probe_results)
 
-    # Managed providers (kLLM) expose ready models plus administrator-approved
-    # on-demand models and need no user key.
-    from app.core.config import settings as _settings
+    # Managed providers expose a server-owned catalogue and need no user key.
+    # Each provider reads its own source: kLLM Cloud options come from the
+    # cloud snapshot/approval gate and must never be served from local kLLM
+    # readiness (which would fabricate cloud models on a local-only install).
+    from app.services import kllm_cloud_service
 
-    if _settings.KLLM_ENABLED:
-        from app.services import kllm_service
+    for provider in await provider_registry_service.get_usable(db):
+        if not provider.is_managed:
+            continue
+        if provider.name in user_keys:
+            continue
+        try:
+            if provider.slug == kllm_cloud_service.PROVIDER_SLUG:
+                models = await kllm_cloud_service.model_options(db, surface="review")
+            else:
+                from app.services import kllm_service
 
-        for provider in await provider_registry_service.get_usable(db):
-            if not provider.is_managed:
-                continue
-            if provider.name in user_keys:
-                continue
-            try:
                 models = await kllm_service.get_model_options(db)
-            except Exception:  # noqa: BLE001 - never leak kLLM details
-                grouped[provider.name] = []
-                continue
-            blocked = disabled_overrides.get(provider.name, set()) | (
-                disabled_overrides.get(provider.slug, set())
-            )
-            grouped[provider.name] = [
-                {
-                    "model": m["canonical_model_name"],
-                    "litellm_model": f"{provider.litellm_provider}/{m['canonical_model_name']}",
-                }
-                for m in models
-                if m["canonical_model_name"] not in blocked
-            ]
+        except Exception:  # noqa: BLE001 - never leak provider details
+            grouped[provider.name] = []
+            continue
+        blocked = disabled_overrides.get(provider.name, set()) | (
+            disabled_overrides.get(provider.slug, set())
+        )
+        grouped[provider.name] = [
+            {
+                "model": m["canonical_model_name"],
+                "litellm_model": m.get("litellm_model_name")
+                or f"{provider.litellm_provider}/{m['canonical_model_name']}",
+            }
+            for m in models
+            if m["canonical_model_name"] not in blocked
+            and m.get("model_id", m["canonical_model_name"]) not in blocked
+        ]
 
     return grouped
 
@@ -189,18 +195,31 @@ async def update_routing_preferences(
                 )
                 raise HTTPException(status_code=400, detail=detail)
 
-            # Managed providers are only selectable while the requested model
-            # is loaded and ready in kLLM. Never substitute another model.
+            # Managed providers validate against their own gate. The local
+            # kLLM gate knows nothing about Cloud models (and a same-named
+            # local model must not validate a Cloud one), so Cloud uses its
+            # approval/surface/readiness check. Never substitute another model.
             if provider_row is not None and provider_row.is_managed:
                 pref_model = feature_pref.get("model")
                 if pref_model:
+                    from app.services import kllm_cloud_service
+                    from app.services.kllm_cloud_errors import KllmCloudError
                     from app.services.kllm_service import (
                         KllmError,
                         ensure_model_selectable,
                     )
 
                     try:
-                        await ensure_model_selectable(db, pref_model)
+                        if provider_row.slug == kllm_cloud_service.PROVIDER_SLUG:
+                            await kllm_cloud_service.ensure_model_ready(
+                                db, pref_model, surface="review"
+                            )
+                        else:
+                            await ensure_model_selectable(db, pref_model)
+                    except KllmCloudError as exc:
+                        raise HTTPException(
+                            status_code=400, detail=exc.message
+                        ) from exc
                     except KllmError as exc:
                         raise HTTPException(
                             status_code=400, detail=exc.message

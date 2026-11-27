@@ -2,7 +2,7 @@
 
 import { useMemo, type RefObject } from 'react';
 import type { ChatMessage, ResponseMetrics } from '@/lib/chat-state';
-import ThinkingOrb from '@/components/ui/ai-thiking-orb-and-input';
+import ChatActivityIndicator from '@/components/chat/chat-activity-indicator';
 import { MessageBubble } from './message-bubble';
 
 interface ChatMessageListProps {
@@ -10,6 +10,12 @@ interface ChatMessageListProps {
   metrics?: Record<string, ResponseMetrics>;
   activeStreamMessageId?: string | null;
   thinking?: boolean;
+  /**
+   * Provider-neutral, already-mapped activity label produced by
+   * `chat-activity.ts`. When null/empty the indicator renders nothing at all
+   * (e.g. once content starts streaming). Never names a provider.
+   */
+  activityLabel?: string | null;
   thinkingOrbRef?: RefObject<HTMLDivElement | null>;
   canEdit?: boolean;
   canRegenerate?: boolean;
@@ -26,6 +32,7 @@ export function ChatMessageList({
   metrics,
   activeStreamMessageId,
   thinking = false,
+  activityLabel,
   thinkingOrbRef,
   canEdit = false,
   canRegenerate = false,
@@ -41,9 +48,16 @@ export function ChatMessageList({
       && message.id === activeStreamMessageId
       && !message.content?.trim();
     if (isPlaceholder && thinking) {
+      // The compact pill lives in the same column as MessageBubble so the
+      // existing layout shift is reduced compared to the previous 132 px
+      // centered orb. The shell still auto-scrolls the ref into view.
       return (
-        <div key={message.id} ref={thinkingOrbRef} className="py-8 flex flex-col items-center justify-center">
-          <ThinkingOrb active={thinking} size={132} />
+        <div
+          key={message.id}
+          ref={thinkingOrbRef}
+          className="flex flex-col items-start gap-2 py-3"
+        >
+          <ChatActivityIndicator label={activityLabel} />
         </div>
       );
     }
@@ -77,6 +91,7 @@ export function ChatMessageList({
     editingMessageId,
     activeStreamMessageId,
     thinking,
+    activityLabel,
     thinkingOrbRef,
     messages,
     metrics,

@@ -46,6 +46,13 @@ const PHASE_LABEL: Record<ResponsePhase, string> = {
   truncated: 'Response truncated',
 };
 
+const ACTION_BUTTON =
+  'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3';
+const ASSISTANT_ACTION = 'chat-ink hover:bg-muted/60 hover:text-foreground';
+// Opaque, bordered pill so Copy/Edit stay legible over the bright SideRays beam.
+const USER_ACTION =
+  'border border-slate-200/80 bg-white/90 text-slate-700 shadow-sm backdrop-blur-md hover:border-slate-300 hover:bg-white hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-white/25 dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:border-white/40 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-white/50';
+
 const PHASE_DOT: Record<ResponsePhase, string> = {
   preparing: 'bg-brand animate-pulse',
   thinking: 'bg-brand/80 animate-pulse',
@@ -413,10 +420,16 @@ export function MessageBubble({
 
           {!isUser && attribution.label ? (
             <p
-              className="chat-ink mt-2 truncate text-[11px] leading-5 opacity-70"
+              className="chat-ink mt-2 flex min-w-0 items-center gap-1.5 text-[11px] leading-5 opacity-70"
               title={attribution.title ?? undefined}
             >
-              {attribution.label}
+              {responseModel ? (
+                <ModelIcon model={responseModel} size={13} className="shrink-0" />
+              ) : null}
+              <span className="min-w-0 truncate">{attribution.label}</span>
+              {attribution.management ? (
+                <span className="shrink-0 whitespace-nowrap">· {attribution.management}</span>
+              ) : null}
             </p>
           ) : null}
         </div>
@@ -426,7 +439,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={handleCopy}
-              className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3"
+              className={cn(ACTION_BUTTON, isUser ? USER_ACTION : ASSISTANT_ACTION)}
               aria-label={copied ? 'Copied' : 'Copy message'}
               title={copied ? 'Copied' : 'Copy'}
             >
@@ -438,7 +451,7 @@ export function MessageBubble({
                 type="button"
                 onClick={() => onBeginEdit(message.id)}
                 disabled={!canEdit}
-                className="chat-ink inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 [@media(hover:none)]:h-10 [@media(hover:none)]:min-w-10 [@media(hover:none)]:justify-center [@media(hover:none)]:px-3"
+                className={cn(ACTION_BUTTON, USER_ACTION, 'disabled:cursor-not-allowed disabled:opacity-45')}
                 aria-label="Edit message"
                 title={canEdit ? 'Edit' : 'Wait for the response to finish'}
               >

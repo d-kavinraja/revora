@@ -4,6 +4,20 @@
 
 @custom-variant dark (&:is(.dark *, .admin-dark *));
 
+/* Managed-by-Revora badges remain legible over chat rays and other surfaces. */
+.managed-by-revora-pill {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+  backdrop-filter: blur(8px);
+}
+:is(.dark, .admin-dark) .managed-by-revora-pill {
+  background-color: rgb(23 37 84 / 0.9) !important;
+  border-color: rgb(96 165 250 / 0.45) !important;
+  color: #bfdbfe !important;
+}
+
 /* Chat-only secondary ink: higher contrast plus a soft halo so labels stay
    crisp over the fixed full-bleed SideRays layer in both themes. */
 .chat-ink {
@@ -153,7 +167,7 @@
   --revora-announcement-height: 0px;
   /* Height of the fixed mobile navigation header (md:hidden). Single source
      of truth shared by the sidebar and the inference loader. */
-  --revora-app-header-h: 4rem;
+  --revora-app-header-h: calc(4rem + env(safe-area-inset-top, 0px));
 
   /* Global announcement banner — warm maintenance-alert palette */
   --announcement-bg: #F8E9E5;
@@ -454,7 +468,10 @@
 
 /* Heading font utility */
 .font-heading {
-  font-family: var(--font-heading);
+  /* Reference the next/font variable directly: `--font-heading` is declared on
+     :root while `--font-oxanium` is scoped to <body>, so a second-level
+     reference would fall back to ui-sans-serif before it ever reached body. */
+  font-family: var(--font-oxanium, ui-sans-serif);
   letter-spacing: -0.01em;
 }
 

@@ -1,14 +1,28 @@
 'use client';
 
 import type { ChatCatalog, ChatCatalogProvider } from '@/lib/api';
-import { HOSTED_PROVIDER, KLLM_PROVIDER } from '@/lib/chat-state';
+import { CLOUD_PROVIDER, HOSTED_PROVIDER, KLLM_PROVIDER } from '@/lib/chat-state';
 
 function providerBannerText(providerId: string, provider: ChatCatalogProvider): string | null {
-  const label = providerId === HOSTED_PROVIDER ? 'Hosted Models' : 'kLLM';
+  const label =
+    providerId === CLOUD_PROVIDER
+      ? 'kLLM Cloud'
+      : providerId === HOSTED_PROVIDER
+        ? 'Hosted Models'
+        : 'kLLM';
+  const isCloud = providerId === CLOUD_PROVIDER;
   if (!provider.enabled) return null;
   if (provider.waking) return 'Starting hosted models… This can take a moment.';
-  if (!provider.configured) return `${label} are not configured on this server.`;
-  if (!provider.reachable) return `${label} are unreachable right now.`;
+  if (!provider.configured) {
+    return isCloud
+      ? `${label} is not configured on this server.`
+      : `${label} are not configured on this server.`;
+  }
+  if (!provider.reachable) {
+    return isCloud
+      ? `${label} is unreachable right now.`
+      : `${label} are unreachable right now.`;
+  }
   if (provider.stale) return `${label} status is stale. Refresh before sending.`;
   if (provider.discovery_ok === false) return `Checking ${label.toLowerCase()} readiness…`;
   return null;
@@ -28,7 +42,7 @@ export function ChatProviderStatusBanners({ catalog }: { catalog: ChatCatalog | 
     );
   }
 
-  const banners = [HOSTED_PROVIDER, KLLM_PROVIDER]
+  const banners = [HOSTED_PROVIDER, KLLM_PROVIDER, CLOUD_PROVIDER]
     .map((providerId) => {
       const provider = providers.find((p) => p.provider === providerId);
       if (!provider) return null;

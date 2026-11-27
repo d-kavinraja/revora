@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Boxes,
   Cloud,
+  CloudLightning,
   FileText,
   Flag,
   FolderGit2,
@@ -81,6 +82,12 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<NavItem> }
       { href: '/admin/models', label: 'Models', icon: Boxes, exact: false },
       { href: '/admin/kllm', label: 'kLLM', icon: Zap, exact: false },
       {
+        href: '/admin/kllm-cloud',
+        label: 'kLLM Cloud',
+        icon: CloudLightning,
+        exact: false,
+      },
+      {
         href: '/admin/hosted-ollama',
         label: 'Hosted models',
         icon: Cloud,
@@ -114,6 +121,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/providers': 'Providers',
   '/admin/models': 'Models',
   '/admin/kllm': 'kLLM Management',
+  '/admin/kllm-cloud': 'kLLM Cloud',
   '/admin/hosted-ollama': 'Hosted models',
   '/admin/features': 'Features',
   '/admin/maintenance': 'Maintenance',

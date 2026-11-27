@@ -67,6 +67,13 @@ class LLMService:
             raise ValueError(f"Model must be specified for provider '{provider}'")
 
         managed = await self._is_managed(provider)
+        if managed and await self._is_cloud(provider):
+            # kLLM Cloud is server-owned but has its own relay, catalog and
+            # approval gate: it must never touch KLLM_SERVER_URL or a user key.
+            content, prompt_tokens, completion_tokens = (
+                await self._cloud_completion(model, messages, timeout=timeout)
+            )
+            return content, prompt_tokens, completion_tokens
         if managed:
             # Server-owned provider: no user key, and readiness is validated
             # against live kLLM state immediately before the call.
@@ -208,6 +215,60 @@ class LLMService:
         except Exception as exc:
             logger.warning("Managed-provider lookup failed: %s", type(exc).__name__)
         return provider.lower() == "kllm"
+
+    async def _is_cloud(self, provider: str) -> bool:
+        """True when provider is the independent kLLM Cloud provider."""
+        if provider.lower() in ("kllm-cloud", "kllm_cloud"):
+            return True
+        try:
+            async with AsyncSessionLocal() as db:
+                from app.services.provider_registry import provider_registry_service
+
+                row = await provider_registry_service.get_by_identifier(db, provider)
+                return bool(
+                    row is not None
+                    and row.is_managed
+                    and row.slug == "kllm-cloud"
+                )
+        except Exception as exc:
+            logger.warning("Cloud-provider lookup failed: %s", type(exc).__name__)
+        return False
+
+    async def _cloud_completion(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        timeout: float | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        surface: str = "review",
+    ) -> tuple[str, int, int]:
+        """Non-streaming kLLM Cloud call behind the shared approval gate."""
+        from app.ai import kllm_cloud_client
+        from app.services import kllm_cloud_service
+
+        # The namespaced key is Revora's routing identity; the relay only ever
+        # accepts the bare canonical id. Normalize here so an internal caller
+        # cannot leak the prefix upstream.
+        model_id = kllm_cloud_service.model_id_from_key(model) or model
+        try:
+            async with AsyncSessionLocal() as db:
+                await kllm_cloud_service.ensure_model_ready(
+                    db, model_id, surface=surface
+                )
+        except kllm_cloud_service.KllmCloudError as exc:
+            raise ManagedModelError(
+                exc.message, exc.reason_code or "kllm_cloud_error"
+            ) from exc
+        result = await kllm_cloud_client.kllm_cloud_client.complete(
+            model_id,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=float(timeout) if timeout else None,
+        )
+        return result.content, result.prompt_tokens, result.completion_tokens
 
     def _managed_error_message(self, error: Exception, display_model: str) -> str:
         """Map managed kLLM errors to safe, user-facing messages.
@@ -367,6 +428,56 @@ class LLMService:
             temperature=temperature,
             # Diagnostic only: see complete_hosted().
             context_window=context_window,
+        ):
+            yield item
+
+    async def complete_cloud(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        timeout: float | None = None,
+    ) -> tuple[str, int, int, str | None]:
+        """Non-streaming completion via the independent kLLM Cloud relay.
+
+        ``model`` is the bare canonical relay id (the namespaced cloud key is
+        resolved by the caller). The caller must validate availability with
+        kllm_cloud_service.ensure_model_ready() first; this never autoloads.
+        """
+        from app.ai import kllm_cloud_client
+
+        result = await kllm_cloud_client.kllm_cloud_client.complete(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+        )
+        return (
+            result.content,
+            result.prompt_tokens,
+            result.completion_tokens,
+            getattr(result, "finish_reason", None),
+        )
+
+    async def stream_cloud_completion(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+    ) -> AsyncIterator[Any]:
+        """Stream normalized kLLM Cloud events, same contract as kLLM/hosted."""
+        from app.ai import kllm_cloud_client
+
+        async for item in kllm_cloud_client.kllm_cloud_client.stream(
+            model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
         ):
             yield item
 

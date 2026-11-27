@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { ReviewActions } from '@/components/shared/review-actions';
 import { useReviewStream, reviewStreamUrl } from '@/lib/events';
 import { modelSelectionView } from '@/lib/review-model-selection';
+import { reviewExecutionCount, reviewHistoryCountLabel } from '@/lib/review-history';
 
 // Code blocks in AI reviews always render in the light CodeView (white,
 // GitHub-style) regardless of the portal theme. Loaded on demand so the
@@ -113,14 +114,19 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   useReviewStream(reviewStreamUrl(id), (event) => {
     if (event.type === 'review.updated' || event.type === 'pr.state') {
       queryClient.invalidateQueries({ queryKey: ['review', id] });
+      // A new execution appends a row to this review's execution history, so
+      // the collapsed history count is recomputed with it.
+      queryClient.invalidateQueries({ queryKey: ['review-history', id] });
     }
   });
 
-  // Fetch review history
+  // Review history. The query always runs (not only while the section is
+  // expanded) because the collapsed header shows the execution count from it.
+  // The response is cached under one key, so expanding the section reuses the
+  // same payload and the count cannot drift from the listed executions.
   const { data: historyData } = useQuery({
     queryKey: ['review-history', id],
     queryFn: () => api.getReviewHistory(id),
-    enabled: showHistory,
   });
 
   // Fetch review timeline
@@ -135,6 +141,9 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     mutationFn: () => api.rerunReview(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      // A rerun appends an execution to this review, so the history count
+      // (and the expanded execution list) must pick it up.
+      queryClient.invalidateQueries({ queryKey: ['review-history', id] });
       refetch();
     },
     onError: (err: unknown) => {
@@ -146,6 +155,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     mutationFn: () => api.retryReview(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['review-history', id] });
       refetch();
     },
     onError: (err: unknown) => {
@@ -157,6 +167,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     mutationFn: () => api.restartReview(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['review-history', id] });
       refetch();
     },
     onError: (err: unknown) => {
@@ -586,8 +597,8 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         >
           <History size={16} />
           Review History for PR #{pr?.pr_number}
-          <span className="text-xs text-muted-foreground ml-2">
-            {historyData?.history?.length || 0} reviews
+          <span className="text-xs text-muted-foreground ml-2" aria-live="polite">
+            {historyData ? reviewHistoryCountLabel(reviewExecutionCount(historyData)) : '…'}
           </span>
         </button>
 

@@ -26,6 +26,9 @@ DEFAULT_FLAG_MESSAGES: dict[str, str] = {
     "mouthmap": "MouthMap is temporarily unavailable while we update the service.",
     "botaniq": "BotaniQ is temporarily unavailable while we update the service.",
     "chat": "Chat is temporarily unavailable while we update the service.",
+    "kllm_cloud_page": (
+        "kLLM Cloud is temporarily unavailable while we update the service."
+    ),
 }
 
 GENERIC_FLAG_MESSAGE = "This feature is temporarily unavailable. Please try again later."

@@ -209,7 +209,7 @@ async def validate_selection(
     """Re-check a resolved selection before execution.
 
     Raises :class:`ProviderUnavailableError` when the provider is blocked or a
-    managed (kLLM) model is no longer available. An unloaded model remains
+    managed (kLLM, kLLM Cloud) model is no longer available. An unloaded model remains
     *available*: automatic review-demand loading is decided later, using the
     administrator policy and the exact mapped model. Callers may re-resolve
     with the repository's fallback preference only on definitive failure.
@@ -221,6 +221,23 @@ async def validate_selection(
         db, selection.provider or ""
     )
     if row is not None and row.is_managed:
+        if row.slug == "kllm-cloud":
+            from app.services.kllm_cloud_service import (
+                KllmCloudError,
+                ensure_model_ready,
+            )
+
+            try:
+                await ensure_model_ready(
+                    db, selection.model or "", surface="review"
+                )
+            except KllmCloudError as exc:
+                raise ProviderUnavailableError(
+                    selection.provider or "",
+                    exc.message,
+                    definitive=bool(getattr(exc, "definitive", False)),
+                ) from exc
+            return
         from app.services.kllm_service import KllmError, ensure_model_selectable
 
         try:
@@ -336,16 +353,34 @@ def _api_source(source: str | None) -> str:
     return "unknown"
 
 
+# Stable slugs, not display-name substrings: ``ollama_cloud`` is a different
+# provider whose name also contains "cloud" and must keep its own label.
+_MANAGED_PROVIDER_LABELS = {
+    "kllm-cloud": "kLLM Cloud",
+    "kllm_cloud": "kLLM Cloud",
+    "kllm cloud": "kLLM Cloud",
+    "kllm": "kLLM",
+}
+
+
 def _normalize_provider_name(
     slug: str | None, name: str | None
 ) -> str | None:
-    """Standardize visible provider labels: the managed kLLM provider is
-    always displayed as ``kLLM`` (no parenthetical suffixes), while the
-    underlying slug/key stays ``kllm``."""
+    """Standardize the two managed provider labels.
+
+    Dispatch is on the stable slug, never on a substring of the display name:
+    ``ollama_cloud`` is Ollama Cloud, not kLLM Cloud. An exact known label is
+    still normalized for legacy snapshots that stored no slug, and any other
+    provider keeps the label the caller supplied.
+    """
     s = (slug or "").strip().lower()
+    known = _MANAGED_PROVIDER_LABELS.get(s)
+    if known:
+        return known
     n = (name or "").strip()
-    if s == "kllm" or n.lower().startswith("kllm"):
-        return "kLLM"
+    exact = _MANAGED_PROVIDER_LABELS.get(n.lower())
+    if exact:
+        return exact
     return name
 
 

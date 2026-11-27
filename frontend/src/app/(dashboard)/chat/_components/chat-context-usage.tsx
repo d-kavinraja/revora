@@ -67,14 +67,14 @@ export function ChatContextUsage({ contextInfo, open, onOpenChange }: ChatContex
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="chat-ink inline-flex h-8 min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs transition hover:bg-muted/60 hover:text-foreground"
+        className="chat-ink inline-flex h-10 min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs transition hover:bg-muted/60 hover:text-foreground md:h-8 md:w-auto"
         aria-label={`Context information: ${contextInfo.usedPct !== null
           ? `${contextInfo.usedPct}% of the window used by the prompt`
           : `${contextInfo.promptTokens.toLocaleString()} estimated prompt tokens`}`}
         aria-expanded={open}
         title="Context information"
       >
-        <span>Context</span>
+        <span className="max-sm:hidden">Context</span>
         {contextInfo.usedPct !== null ? <span className="chat-ink tabular-nums">{contextInfo.usedPct}%</span> : null}
         <ChevronDownIcon size={13} className={`transition ${open ? 'rotate-180' : ''}`} />
       </button>

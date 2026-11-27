@@ -18,6 +18,7 @@ import { HandoffBeam, type BeamPhase } from "@/components/ui/handoff-beam";
 import type { ChatCatalog } from "@/lib/api";
 import type { ReasoningEffort } from "@/lib/chat-api";
 import { CHAT_MAX_MESSAGE_CHARS } from "@/lib/chat-state";
+import { useChatKeyboard } from "@/lib/use-chat-keyboard";
 import type { SpeechPhase } from "@/lib/speech";
 
 import { ModelPicker } from "./model-picker";
@@ -134,7 +135,7 @@ function EffortTrigger({ value, disabled }: {
     <Select.Trigger
       disabled={disabled}
       className={cn(
-        "chat-ink group/effort-trigger h-9 w-[100px] sm:w-auto shrink-0 inline-flex items-center justify-between gap-2 rounded-full border border-border/70 bg-transparent px-3 text-xs font-medium outline-none transition hover:bg-muted/50 hover:text-foreground focus:border-brand/50 disabled:cursor-not-allowed disabled:opacity-60",
+        "chat-ink group/effort-trigger h-9 w-[88px] max-sm:w-[76px] max-sm:px-2 sm:w-auto shrink-0 inline-flex items-center justify-between gap-2 rounded-full border border-border/70 bg-transparent px-2.5 text-xs font-medium outline-none transition hover:bg-muted/50 hover:text-foreground focus:border-brand/50 disabled:cursor-not-allowed disabled:opacity-60",
         "data-[popup-open]:bg-muted/50"
       )}
       aria-label="Reasoning effort"
@@ -174,6 +175,7 @@ export function ChatComposer({
   caretRequest = 0,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const keyboardOpen = useChatKeyboard();
   const [focused, setFocused] = useState(false);
   const nearLimit = value.length > CHAT_MAX_MESSAGE_CHARS * 0.92;
   const showCount = value.length > 0;
@@ -187,8 +189,9 @@ export function ChatComposer({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [value]);
+    const cap = keyboardOpen ? 120 : 220;
+    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+  }, [value, keyboardOpen]);
 
   useEffect(() => {
     if (!caretRequest) return;
@@ -204,6 +207,20 @@ export function ChatComposer({
   const speechStatusText = speech
     ? speechStatus(speech.phase, speech.elapsedMs, speech.maxSeconds)
     : null;
+  const voiceNotice = speech?.error
+    ? { text: speech.error, alert: true }
+    : speech?.enabled && speech.readiness !== 'ready'
+      ? {
+          alert: false,
+          text: speech.readiness === 'recovering'
+            ? 'Voice input is recovering. Try again shortly.'
+            : speech.readiness === 'disabled'
+              ? 'Voice input is turned off by an administrator.'
+              : speech.readiness === 'authentication_error'
+                ? 'Voice input could not authenticate.'
+                : 'Voice input is temporarily unavailable. Retrying automatically.',
+        }
+      : null;
 
   const phase: BeamPhase = sending
     ? generationPhase === "generating"
@@ -217,22 +234,22 @@ export function ChatComposer({
   const isActive = focused || value.trim().length > 0;
 
   return (
-    <div className="shrink-0 px-3 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-3">
+    <div className="shrink-0 px-4 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-3">
       <div className="mx-auto w-full max-w-3xl">
-        {speech?.error ? (
-          <p role="alert" className="chat-ink mb-2 px-2 text-xs text-destructive">
-            {speech.error}
-          </p>
-        ) : speech?.enabled && speech.readiness !== 'ready' ? (
-          <p role="status" className="chat-ink mb-2 px-2 text-xs text-muted-foreground">
-            {speech.readiness === 'recovering'
-              ? 'Voice input is recovering. Try again shortly.'
-              : speech.readiness === 'disabled'
-                ? 'Voice input is turned off by an administrator.'
-                : speech.readiness === 'authentication_error'
-                  ? 'Voice input could not authenticate.'
-                  : 'Voice input is temporarily unavailable. Retrying automatically.'}
-          </p>
+        {voiceNotice ? (
+          <>
+            <div
+              role={voiceNotice.alert ? 'alert' : 'status'}
+              className={cn(
+                'mb-1.5 flex max-w-full items-center gap-2 self-start rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-[11px] text-muted-foreground',
+                keyboardOpen && 'max-md:hidden',
+              )}
+            >
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+              <span className="truncate">{voiceNotice.text}</span>
+            </div>
+            {keyboardOpen ? <span className="sr-only" role="status">{voiceNotice.text}</span> : null}
+          </>
         ) : helperText ? (
           <p className="chat-ink mb-2 px-2 text-xs">{helperText}</p>
         ) : null}
@@ -289,7 +306,7 @@ export function ChatComposer({
             ) : null}
 
             <div className="mt-1 flex items-center justify-between gap-2 pt-1">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 flex-wrap">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <ModelPicker
                   catalog={modelStatus}
                   value={modelValue}
@@ -319,7 +336,7 @@ export function ChatComposer({
                       className="z-40"
                     >
                       <Select.Popup
-                        className="w-56 rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-xl backdrop-blur-md"
+                        className="w-56 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-xl backdrop-blur-md"
                       >
                         <Select.List className="max-h-60 space-y-0.5 overflow-y-auto">
                           {EFFORT_ITEMS.map((item) => (
@@ -356,7 +373,7 @@ export function ChatComposer({
                       <button
                         type="button"
                         onClick={speech.onStop}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-foreground transition hover:bg-brand/90"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 bg-brand text-brand-foreground transition hover:bg-brand/90"
                         aria-label="Stop recording and transcribe"
                         title="Stop recording and transcribe"
                       >
@@ -366,7 +383,7 @@ export function ChatComposer({
                       <button
                         type="button"
                         disabled
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-muted-foreground"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 border border-border/70 text-muted-foreground"
                         aria-label={
                           speech.phase === 'requesting'
                             ? 'Waiting for microphone permission'
@@ -385,7 +402,7 @@ export function ChatComposer({
                         type="button"
                         onClick={speech.onStart}
                         disabled={disabled || sending || speech.readiness !== 'ready'}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Start voice input"
                         title={
                           speech.readiness === 'ready'
@@ -404,7 +421,7 @@ export function ChatComposer({
                       <button
                         type="button"
                         onClick={speech.onCancel}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         aria-label="Cancel voice input"
                         title="Cancel voice input"
                       >
@@ -422,7 +439,7 @@ export function ChatComposer({
                   <button
                     type="button"
                     onClick={onStop}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition hover:opacity-90"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 bg-foreground text-background transition hover:opacity-90"
                     aria-label="Stop generation"
                     title="Stop generation"
                   >
@@ -433,7 +450,7 @@ export function ChatComposer({
                     type="button"
                     onClick={onSend}
                     disabled={disabled || sending || !value.trim()}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-9 md:w-9 bg-foreground text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label="Send message"
                     title="Send message"
                   >
@@ -444,7 +461,7 @@ export function ChatComposer({
             </div>
           </div>
         </HandoffBeam>
-        <p className="chat-ink mt-1.5 px-2 text-center text-[11px] md:mt-2">
+        <p className="chat-ink mt-1 px-2 text-center text-[10px] md:mt-2 md:text-[11px]">
           AI can make mistakes. Check important information.
         </p>
       </div>

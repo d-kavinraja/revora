@@ -1,6 +1,6 @@
 import Image from 'next/image';
 
-import { GlobeIcon } from 'lucide-react';
+import { CloudLightning, GlobeIcon } from 'lucide-react';
 import {
   Azure,
   Gemini,
@@ -56,6 +56,17 @@ export function ProviderIcon({ slug, size = 24, className = '' }: { slug?: strin
     case 'azure':
     case 'azure_openai':
       return <Azure.Color size={size} className={className} />;
+    case 'kllm-cloud':
+    case 'kllm_cloud':
+    case 'cloud-lightning':
+      // kLLM Cloud is a Revora-managed provider, not a third-party brand.
+      return (
+        <CloudLightning
+          size={size}
+          className={cn('text-foreground', className)}
+          aria-hidden
+        />
+      );
     case 'kllm':
       // Official kLLM logo (served from /assets/kllm.svg).
       return (

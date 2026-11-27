@@ -13,6 +13,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   grok: 'Grok',
   groq: 'Groq',
   kllm: 'kLLM',
+  'kllm-cloud': 'kLLM Cloud',
   mistral: 'Mistral AI',
   mistralai: 'Mistral AI',
   nvidia: 'NVIDIA NIM',

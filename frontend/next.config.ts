@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     // The /api/v1 rewrite uses httpxy, whose default proxy timeout is 30s.
     // A queued speech request can legitimately take longer than that, so the
     // proxy must outlast the backend's own 300s streaming read timeout.
-    proxyTimeout: 310_000,
+    proxyTimeout: 610_000,
   },
   // Same-origin API proxy. The decision comes from the same module the
   // browser client uses (src/lib/api.ts), so /api/v1 is only used by the

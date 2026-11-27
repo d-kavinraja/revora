@@ -52,9 +52,8 @@ const GUIDE_STEPS: GuideStep[] = [
     id: 'access',
     title: 'Grant repository access',
     description:
-      'Repository permissions are managed through the GitHub App installation ' +
-      'settings — not inside Revora. You can grant access to all repositories ' +
-      'or only the ones you want reviewed.',
+      'Repository access is set in GitHub, not in Revora. Grant access to all ' +
+      'repositories, or only the ones you want reviewed.',
     bullets: [
       'Open GitHub and go to Settings.',
       'Open Applications, then Installed GitHub Apps.',
@@ -73,10 +72,10 @@ const GUIDE_STEPS: GuideStep[] = [
     id: 'providers',
     title: 'Configure API keys & providers',
     description:
-      'Pick the engine that powers your reviews. Revora never substitutes a model silently — whatever you configure is what actually runs.',
+      'Choose the engine that runs your reviews. Revora never swaps in a different model silently: the model you configure is the one that runs.',
     bullets: [
       'Open Settings → Providers and choose your review engine.',
-      'Add an API key for your provider, or use kLLM — kLLM is managed by Revora and needs no API key.',
+      'Add an API key for your provider, or use kLLM, which Revora manages and needs no key.',
       'Revora validates the key and lists the models it can reach.',
       'Choose a default review model for new repositories.',
     ],
@@ -143,7 +142,7 @@ interface GuideCarouselMetrics {
 const CAROUSEL_METRICS: Record<GuideBreakpoint, GuideCarouselMetrics> = {
   mobile: {
     cardWidth: 300,
-    cardHeight: 440,
+    cardHeight: 400,
     radius: 16,
     depth: 150,
     spread: 44,
@@ -153,7 +152,7 @@ const CAROUSEL_METRICS: Record<GuideBreakpoint, GuideCarouselMetrics> = {
   },
   tablet: {
     cardWidth: 420,
-    cardHeight: 460,
+    cardHeight: 400,
     radius: 18,
     depth: 190,
     spread: 70,
@@ -163,7 +162,7 @@ const CAROUSEL_METRICS: Record<GuideBreakpoint, GuideCarouselMetrics> = {
   },
   desktop: {
     cardWidth: 500,
-    cardHeight: 460,
+    cardHeight: 430,
     radius: 20,
     depth: 220,
     spread: 90,
@@ -207,11 +206,11 @@ function CtaLink({
           // Solid, saturated brand fill with a pure white label and a crisp
           // edge, so the primary action stays legible in both themes.
           'inline-flex items-center justify-center gap-1.5 rounded-lg',
-          'border border-[#4338ca] bg-[#4f46e5] font-medium text-white',
-          'shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-12px_rgba(79,70,229,0.95)]',
+          'border border-brand bg-brand font-medium text-brand-foreground',
+          'shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-12px_color-mix(in_oklch,var(--brand)_70%,transparent)]',
           'transition-[background-color,border-color,box-shadow] duration-150',
-          'hover:border-[#3730a3] hover:bg-[#4338ca]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a5b4fc]',
+          'hover:border-brand-hover hover:bg-brand-hover',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
           'focus-visible:ring-offset-2 focus-visible:ring-offset-transparent',
           compact
             ? 'min-h-8 px-2.5 py-1 text-[11px]'
@@ -352,9 +351,8 @@ export default function SetupGuidePage() {
               Setup guide
             </h1>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Connect your GitHub repositories, configure your AI review
-              provider, and automate pull request reviews in {GUIDE_STEPS.length}{' '}
-              steps.
+              Connect GitHub, choose an AI provider, and get automated reviews on
+              your pull requests in {GUIDE_STEPS.length} steps.
             </p>
           </div>
 
@@ -365,7 +363,7 @@ export default function SetupGuidePage() {
 
         {/* Transparent stage: the cards float over the page's dotted canvas. */}
         <section className="mt-6" aria-label="Setup steps carousel">
-          <div className="relative h-[500px] w-full sm:h-[520px] lg:h-[560px]">
+          <div className="relative h-[500px] w-full sm:h-[540px] lg:h-[580px]">
             <DepthCarousel
               items={GUIDE_SLIDES}
               renderCard={renderCard}

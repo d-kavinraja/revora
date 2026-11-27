@@ -20,13 +20,26 @@ from app.services.provider_registry import provider_registry_service
 class ModelOverridesService:
     """Default-tolerant reads + transactional admin writes."""
 
-    async def list_rows(self, db: AsyncSession) -> list[ModelOverride]:
-        result = await db.execute(
-            select(ModelOverride).order_by(
-                ModelOverride.provider_slug, ModelOverride.model_id
-            )
+    async def list_rows(
+        self, db: AsyncSession, *, provider_slug: str | None = None
+    ) -> list[ModelOverride]:
+        query = select(ModelOverride).order_by(
+            ModelOverride.provider_slug, ModelOverride.model_id
         )
+        if provider_slug:
+            query = query.where(ModelOverride.provider_slug == provider_slug)
+        result = await db.execute(query)
         return list(result.scalars().all())
+
+    async def get_row(
+        self, db: AsyncSession, provider_slug: str, model_id: str
+    ) -> ModelOverride | None:
+        result = await db.execute(
+            select(ModelOverride)
+            .where(ModelOverride.provider_slug == provider_slug)
+            .where(ModelOverride.model_id == model_id)
+        )
+        return result.scalars().first()
 
     async def get_disabled_map(self, db: AsyncSession) -> dict[str, set[str]]:
         """`{provider alias: {disabled model ids}}` for every alias."""
@@ -73,12 +86,19 @@ class ModelOverridesService:
         model_id: str,
         status: str,
         message: str | None = None,
+        keep_row: bool = False,
+        chat_enabled: bool | None = None,
+        review_enabled: bool | None = None,
     ) -> tuple[ModelOverride | None, str]:
         """Upsert or clear one override (no commit).
 
         `status == "available"` clears the row (restores the model with no
-        user action). Returns `(row_or_None, action)` with action in
-        `{"set", "cleared", "noop"}`; raises `ValueError` on bad input.
+        user action), unless `keep_row` is set: kLLM Cloud keeps an
+        `available` row because the row itself is the approval record.
+        `chat_enabled`/`review_enabled` are only written when provided, so
+        every existing caller keeps today's behaviour. Returns
+        `(row_or_None, action)` with action in `{"set", "cleared", "noop"}`;
+        raises `ValueError` on bad input.
         """
         if status not in MODEL_OVERRIDE_STATUSES:
             raise ValueError(f"Invalid model override status '{status}'.")
@@ -92,25 +112,50 @@ class ModelOverridesService:
         )
         row = result.scalars().first()
 
-        if status == "available":
+        if status == "available" and not keep_row:
             if row is None:
                 return None, "noop"
             await db.delete(row)
             return row, "cleared"
 
+        action = "set"
         if row is None:
             row = ModelOverride(
                 provider_slug=provider_slug,
                 model_id=model_id,
                 status=status,
                 message=message,
+                chat_enabled=True if chat_enabled is None else bool(chat_enabled),
+                review_enabled=(
+                    True if review_enabled is None else bool(review_enabled)
+                ),
             )
             db.add(row)
         else:
             row.status = status
             row.message = message
+            if chat_enabled is not None:
+                row.chat_enabled = bool(chat_enabled)
+            if review_enabled is not None:
+                row.review_enabled = bool(review_enabled)
             db.add(row)
-        return row, "set"
+        return row, action
+
+    async def set_surfaces(
+        self,
+        db: AsyncSession,
+        row: ModelOverride,
+        *,
+        chat_enabled: bool | None = None,
+        review_enabled: bool | None = None,
+    ) -> ModelOverride:
+        """Update the Chat/Review surface flags of an existing row (no commit)."""
+        if chat_enabled is not None:
+            row.chat_enabled = bool(chat_enabled)
+        if review_enabled is not None:
+            row.review_enabled = bool(review_enabled)
+        db.add(row)
+        return row
 
 
 model_overrides_service = ModelOverridesService()

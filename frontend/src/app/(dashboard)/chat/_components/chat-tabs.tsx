@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { PlusIcon, SquareIcon, XIcon } from "lucide-react";
 
 import type { TemporaryChat } from "@/lib/chat-state";
+import { cn } from "@/lib/utils";
 
 interface ChatTabsProps {
   chats: TemporaryChat[];
@@ -17,6 +18,8 @@ interface ChatTabsProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onStop?: (id: string) => void;
+  /** Render inside the chat header without its own border or padding. */
+  bare?: boolean;
 }
 
 export function ChatTabs({
@@ -29,6 +32,7 @@ export function ChatTabs({
   onNew,
   onDelete,
   onStop,
+  bare = false,
 }: ChatTabsProps) {
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
@@ -37,8 +41,8 @@ export function ChatTabs({
   }, [activeId]);
 
   return (
-    <div className="w-full shrink-0 border-b border-border/60 bg-background/85 backdrop-blur-md">
-      <div className="flex w-full items-center gap-1.5 py-1.5 px-4 md:px-6">
+    <div className={cn("w-full shrink-0", !bare && "border-b border-border/60 bg-background/85 backdrop-blur-md")}>
+      <div className={cn("flex w-full items-center gap-1.5", bare ? "py-0" : "py-1.5 px-4 md:px-6")}>
         <div
           className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:thin]"
           role="tablist"
@@ -62,7 +66,7 @@ export function ChatTabs({
                   role="tab"
                   data-active-tab={active ? "" : undefined}
                   aria-selected={active}
-                  aria-controls={`${panelIdBase}-panel-${index}`}
+                  aria-controls={bare ? undefined : `${panelIdBase}-panel-${index}`}
                   onClick={() => onSelect(chat.id)}
                   className="flex max-w-[170px] items-center gap-2 px-3 py-2 pr-8 text-left text-[13px] md:max-w-[220px]"
                   title={title}
@@ -111,7 +115,7 @@ export function ChatTabs({
           type="button"
           onClick={onNew}
           disabled={!canCreate}
-          className="chat-ink ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+          className="chat-ink ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/60 transition hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 md:h-8 md:w-8"
           aria-label="New chat"
           title={canCreate ? "New chat" : "Maximum temporary chats reached"}
         >

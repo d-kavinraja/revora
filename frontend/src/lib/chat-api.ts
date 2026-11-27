@@ -19,7 +19,7 @@ export interface ChatCompletionMessage {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
 
-export type ChatProviderId = 'kllm' | 'hosted-ollama';
+export type ChatProviderId = 'kllm' | 'kllm-cloud' | 'hosted-ollama';
 
 export interface ChatCompletionPayload {
   model: string;

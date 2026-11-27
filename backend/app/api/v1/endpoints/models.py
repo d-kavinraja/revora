@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,20 +68,26 @@ async def list_models(
         except Exception:
             all_models[prov_name] = []
 
-    # Managed providers (kLLM): ready and approved on-demand models, no user key.
-    from app.core.config import settings as _settings
+    # Managed providers expose a server-owned catalogue and need no user key.
+    # Each provider reads its own source, so Cloud options come from the cloud
+    # approval gate and local kLLM readiness never fabricates cloud models.
+    from app.services import kllm_cloud_service
 
-    if _settings.KLLM_ENABLED:
-        from app.services import kllm_service
+    for prov in await provider_registry_service.get_usable(db):
+        if not prov.is_managed:
+            continue
+        if provider and prov.name != provider:
+            continue
+        try:
+            if prov.slug == kllm_cloud_service.PROVIDER_SLUG:
+                all_models[prov.name] = await kllm_cloud_service.model_options(
+                    db, surface="chat"
+                )
+            else:
+                from app.services import kllm_service
 
-        for prov in await provider_registry_service.get_usable(db):
-            if not prov.is_managed:
-                continue
-            if provider and prov.name != provider:
-                continue
-            try:
                 all_models[prov.name] = await kllm_service.get_model_options(db)
-            except Exception:  # noqa: BLE001 - never leak kLLM details
-                all_models[prov.name] = []
+        except Exception:  # noqa: BLE001 - never leak provider details
+            all_models[prov.name] = []
 
     return all_models

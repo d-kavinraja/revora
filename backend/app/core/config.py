@@ -9,6 +9,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import re
 
+def _kllm_gcp_config_defaults() -> tuple[str, str | None]:
+    try:
+        from pathlib import Path
+        import json
+        p = Path.home() / ".config" / "kllm-gcp" / "config.json"
+        if p.is_file():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            relay = str(data.get("relay_url") or "").strip()
+            key = str(data.get("api_key") or "").strip() or None
+            return relay, key
+    except Exception:
+        pass
+    return "", None
+
+
 
 # --- hosted Ollama keep_alive -----------------------------------------------
 #
@@ -146,6 +161,105 @@ class Settings(BaseSettings):
     )
     KLLM_TELEMETRY_TIMEOUT_S: float = Field(
         default=5.0, ge=1.0, description="Timeout for kLLM telemetry reads"
+    )
+
+    # kLLM Cloud (Revora-managed remote kLLM relay over the GCP gateway).
+    # A completely separate provider from the local managed kLLM: its own
+    # namespace (kllm-cloud:<model>), its own relay, its own credentials and
+    # its own per-model approval catalogue. Disabled by default; enabling needs
+    # BOTH this flag and an admin enabling the `kllm-cloud` provider row.
+    # Only three relay endpoints are ever used: GET /v1/models (catalogue +
+    # liveness), GET /health (backend-warm probe) and POST /v1/chat/completions.
+    KLLM_CLOUD_ENABLED: bool = Field(
+        default=False,
+        description="Enable the Revora-managed kLLM Cloud provider",
+    )
+    KLLM_CLOUD_BASE_URL: str = Field(
+        default="",
+        description="Server-side origin of the kLLM Cloud relay (never sent to clients)",
+    )
+    KLLM_CLOUD_API_KEY: str | None = Field(
+        default=None,
+        description="Optional server-side gateway key for the kLLM Cloud relay (never exposed)",
+    )
+    KLLM_CLOUD_DEFAULT_MODEL: str = Field(
+        default="qwen3.8-27b",
+        description="Fallback default model for kLLM Cloud when no approved model is chosen",
+    )
+    KLLM_CLOUD_TIMEOUT: float = Field(
+        default=300.0,
+        ge=1.0,
+        description="Read timeout backstop for kLLM Cloud inference and probe requests",
+    )
+    KLLM_CLOUD_CONNECT_TIMEOUT_S: float = Field(
+        default=10.0, ge=1.0, description="Connect timeout for kLLM Cloud requests"
+    )
+    KLLM_CLOUD_CONCURRENCY_LIMIT: int = Field(
+        default=4, ge=1, description="Global cap on concurrent kLLM Cloud inference requests"
+    )
+    KLLM_CLOUD_QUEUE_TIMEOUT_S: float = Field(
+        default=30.0, ge=0.0, description="Max time a kLLM Cloud request waits for a permit"
+    )
+    # Cloud-only stream deadlines (seconds). These are service-level deadlines,
+    # distinct from the per-read transport timeout KLLM_CLOUD_TIMEOUT. They are
+    # deliberately Cloud-specific so local kLLM / Hosted Ollama keep their
+    # existing behaviour. The prefill deadline is absolute from request start and
+    # is NOT reset by relay keepalives or by status events.
+    KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S: float = Field(
+        default=120.0,
+        ge=1.0,
+        le=600.0,
+        description="Absolute prefill deadline for a kLLM Cloud request (seconds)",
+    )
+    KLLM_CLOUD_IDLE_TIMEOUT_S: float = Field(
+        default=60.0,
+        ge=1.0,
+        le=600.0,
+        description="Content-idle deadline for a kLLM Cloud request (seconds)",
+    )
+    KLLM_CLOUD_TOTAL_TIMEOUT_S: float = Field(
+        default=180.0,
+        ge=1.0,
+        le=600.0,
+        description="Absolute total deadline for a kLLM Cloud request (seconds)",
+    )
+    KLLM_CLOUD_STATUS_INTERVAL_S: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=120.0,
+        description="Minimum interval between client-visible Cloud waiting status events",
+    )
+    KLLM_CLOUD_DIAGNOSTICS: bool = Field(
+        default=False,
+        description="Enable developer-only Cloud Chat timing diagnostics (no message content)",
+    )
+    KLLM_CLOUD_PROBE_TIMEOUT_S: float = Field(
+        default=12.0,
+        ge=2.0,
+        le=60.0,
+        description="Timeout for bounded model-readiness verification probes",
+    )
+    KLLM_CLOUD_CATALOG_CACHE_TTL: float = Field(
+        default=60.0, ge=1.0, description="TTL for the kLLM Cloud catalogue snapshot"
+    )
+    KLLM_CLOUD_ALLOW_HTTP: bool = Field(
+        default=False,
+        description="Allow plain-HTTP kLLM Cloud relay URLs (development/testing only)",
+    )
+    # Cost policy for the Revora-managed relay. The relay billing model is not
+    # documented in this repository, so the default follows the existing
+    # managed-provider convention (kllm / ollama_cloud: zero marginal cost).
+    # An operator billed per token sets the real rates here instead of relying
+    # on the generic fallback used for unknown third-party providers.
+    KLLM_CLOUD_INPUT_COST_PER_1K: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Optional kLLM Cloud input cost per 1K tokens (USD)",
+    )
+    KLLM_CLOUD_OUTPUT_COST_PER_1K: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Optional kLLM Cloud output cost per 1K tokens (USD)",
     )
 
     # Hosted Ollama (Revora-managed remote inference for Chat only).
@@ -552,6 +666,31 @@ class Settings(BaseSettings):
                     "print(secrets.token_urlsafe(32))\"",
                     len(self.JWT_SECRET_KEY.encode("utf-8")),
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_kllm_cloud_stream_deadlines(self) -> "Settings":
+        if not self.KLLM_CLOUD_BASE_URL:
+            gcp_relay, gcp_key = _kllm_gcp_config_defaults()
+            if gcp_relay:
+                self.KLLM_CLOUD_BASE_URL = gcp_relay
+            if not self.KLLM_CLOUD_API_KEY and gcp_key:
+                self.KLLM_CLOUD_API_KEY = gcp_key
+        # Cloud-only stream deadlines must form a sane, enforceable ordering:
+        # prefill < total, and idle is positive. Keepalives/status events can
+        # never extend any of them (enforced in chat_service, not here).
+        if self.KLLM_CLOUD_IDLE_TIMEOUT_S <= 0:
+            raise ValueError("KLLM_CLOUD_IDLE_TIMEOUT_S must be positive.")
+        if self.KLLM_CLOUD_TOTAL_TIMEOUT_S <= self.KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S:
+            raise ValueError(
+                "KLLM_CLOUD_TOTAL_TIMEOUT_S must be greater than "
+                "KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S."
+            )
+        if self.KLLM_CLOUD_STATUS_INTERVAL_S > self.KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S:
+            raise ValueError(
+                "KLLM_CLOUD_STATUS_INTERVAL_S must not exceed "
+                "KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S."
+            )
         return self
 
 

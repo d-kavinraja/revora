@@ -53,6 +53,10 @@ FEATURE_FLAG_KEYS = (
     # UI/visualization gate for the kLLM dashboard view only. Enforced
     # exclusively in the frontend; the kLLM user API surface stays open.
     "kllm_page",
+    # UI gate for the kLLM Cloud page (/settings/kllm-cloud). Backend access to
+    # approved kLLM Cloud models is gated by the provider flag and per-model
+    # approval instead; a missing row is treated as enabled.
+    "kllm_cloud_page",
 )
 
 #: Per-model override statuses (§11.2). `available` means "no override" —
@@ -258,3 +262,12 @@ class ModelOverride(Base):
         String(20), default="available", server_default="available", nullable=False
     )
     message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: Per-surface availability. Both default to true so every existing
+    #: provider/row keeps its current behaviour; only the kLLM Cloud admin
+    #: surface narrows them, and enforcement is per (provider, model) row.
+    chat_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    review_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )

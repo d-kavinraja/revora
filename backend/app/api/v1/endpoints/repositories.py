@@ -936,22 +936,36 @@ async def get_available_models(
         provider: models for provider, models in probe_results if models is not None
     }
 
-    # Managed providers (kLLM) have no user key: their catalogue comes from the
-    # server-side readiness projection and includes administrator-approved
-    # unloaded models marked as "loads on demand".
+    # Managed providers (kLLM, kLLM Cloud) have no user key: their catalogue
+    # comes from the server-side readiness projection and includes
+    # administrator-approved models. Each managed provider reads from its own
+    # source: kLLM Cloud options come from the cloud snapshot/approval gate and
+    # must never be served from local kLLM readiness.
     from app.core.config import settings as _settings
+    from app.services import kllm_cloud_service
 
-    if _settings.KLLM_ENABLED:
+    if _settings.KLLM_ENABLED or _settings.KLLM_CLOUD_ENABLED:
         from app.services import kllm_service
 
         for provider in await provider_registry_service.get_usable(db):
             if not provider.is_managed:
                 continue
             try:
-                managed_models = await kllm_service.get_model_options(db)
-            except Exception as exc:  # noqa: BLE001 - never leak kLLM details
+                if provider.slug == kllm_cloud_service.PROVIDER_SLUG:
+                    if not _settings.KLLM_CLOUD_ENABLED:
+                        continue
+                    managed_models = await kllm_cloud_service.model_options(
+                        db, surface="review"
+                    )
+                else:
+                    if not _settings.KLLM_ENABLED:
+                        continue
+                    managed_models = await kllm_service.get_model_options(db)
+            except Exception as exc:  # noqa: BLE001 - never leak provider details
                 logger.warning(
-                    "kLLM catalogue unavailable: %s", type(exc).__name__
+                    "managed catalogue unavailable for %s: %s",
+                    provider.slug,
+                    type(exc).__name__,
                 )
                 continue
             blocked = disabled_overrides.get(provider.name, set()) | (

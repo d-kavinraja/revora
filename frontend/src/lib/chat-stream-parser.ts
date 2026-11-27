@@ -20,7 +20,12 @@
       gen_tps?: number;
       cache_n?: number;
     }
-  | { type: 'status'; status: 'thinking' | 'waking' | 'queued' }
+  | {
+      type: 'status';
+      status: 'thinking' | 'waking' | 'queued';
+      phase?: string;
+      elapsed_seconds?: number;
+    }
   | {
       type: 'progress';
       cache?: number;
@@ -102,7 +107,15 @@ export function parseSseFrame(frame: string): ChatSseEvent | null {
       parsed.type === 'status' &&
       (parsed.status === 'thinking' || parsed.status === 'waking' || parsed.status === 'queued')
     ) {
-      return { type: 'status', status: parsed.status };
+      const out: { type: 'status'; status: 'thinking' | 'waking' | 'queued'; phase?: string; elapsed_seconds?: number } = {
+        type: 'status',
+        status: parsed.status,
+      };
+      if (typeof parsed.phase === 'string') out.phase = parsed.phase;
+      if (typeof parsed.elapsed_seconds === 'number' && Number.isFinite(parsed.elapsed_seconds)) {
+        out.elapsed_seconds = parsed.elapsed_seconds;
+      }
+      return out;
     }
     if (parsed.type === 'progress') {
       return {

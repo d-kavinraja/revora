@@ -17,6 +17,7 @@ from app.api.v1.endpoints.admin import (
     installations,
     keys,
     kllm,
+    kllm_cloud,
     maintenance,
     models,
     overview,
@@ -38,6 +39,7 @@ router.include_router(providers.router, tags=["admin"])
 router.include_router(keys.router, tags=["admin"])
 router.include_router(models.router, tags=["admin"])
 router.include_router(kllm.router, prefix="/kllm", tags=["admin"])
+router.include_router(kllm_cloud.router, prefix="/kllm-cloud", tags=["admin"])
 router.include_router(hosted_ollama.router, prefix="/hosted-ollama", tags=["admin"])
 router.include_router(speech.router, prefix="/hosted-ollama", tags=["admin"])
 router.include_router(features.router, tags=["admin"])

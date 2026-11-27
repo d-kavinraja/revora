@@ -39,7 +39,7 @@ from app.schemas.persistent_chat import (
     PersistentMessageRead,
     PersistentRegenerate,
 )
-from app.services import hosted_ollama_service, kllm_service
+from app.services import hosted_ollama_service, kllm_cloud_service, kllm_service
 from app.services.chat_service import (
     STREAM_HEADERS,
     enforce_chat_limits,
@@ -69,6 +69,7 @@ from app.services.persistent_chat_service import (
     _restore_revision,
 )
 from app.services.hosted_ollama_service import HostedError
+from app.services.kllm_cloud_service import KllmCloudError
 from app.services.kllm_service import KllmError
 
 router = APIRouter()
@@ -102,7 +103,28 @@ async def _prepare_model(
     db: AsyncSession, model: str, provider_assertion: str | None,
     messages: list[dict[str, str]], max_tokens: int | None,
 ) -> tuple[str, str, list[dict[str, str]], int, int | None]:
-    if hosted_ollama_service.is_hosted_key(model):
+    if kllm_cloud_service.is_cloud_key(model):
+        if provider_assertion not in (None, kllm_cloud_service.PROVIDER_SLUG):
+            raise HTTPException(status_code=400, detail="Provider does not match model.")
+        try:
+            ready = await kllm_cloud_service.ensure_model_ready(
+                db, model, surface="chat"
+            )
+        except KllmCloudError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.reason_code or exc.code,
+                    "message": exc.message,
+                },
+            ) from exc
+        provider = kllm_cloud_service.PROVIDER_SLUG
+        # Keep the namespaced key: it is the only place the provider identity is
+        # stored (ChatMessage/ChatConversation have no provider column), so
+        # stripping it here would make follow-up turns look like local kLLM and
+        # silently dispatch a Cloud conversation to the local gateway.
+        canonical = model
+    elif hosted_ollama_service.is_hosted_key(model):
         if provider_assertion not in (None, hosted_ollama_service.HOSTED_PROVIDER_SLUG):
             raise HTTPException(status_code=400, detail="Provider does not match model.")
         ready = await hosted_ollama_service.ensure_model_ready(db, model)
@@ -155,10 +177,17 @@ async def _generate(
             terminal_frame: str | None = None
             from app.services.chat_service import sse_event
             stream_factory = None
+            is_cloud = kllm_cloud_service.is_cloud_key(model)
             if hosted_ollama_service.is_hosted_key(model):
                 hosted_model = hosted_ollama_service.parse_hosted_key(model)
                 stream_factory = lambda: llm_service.stream_hosted_completion(
                     hosted_model, messages, max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            elif is_cloud:
+                cloud_model = kllm_cloud_service.model_id_from_key(model)
+                stream_factory = lambda: llm_service.stream_cloud_completion(
+                    cloud_model, messages, max_tokens=max_tokens,
                     temperature=temperature,
                 )
             try:
@@ -166,6 +195,7 @@ async def _generate(
                     request, user_id=str(user_id), model=model, messages=messages,
                     max_tokens=max_tokens, temperature=temperature,
                     reasoning_effort=reasoning_effort, stream_factory=stream_factory,
+                    provider_label=("kLLM Cloud" if is_cloud else "kLLM"),
                 ):
                     still_current = await claim_is_current(
                         db, user_id, conversation_id, claim_id
@@ -234,7 +264,11 @@ async def _generate(
                     await _restore_revision(db, conversation_id, claim_id)
                 except Exception:
                     pass
-                code, message = safe_chat_error(exc, display_model=model)
+                code, message = safe_chat_error(
+                    exc,
+                    display_model=model,
+                    provider_label="kLLM Cloud" if is_cloud else "kLLM",
+                )
                 yield sse_event({"type": "error", "code": code, "message": message})
 
         async def close_generation() -> None:
@@ -261,6 +295,12 @@ async def _generate(
         if hosted_ollama_service.is_hosted_key(model):
             result = await llm_service.complete_hosted(
                 hosted_ollama_service.parse_hosted_key(model), messages,
+                max_tokens=max_tokens, temperature=temperature,
+                timeout=FIRST_TOKEN_TIMEOUT_SECONDS,
+            )
+        elif kllm_cloud_service.is_cloud_key(model):
+            result = await llm_service.complete_cloud(
+                kllm_cloud_service.model_id_from_key(model), messages,
                 max_tokens=max_tokens, temperature=temperature,
                 timeout=FIRST_TOKEN_TIMEOUT_SECONDS,
             )

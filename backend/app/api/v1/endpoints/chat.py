@@ -16,13 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.llm import llm_service
 from app.api.v1.endpoints.chat_stream_response import LeaseStreamingResponse
+from app.core.config import settings
 from app.core.deps import get_current_user, get_current_user_for_stream
 from app.core.deps_flags import FeatureDisabledError, feature_message, require_feature
 from app.db.session import AsyncSessionLocal, get_db
 from app.models.user import User
-from app.services import hosted_ollama_service, kllm_service
+from app.services import hosted_ollama_service, kllm_cloud_service, kllm_service
 from app.services.chat_service import (
     FIRST_TOKEN_TIMEOUT_SECONDS,
+    IDLE_TIMEOUT_SECONDS,
+    TOTAL_TIMEOUT_SECONDS,
     MAX_MESSAGE_CHARS,
     MAX_OUTPUT_TOKENS,
     MAX_REQUEST_CHARS,
@@ -37,6 +40,7 @@ from app.services.chat_service import (
     trim_chat_context,
 )
 from app.services.hosted_ollama_service import HostedError
+from app.services.kllm_cloud_service import KllmCloudError
 from app.services.kllm_service import KllmError
 from app.services.platform_settings import platform_settings_service
 from app.services.persistent_chat_service import require_mode
@@ -139,14 +143,16 @@ async def get_chat_models(
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_feature("chat")),
 ):
-    """Unified selectable-model catalog for Chat: kLLM + hosted Ollama.
+    """Unified selectable-model catalog for Chat: kLLM, kLLM Cloud, hosted Ollama.
 
     Hosted entries include the installed inventory reported by ``/api/tags`` and
     the runtime-loaded set reported by ``/api/ps``. Installed-but-unloaded
     models are listed so they are visible, but only an ``/api/ps``-confirmed
     model has ``ready=True`` and is selectable. Revora never auto-loads a model
     to satisfy a catalog refresh or a selection. The kLLM surface is unchanged.
-    No endpoint URL, token or machine identifier is ever returned.
+    kLLM Cloud contributes only administrator-approved canonical chat models;
+    its catalogue (not a health probe) is the availability source, and no
+    endpoint URL, token or machine identifier is ever returned.
     """
     try:
         modes = await platform_settings_service.get_chat_modes(db)
@@ -165,6 +171,7 @@ async def get_chat_models(
         )
 
     kllm_snapshot = await kllm_service.get_snapshot(db)
+    cloud_snapshot = await kllm_cloud_service.get_snapshot(db)
     hosted_snapshot = await hosted_ollama_service.get_snapshot(db)
     kllm_state, kllm_reason = _kllm_provider_state(kllm_snapshot)
 
@@ -176,6 +183,11 @@ async def get_chat_models(
         row["display_name"] = m.key
         row["resident"] = False
         models.append(row)
+    for m in cloud_snapshot.models:
+        # Only an approved chat model for an enabled Chat surface is listed.
+        if m.kind != "chat" or not m.approved or m.disabled or not m.chat_enabled:
+            continue
+        models.append(m.as_dict())
     for m in hosted_snapshot.models:
         models.append(m.as_dict())
 
@@ -203,6 +215,42 @@ async def get_chat_models(
                 else None
             ),
         ),
+    ]
+    if cloud_snapshot.enabled or cloud_snapshot.configured:
+        providers.append(
+            ChatProviderRead(
+                provider=kllm_cloud_service.PROVIDER_SLUG,
+                enabled=cloud_snapshot.enabled,
+                configured=cloud_snapshot.configured,
+                reachable=cloud_snapshot.reachable,
+                stale=cloud_snapshot.stale,
+                error=cloud_snapshot.error,
+                installed_count=sum(
+                    1
+                    for m in cloud_snapshot.models
+                    if m.kind == "chat" and m.approved and not m.disabled
+                ),
+                loaded_count=sum(
+                    1
+                    for m in cloud_snapshot.models
+                    if m.kind == "chat" and m.ready
+                ),
+                last_verified_at=cloud_snapshot.generated_at.isoformat(),
+                state=cloud_snapshot.state,
+                reason=cloud_snapshot.reason,
+                discovery_ok=bool(
+                    cloud_snapshot.enabled
+                    and cloud_snapshot.reachable
+                    and not cloud_snapshot.stale
+                ),
+                last_success_at=(
+                    cloud_snapshot.last_success_at.isoformat()
+                    if cloud_snapshot.last_success_at
+                    else None
+                ),
+            )
+        )
+    providers.append(
         ChatProviderRead(
             provider=hosted_ollama_service.HOSTED_PROVIDER_SLUG,
             enabled=hosted_snapshot.enabled,
@@ -221,19 +269,28 @@ async def get_chat_models(
             discovery_ok=hosted_snapshot.discovery_ok,
             last_success_at=hosted_snapshot.last_success_at,
             cooldown_until=hosted_snapshot.cooldown_until,
-        ),
-    ]
+        )
+    )
 
-    enabled = kllm_snapshot.enabled or hosted_snapshot.enabled
+    enabled = (
+        kllm_snapshot.enabled
+        or cloud_snapshot.enabled
+        or hosted_snapshot.enabled
+    )
     kllm_fresh = (
         kllm_snapshot.enabled and kllm_snapshot.reachable and not kllm_snapshot.stale
+    )
+    cloud_fresh = (
+        cloud_snapshot.enabled
+        and cloud_snapshot.reachable
+        and not cloud_snapshot.stale
     )
     hosted_fresh = (
         hosted_snapshot.enabled
         and hosted_snapshot.reachable
         and not hosted_snapshot.stale
     )
-    reachable = kllm_fresh or hosted_fresh
+    reachable = kllm_fresh or cloud_fresh or hosted_fresh
     return ChatCatalogResponse(
         enabled=enabled,
         reachable=reachable,
@@ -258,7 +315,7 @@ class ChatCompletionRequest(BaseModel):
     reasoning_effort: Literal["low", "medium", "high", "max"] | None = None
     #: Optional client assertion of the provider. The model key prefix stays
     #: authoritative; a mismatching value is rejected instead of being trusted.
-    provider: Literal["kllm", "hosted-ollama"] | None = None
+    provider: Literal["kllm", "kllm-cloud", "hosted-ollama"] | None = None
     #: Optional client chat identifier. Additive and backward compatible: it
     #: is never persisted or authenticated against, it only makes one chat
     #: single-flight so a duplicate request cannot start a second generation.
@@ -285,14 +342,44 @@ async def _validate_request(
 ) -> tuple[str, str, list[dict[str, str]], int, str | None, int | None]:
     """Return ``(model_key, provider, context, max_tokens, effort, context_window)``.
 
-    Hosted (namespaced) keys route to the Revora-managed Ollama provider; every
-    other key keeps the existing kLLM pathway unchanged. Neither path ever
-    substitutes a model or auto-loads one just to serve a selection.
+    kLLM Cloud keys (``kllm-cloud:``) route to the independent cloud provider
+    through its approval gate. Hosted (namespaced) keys route to the
+    Revora-managed Ollama provider; every other key keeps the existing kLLM
+    pathway unchanged. No path ever substitutes a model or auto-loads one just
+    to serve a selection.
     """
     async with AsyncSessionLocal() as db:
         await require_mode(db, "temporary")
 
-        if hosted_ollama_service.is_hosted_key(request.model):
+        if kllm_cloud_service.is_cloud_key(request.model):
+            if (
+                request.provider is not None
+                and request.provider != kllm_cloud_service.PROVIDER_SLUG
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "provider_mismatch",
+                        "message": "The selected model belongs to a different provider.",
+                    },
+                )
+            try:
+                ready_model = await kllm_cloud_service.ensure_model_ready(
+                    db, request.model, surface="chat"
+                )
+            except KllmCloudError as exc:
+                raise HTTPException(
+                    status_code=exc.status_code,
+                    detail={
+                        "code": exc.reason_code or exc.code,
+                        "message": exc.message,
+                    },
+                ) from exc
+            provider = kllm_cloud_service.PROVIDER_SLUG
+            # The response and every client-visible identity keep the requested
+            # namespaced key; only the upstream call receives the bare model id.
+            model_key = request.model
+        elif hosted_ollama_service.is_hosted_key(request.model):
             if request.provider is not None and request.provider != hosted_ollama_service.HOSTED_PROVIDER_SLUG:
                 raise HTTPException(
                     status_code=400,
@@ -403,8 +490,12 @@ async def create_chat_completion(
             context_window,
         ) = await _validate_request(request, current_user)
         is_hosted = provider == hosted_ollama_service.HOSTED_PROVIDER_SLUG
+        is_cloud = provider == kllm_cloud_service.PROVIDER_SLUG
         hosted_model = (
             hosted_ollama_service.parse_hosted_key(model) if is_hosted else None
+        )
+        cloud_model = (
+            kllm_cloud_service.model_id_from_key(model) if is_cloud else None
         )
 
         if request.stream:
@@ -418,9 +509,27 @@ async def create_chat_completion(
                         temperature=request.temperature,
                         context_window=context_window,
                     )
+            elif is_cloud:
+                def stream_factory():
+                    return llm_service.stream_cloud_completion(
+                        cloud_model,
+                        messages,
+                        max_tokens=max_tokens,
+                        temperature=request.temperature,
+                    )
             # The response owns the lease from here on: it is released after the
             # body iterator is closed, never inside the generator. Build the
             # response first so a construction failure still releases here.
+            # Cloud turns carry their own (stricter, non-resettable) deadlines;
+            # local kLLM keeps the historical 90/60/600 defaults.
+            cloud_first_token = (
+                settings.KLLM_CLOUD_FIRST_TOKEN_TIMEOUT_S if is_cloud else None
+            )
+            cloud_idle = settings.KLLM_CLOUD_IDLE_TIMEOUT_S if is_cloud else None
+            cloud_total = settings.KLLM_CLOUD_TOTAL_TIMEOUT_S if is_cloud else None
+            cloud_status_interval = (
+                settings.KLLM_CLOUD_STATUS_INTERVAL_S if is_cloud else None
+            )
             response = LeaseStreamingResponse(
                 stream_chat_sse(
                     http_request,
@@ -431,6 +540,17 @@ async def create_chat_completion(
                     temperature=request.temperature,
                     reasoning_effort=reasoning_effort,
                     stream_factory=stream_factory,
+                    provider_label=("kLLM Cloud" if is_cloud else "kLLM"),
+                    first_token_timeout=(
+                        cloud_first_token
+                        if cloud_first_token is not None
+                        else FIRST_TOKEN_TIMEOUT_SECONDS
+                    ),
+                    idle_timeout=cloud_idle if cloud_idle is not None else IDLE_TIMEOUT_SECONDS,
+                    total_timeout=cloud_total if cloud_total is not None else TOTAL_TIMEOUT_SECONDS,
+                    status_interval=(
+                        cloud_status_interval if cloud_status_interval is not None else 15.0
+                    ),
                 ),
                 on_close=lambda: release_chat_lease(lease),
                 media_type="text/event-stream; charset=utf-8",
@@ -439,7 +559,17 @@ async def create_chat_completion(
             release_on_exit = False
             return response
 
-        if is_hosted:
+        if is_cloud:
+            content, input_tokens, output_tokens, finish_reason = _unpack_completion(
+                await llm_service.complete_cloud(
+                    cloud_model,
+                    messages,
+                    max_tokens=max_tokens,
+                    temperature=request.temperature,
+                    timeout=FIRST_TOKEN_TIMEOUT_SECONDS,
+                )
+            )
+        elif is_hosted:
             content, input_tokens, output_tokens, finish_reason = _unpack_completion(
                 await llm_service.complete_hosted(
                     hosted_model,
@@ -509,6 +639,14 @@ async def create_chat_completion(
                 detail={"code": exc.reason_code, "message": exc.message},
             ) from exc
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    except KllmCloudError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "code": exc.reason_code or exc.code,
+                "message": exc.message,
+            },
+        ) from exc
     except KllmError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
     except Exception as exc:

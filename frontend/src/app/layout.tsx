@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Oxanium, Inter, JetBrains_Mono } from "next/font/google";
+import { Oxanium, Inter, Inter_Tight, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -17,6 +17,15 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
   display: "swap",
+});
+
+// Display face for the bloom landing page (400/500/600/700 + italic 400/500).
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  variable: "--font-inter-tight",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 const oxanium = Oxanium({
@@ -99,7 +108,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head />
-      <body className={`${inter.variable} ${oxanium.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`}>
+      <body className={`${inter.variable} ${interTight.variable} ${oxanium.variable} ${jetbrainsMono.variable} min-h-screen bg-background text-foreground antialiased font-sans`}>
         <Providers>
           <GlobalAnnouncementBanner />
           {children}

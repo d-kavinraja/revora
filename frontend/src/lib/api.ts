@@ -672,6 +672,100 @@ export interface ChatCatalog {
   models: ChatCatalogModel[];
 }
 
+// kLLM Cloud (independent managed provider: admin-approved Chat + Review models)
+export interface CloudModelStatus {
+  key: string;
+  model_id: string;
+  display_name: string;
+  description: string | null;
+  category: string;
+  context_window: number | null;
+  vision: boolean;
+  tags: string[];
+  chat_enabled: boolean;
+  review_enabled: boolean;
+  /** Per-surface readiness; absent on older admin payloads. */
+  chat_ready?: boolean;
+  review_ready?: boolean;
+  chat_reason_code?: string;
+  review_reason_code?: string;
+  /** @deprecated Chat alias kept for older clients. */
+  ready: boolean;
+  /** @deprecated Chat alias kept for older clients. */
+  reason_code: string;
+  runtime_state?: string;
+  runtime_reason?: string | null;
+}
+
+export interface CloudStatus {
+  provider: string;
+  name: string;
+  attribution: string;
+  enabled: boolean;
+  configured: boolean;
+  reachable: boolean;
+  stale: boolean;
+  state: string;
+  reason: string;
+  last_success_at: string | null;
+  models: CloudModelStatus[];
+  counts: Record<string, number>;
+}
+
+export interface AdminCloudModel extends CloudModelStatus {
+  classification: string;
+  canonical: string | null;
+  family: string | null;
+  approved: boolean;
+  disabled: boolean;
+  available: boolean;
+}
+
+export interface CloudBackendWarm {
+  state: string;
+  checked_at: string | null;
+  detail: string | null;
+}
+
+export interface AdminCloudDiagnostics {
+  provider: string;
+  name: string;
+  enabled: boolean;
+  configured: boolean;
+  credential_configured: boolean;
+  reachable: boolean;
+  stale: boolean;
+  state: string;
+  reason: string;
+  error: string | null;
+  error_reason: string | null;
+  last_success_at: string | null;
+  catalog_age_seconds: number | null;
+  cache_ttl_seconds: number;
+  concurrency_limit: number;
+  queue_timeout_seconds: number;
+  counts: Record<string, number>;
+  overlay: Record<string, number>;
+  backend_warm: CloudBackendWarm;
+  models: AdminCloudModel[];
+}
+
+export interface AdminCloudActionResult {
+  status: string;
+  model: AdminCloudModel | null;
+  refreshed?: boolean | null;
+  throttled?: boolean | null;
+  advertised?: number | null;
+  backend_warm?: CloudBackendWarm | null;
+}
+
+export interface AdminCloudModelUpdate {
+  approved?: boolean;
+  disabled?: boolean;
+  chat_enabled?: boolean;
+  review_enabled?: boolean;
+  message?: string | null;
+}
 export interface SpeechConfig {
   enabled: boolean;
   max_recording_seconds: number;
@@ -1226,6 +1320,8 @@ export const api = {
     apiClient
       .get<ChatCatalog>('/chat/models', { signal })
       .then((r) => r.data),
+  getCloudStatus: (signal?: AbortSignal) =>
+    apiClient.get<CloudStatus>('/kllm-cloud/status', { signal }).then((r) => r.data),
   getChatModes: (signal?: AbortSignal) =>
     apiClient.get<ChatModeSettings>('/platform/chat-modes', { signal }).then((r) => r.data),
   listPersistentChats: () =>
@@ -2216,6 +2312,32 @@ export const adminApi = {
       .put<KllmAutoloadPolicy>('/admin/kllm/autoload', data)
       .then((r) => r.data),
 
+  // kLLM Cloud controls (admin namespace only; independent from local kLLM)
+  kllmCloud: (signal?: AbortSignal) =>
+    apiClient
+      .get<AdminCloudDiagnostics>('/admin/kllm-cloud', { signal })
+      .then((r) => r.data),
+  refreshKllmCloud: () =>
+    apiClient
+      .post<AdminCloudActionResult>('/admin/kllm-cloud/refresh')
+      .then((r) => r.data),
+  probeKllmCloud: () =>
+    apiClient
+      .post<AdminCloudActionResult>('/admin/kllm-cloud/warm-probe')
+      .then((r) => r.data),
+  updateKllmCloudModel: (modelId: string, data: AdminCloudModelUpdate) =>
+    apiClient
+      .put<AdminCloudActionResult>(
+        `/admin/kllm-cloud/models/${encodeURIComponent(modelId)}`,
+        data,
+      )
+      .then((r) => r.data),
+  revokeKllmCloudModel: (modelId: string) =>
+    apiClient
+      .delete<AdminCloudActionResult>(
+        `/admin/kllm-cloud/models/${encodeURIComponent(modelId)}`,
+      )
+      .then((r) => r.data),
   // Hosted Ollama controls (admin namespace only; isolated from kLLM)
   hostedOllama: () =>
     apiClient

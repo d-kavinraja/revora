@@ -1,0 +1,97 @@
+/*
+ * Auth surfaces for the Repository Observatory.
+ * The sign-in and OAuth callback pages share one instrument language: a
+ * dotted survey canvas, a hairline panel and a single signal tick.
+ * No ambient glow rests on idle content (DESIGN.md, The Live-Light Rule).
+ */
+
+.auth-backdrop {
+  --auth-dot: #dbe1ec;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--auth-dot) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(
+    ellipse 95% 78% at 50% 44%,
+    #000 18%,
+    transparent 76%
+  );
+  mask-image: radial-gradient(
+    ellipse 95% 78% at 50% 44%,
+    #000 18%,
+    transparent 76%
+  );
+}
+
+.dark .auth-backdrop {
+  --auth-dot: #1e293b;
+}
+
+.auth-panel {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+  box-shadow: 0 22px 50px -34px rgb(15 23 42 / 0.4);
+}
+
+.dark .auth-panel {
+  box-shadow: 0 30px 70px -38px rgb(0 0 0 / 0.9);
+}
+
+.auth-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24px;
+  width: 56px;
+  /* 3px rather than 2px: the panel is centred at fractional pixel offsets on
+     common viewports, and a 2px line then antialiases into a washed-out row. */
+  height: 3px;
+  pointer-events: none;
+  background: var(--brand);
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-rise {
+  animation: auth-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--auth-delay, 0ms);
+}
+
+@keyframes auth-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, currentColor 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.auth-pulse {
+  animation: auth-pulse 2.2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise {
+    animation: none;
+  }
+
+  .auth-pulse {
+    animation: none;
+  }
+}

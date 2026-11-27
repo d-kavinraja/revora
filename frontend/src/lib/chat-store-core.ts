@@ -18,6 +18,7 @@ import {
 export type Provenance = {
   model?: string | null;
   provider?: ChatProviderId | null;
+  displayName?: string | null;
 };
 
 export type MutationResult =
@@ -107,6 +108,7 @@ export function applyRegenerationPlan(
       ...message,
       model: provenance?.model ?? null,
       provider: provenance?.provider ?? null,
+      displayName: provenance?.displayName ?? null,
       // A fresh generation has no confirmed upstream model or reason yet.
       upstreamModel: null,
       finishReason: null,
@@ -155,6 +157,7 @@ export function applyEditPlan(
         ...message,
         model: provenance?.model ?? null,
         provider: provenance?.provider ?? null,
+        displayName: provenance?.displayName ?? null,
         upstreamModel: null,
         finishReason: null,
       };

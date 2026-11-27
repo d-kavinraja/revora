@@ -1028,6 +1028,11 @@ async def _record_kllm_readiness(
             row = await provider_registry_service.get_by_identifier(db, provider)
             if row is None or not row.is_managed:
                 return
+            if row.slug == "kllm-cloud":
+                # Cloud has no per-model residency and no autoload: the relay
+                # decides which backend serves a request. Recording a kLLM
+                # readiness state here would fabricate a locality claim.
+                return
             execution = await get_latest_execution(db, review_id)
             if execution is None:
                 return

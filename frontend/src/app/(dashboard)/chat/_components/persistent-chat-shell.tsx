@@ -10,6 +10,8 @@ import {
   computeContextUsed,
   isModelSelectable,
   nextRequestContextMeter,
+  turnProvenance,
+  visibleChatModels,
   withPendingChatDraft,
   type ChatMessage,
   type ResponseMetrics,
@@ -17,11 +19,16 @@ import {
 } from '@/lib/chat-state';
 import { formatSpeechError, insertTranscript } from '@/lib/speech';
 import type { ReasoningEffort } from '@/lib/chat-api';
+import {
+  activityLabelFor,
+  mergeBackendStatus,
+  type LiveChatActivity,
+} from '@/lib/chat-activity';
 import { ChatComposer } from './chat-composer';
 import { ChatMessageList } from './chat-message-list';
+import { PersistentChatTabs } from './persistent-chat-tabs';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { useToast } from '@/components/ui/toaster';
-import { ChatProviderStatusBanners } from './chat-provider-status-banners';
 import { ChatTopBar } from './chat-top-bar';
 import { useSpeechToText } from './use-speech-to-text';
 
@@ -77,6 +84,7 @@ export function PersistentChatShell({
   const [localMessages, setLocalMessages] = useState<Record<string, ChatMessage[]>>({});
   const [busyChats, setBusyChats] = useState<Record<string, true>>({});
   const [metrics, setMetrics] = useState<Record<string, ResponseMetrics>>({});
+  const [activityClock, setActivityClock] = useState(() => Date.now());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
@@ -91,6 +99,9 @@ export function PersistentChatShell({
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const thinkingOrbRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  // Per-conversation activity survives generic thinking frames and keeps
+  // simultaneous requests isolated. It is cleared in the stream's finally.
+  const [activityByChat, setActivityByChat] = useState<Record<string, LiveChatActivity>>({});
 
   const conversations = useQuery({
     queryKey: ['persistent-chat', 'conversations'],
@@ -147,14 +158,15 @@ export function PersistentChatShell({
   const storedModel = activeId
     ? modelByConversation[activeId] ?? conversations.data?.find((item) => item.id === activeId)?.model ?? conversation.data?.model ?? ''
     : modelByConversation.new ?? '';
-  const selectedModel = useMemo(
-    () => storedModel || modelStatus?.models.find((item) => item.ready)?.key || '',
-    [storedModel, modelStatus?.models],
-  );
-  const selectedModelIdentity = modelStatus?.models.find((item) => item.key === selectedModel) ?? null;
-  const selectedModelReady = modelStatus?.models.some(
+  const visibleModels = useMemo(() => visibleChatModels(modelStatus), [modelStatus]);
+  const selectedModel = useMemo(() => {
+    if (storedModel && visibleModels.some((item) => item.key === storedModel)) return storedModel;
+    return visibleModels.find((item) => isModelSelectable(item))?.key ?? visibleModels[0]?.key ?? '';
+  }, [storedModel, visibleModels]);
+  const selectedModelIdentity = visibleModels.find((item) => item.key === selectedModel) ?? null;
+  const selectedModelReady = visibleModels.some(
     (item) => item.key === selectedModel && isModelSelectable(item),
-  ) ?? false;
+  );
 
   // The meter is derived only from the selected conversation: local streaming
   // state is keyed by conversation id, and the fetched detail is used only when
@@ -245,6 +257,17 @@ export function PersistentChatShell({
     controllersRef.current.set(chatId, controller);
     setBusyChats((current) => ({ ...current, [chatId]: true }));
     setErrors((current) => { const next = { ...current }; delete next[chatId]; return next; });
+    const startedAt = Date.now();
+    setActivityByChat((current) => ({
+      ...current,
+      [chatId]: {
+        assistantMessageId: assistantId,
+        startedAt,
+        status: null,
+        hasPrefillProgress: false,
+        hasContent: false,
+      },
+    }));
     setMetrics((current) => ({ ...current, [assistantId]: { phase: 'preparing', startedAt: performance.now() } }));
     setEditingMessageId(null);
     const timestamp = currentTime();
@@ -256,14 +279,21 @@ export function PersistentChatShell({
       [chatId]: [
         ...baseMessages,
         ...(userContent && userMessageId ? [{ id: userMessageId, role: 'user' as const, content: userContent, status: 'complete' as const, createdAt: timestamp }] : []),
-        { id: assistantId, role: 'assistant', content: '', status: 'streaming', createdAt: timestamp, model: selectedModel },
+        { id: assistantId, role: 'assistant', content: '', status: 'streaming', createdAt: timestamp, ...turnProvenance(selectedModel || null, selectedModelIdentity) },
       ],
     }));
     let finishReason: string | null | undefined;
     let streamError: Error | null = null;
+    let receivedDelta = false;
     try {
       await streamPersistentTurn(path, body, {
         onDelta: (content) => {
+          receivedDelta = true;
+          setActivityByChat((current) => {
+            const activity = current[chatId];
+            if (activity?.assistantMessageId !== assistantId) return current;
+            return { ...current, [chatId]: { ...activity, hasContent: true } };
+          });
           setLocalMessages((current) => ({
             ...current,
             [chatId]: (current[chatId] ?? []).map((item) => item.id === assistantId ? { ...item, content: item.content + content } : item),
@@ -275,9 +305,28 @@ export function PersistentChatShell({
           setMetrics((current) => ({ ...current, [assistantId]: { ...current[assistantId], phase: reason === 'length' ? 'truncated' : 'complete', endedAt: performance.now() } }));
         },
         onError: (streamErrorValue) => { streamError = streamErrorValue; },
-        onStatus: () => setMetrics((current) => ({ ...current, [assistantId]: { ...current[assistantId], phase: 'thinking' } })),
+        onStatus: (event) => {
+          if (!receivedDelta) {
+            if (event?.status) {
+              setActivityByChat((current) => {
+                const activity = current[chatId];
+                if (activity?.assistantMessageId !== assistantId) return current;
+                return {
+                  ...current,
+                  [chatId]: { ...activity, status: mergeBackendStatus(activity.status, event.status, event.phase) },
+                };
+              });
+            }
+            setMetrics((current) => ({ ...current, [assistantId]: { ...current[assistantId], phase: 'thinking' } }));
+          }
+        },
         onProgress: (event) => {
-          if (event.cache === undefined || event.processed === undefined || event.total === undefined) return;
+          if (receivedDelta || event.cache === undefined || event.processed === undefined || event.total === undefined) return;
+          setActivityByChat((current) => {
+            const activity = current[chatId];
+            if (activity?.assistantMessageId !== assistantId) return current;
+            return { ...current, [chatId]: { ...activity, hasPrefillProgress: true } };
+          });
           const progress = { cache: event.cache, processed: event.processed, total: event.total };
           setMetrics((current) => ({ ...current, [assistantId]: { ...current[assistantId], phase: 'preparing', progress } }));
         },
@@ -326,6 +375,12 @@ export function PersistentChatShell({
       invalidate(chatId);
       if (!controller.signal.aborted) toast({ title: 'Persistent Chat failed', description: message, type: 'error' });
     } finally {
+      setActivityByChat((current) => {
+        if (current[chatId]?.assistantMessageId !== assistantId) return current;
+        const next = { ...current };
+        delete next[chatId];
+        return next;
+      });
       if (controllersRef.current.get(chatId) === controller) controllersRef.current.delete(chatId);
       setBusyChats((current) => { const next = { ...current }; delete next[chatId]; return next; });
     }
@@ -399,6 +454,17 @@ export function PersistentChatShell({
 
   const activeAssistantId = busy ? messages[messages.length - 1]?.id ?? null : null;
   const isThinking = !!busy && !lastMessageContent;
+  const activityKey = activeId ?? 'new';
+  const activeActivity = activityByChat[activityKey];
+  useEffect(() => {
+    const startedAt = activeActivity?.assistantMessageId === activeAssistantId ? activeActivity.startedAt : null;
+    if (!busy || !activeAssistantId || !isThinking || startedAt === null) return;
+    const timer = window.setInterval(() => setActivityClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeActivity?.startedAt, activeActivity?.assistantMessageId, activeAssistantId, busy, isThinking]);
+  const elapsedSeconds = activeActivity?.assistantMessageId === activeAssistantId
+    ? Math.max(0, Math.floor((activityClock - activeActivity.startedAt) / 1000))
+    : 0;
   const activePhase = activeAssistantId ? metrics[activeAssistantId]?.phase : undefined;
   const generationPhase: 'preparing' | 'thinking' | 'generating' | null = !busy
     ? null
@@ -407,6 +473,18 @@ export function PersistentChatShell({
       : activePhase === 'thinking' || activePhase === 'preparing'
         ? 'thinking'
         : 'preparing';
+
+  // The shared activity mapper is used by Temporary and Persistent Chat.
+  // It only describes verified statuses/progress and hides once content starts.
+  const activityLabel = busy
+    ? activityLabelFor({
+        status: activeActivity?.assistantMessageId === activeAssistantId ? activeActivity.status : null,
+        hasPrefillProgress: activeActivity?.assistantMessageId === activeAssistantId && activeActivity.hasPrefillProgress,
+        phase: activePhase ?? null,
+        elapsedSeconds,
+        hasContent: Boolean(lastMessageContent) || Boolean(activeActivity?.assistantMessageId === activeAssistantId && activeActivity.hasContent),
+      })
+    : null;
 
   useEffect(() => {
     const element = messageListRef.current;
@@ -464,15 +542,22 @@ export function PersistentChatShell({
           contextOpen={contextOpen}
           onContextOpenChange={(open) => setOpenMenu(open ? 'context' : null)}
           onRefreshModels={() => { void catalog.refetch(); }}
-          rightSlot={(
-            <span className="inline-flex shrink-0 items-center rounded-full border border-brand/20 bg-brand/5 px-2 py-1 text-[10px] font-medium text-brand">
-              <span className="sm:hidden">Saved</span>
-              <span className="hidden sm:inline">Saved to your account</span>
-            </span>
+          sessionSlot={(
+            <PersistentChatTabs
+              items={(conversations.data ?? []).map((item, index) => ({
+                id: item.id,
+                title: item.title?.trim() || `Conversation ${index + 1}`,
+              }))}
+              activeId={activeId}
+              canCreate={enabled}
+              onSelect={(id) => { setActiveId(id); setEditingMessageId(null); setRenamingId(null); setConfirm(null); }}
+              onDelete={(id) => { void remove(id); }}
+              onNew={() => { setActiveId(null); setEditingMessageId(null); setRenamingId(null); setConfirm(null); }}
+            />
           )}
         />
 
-        <nav aria-label="Persistent conversations" className="w-full shrink-0 border-b border-border/60 bg-background/85 backdrop-blur-md">
+        <nav aria-label="Persistent conversations" className="hidden w-full shrink-0 border-b border-border/60 bg-background/85 backdrop-blur-md md:block">
           <div className="flex w-full items-center gap-1.5 px-3 py-1.5 md:px-6">
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:thin]">
               {(conversations.data ?? []).map((item, index) => {
@@ -522,21 +607,17 @@ export function PersistentChatShell({
             const element = event.currentTarget;
             stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
           }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-transparent px-3 py-6 md:px-6"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6"
         >
-          <ChatProviderStatusBanners catalog={catalog.data} />
           {conversations.isLoading && <p className="mx-auto max-w-3xl py-2 text-xs text-muted-foreground">Loading saved conversations…</p>}
           {!activeId && messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center">
-              <div className="max-w-md px-4">
+              <div className="flex w-full max-w-md flex-col items-center px-4">
                 <span className="mb-5 inline-grid h-14 w-14 place-items-center rounded-2xl border border-brand/20 bg-brand/10 text-brand"><MessageCircle size={24} /></span>
-                <h2 className="text-xl font-semibold tracking-tight">A chat that remembers</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">Persistent Chat saves conversations to your account. Start a new chat by sending a message.</p>
-                {!modelStatus?.models?.some(isModelSelectable) && modelStatus?.enabled ? (
-                  <p className="mt-3 text-sm text-warning">
-                    No model is loaded right now. Chat unlocks when an administrator loads one.
-                  </p>
-                ) : null}
+                <h2 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">A chat that remembers</h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  Persistent Chat saves conversations to your account. Start a new chat by sending a message.
+                </p>
               </div>
             </div>
           ) : (
@@ -545,6 +626,7 @@ export function PersistentChatShell({
               metrics={metrics}
               activeStreamMessageId={activeAssistantId}
               thinking={isThinking}
+              activityLabel={activityLabel}
               thinkingOrbRef={thinkingOrbRef}
               canEdit={enabled && !busy}
               canRegenerate={enabled && !busy}

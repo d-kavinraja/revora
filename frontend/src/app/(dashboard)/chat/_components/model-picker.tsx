@@ -14,16 +14,20 @@ import {
   isModelSelectable,
   modelDisplayName,
   providerLabel,
+  providerSourceLabel,
   readinessReason,
   resolveSelectedModel,
+  visibleChatModels,
+  CLOUD_PROVIDER,
+  CLOUD_PROVIDER_LABEL,
   HOSTED_PROVIDER,
   KLLM_PROVIDER,
   HOSTED_PROVIDER_LABEL,
   KLLM_PROVIDER_LABEL,
+  type ChatProviderId,
 } from "@/lib/chat-state";
 
 import { ModelIcon } from "@/components/ui/model-icon";
-import { ManagedByRevora } from "@/components/shared/managed-by-revora";
 
 interface ModelPickerProps {
   catalog: ChatCatalog | undefined;
@@ -37,7 +41,8 @@ interface ModelPickerProps {
 
 function statusLabel(model: KllmModelLike | null | undefined): string {
   if (!model) return "No model";
-  if (isModelSelectable(model)) return "Ready";
+  if (isModelSelectable(model) && model.readiness === 'ready') return "Ready";
+  if (isModelSelectable(model) && model.readiness === 'unverified') return "Available (unverified)";
   if (model.readiness === "verifying" || model.status === "verifying") return "Verifying";
   if (model.readiness === "loading" || model.status === "loading") return "Loading";
   if (model.readiness === "failed" || model.status === "failed") return "Failed";
@@ -72,7 +77,7 @@ function ModelTrigger({
       className={cn(
         "chat-ink group/model-trigger h-9 min-w-0 max-w-full inline-flex items-center justify-between rounded-full border bg-background/70 pl-8 pr-8 text-xs font-medium outline-none transition",
         compact
-          ? "max-w-[150px] sm:max-w-[220px] md:max-w-[280px]"
+          ? "max-w-[112px] max-sm:max-w-[96px] sm:max-w-[220px] md:max-w-[280px]"
           : "w-full rounded-lg px-3 py-2 text-sm",
         ready
           ? "border-border/80 hover:bg-muted/50"
@@ -82,7 +87,11 @@ function ModelTrigger({
         "data-[popup-open]:bg-muted/50"
       )}
       aria-label="Select chat model"
-      title={selected ? `${modelDisplayName(selected)} · ${statusLabel(selected)}` : "Select model"}
+      title={
+        selected
+          ? `${providerSourceLabel(selected)} · ${modelDisplayName(selected)} · ${statusLabel(selected)}`
+          : "Select model"
+      }
     >
       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5" aria-hidden>
         {loading ? (
@@ -93,8 +102,15 @@ function ModelTrigger({
           <Cpu size={14} />
         )}
       </div>
-      <Select.Value placeholder="Select model" className="truncate">
-        {selected ? `${modelDisplayName(selected)}${contextPill}` : "Select model"}
+      <Select.Value placeholder="Select model" className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">
+          {selected ? `${modelDisplayName(selected)}${contextPill}` : "Select model"}
+        </span>
+        {selected ? (
+          <span className="hidden shrink-0 rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium text-muted-foreground md:inline">
+            {providerSourceLabel(selected)}
+          </span>
+        ) : null}
       </Select.Value>
       <Select.Icon>
         <ChevronDown
@@ -172,7 +188,7 @@ function providerNotice(provider: ChatCatalogProvider | undefined): string | nul
 }
 
 interface ProviderSection {
-  provider: 'hosted-ollama' | 'kllm';
+  provider: ChatProviderId;
   label: string;
   groups: GroupedModels;
   notice: string | null;
@@ -192,8 +208,9 @@ export function ModelPicker({
     onOpenMenuChange?.(open ? 'model' : null);
   };
 
-  const groups = useMemo(() => groupCatalogModels(catalog?.models), [catalog?.models]);
-  const models = catalog?.models ?? [];
+  // Unreachable kLLM / kLLM Cloud models never reach the list or the trigger.
+  const models = useMemo(() => visibleChatModels(catalog), [catalog]);
+  const groups = useMemo(() => groupCatalogModels(models), [models]);
   const selected = resolveSelectedModel(models, value);
   const ready = isModelSelectable(selected);
   const providers = catalog?.providers ?? [];
@@ -205,24 +222,38 @@ export function ModelPicker({
     !disabled &&
     !!catalog?.enabled &&
     (providerFor(HOSTED_PROVIDER)?.enabled === true ||
-      providerFor(KLLM_PROVIDER)?.enabled === true);
+      providerFor(KLLM_PROVIDER)?.enabled === true ||
+      providerFor(CLOUD_PROVIDER)?.enabled === true);
 
   const items = models.map((m) => ({ value: m.key, label: modelDisplayName(m) }));
 
-  const sections: ProviderSection[] = [
-    {
-      provider: HOSTED_PROVIDER,
-      label: HOSTED_PROVIDER_LABEL,
-      groups: groups.hosted,
-      notice: providerNotice(providerFor(HOSTED_PROVIDER)),
-    },
-    {
-      provider: KLLM_PROVIDER,
-      label: KLLM_PROVIDER_LABEL,
-      groups: groups.kllm,
-      notice: providerNotice(providerFor(KLLM_PROVIDER)),
-    },
-  ];
+  const cloudProvider = providerFor(CLOUD_PROVIDER);
+  const kllmSection: ProviderSection = {
+    provider: KLLM_PROVIDER,
+    label: KLLM_PROVIDER_LABEL,
+    groups: groups.kllm,
+    notice: providerNotice(providerFor(KLLM_PROVIDER)),
+  };
+  const hostedSection: ProviderSection = {
+    provider: HOSTED_PROVIDER,
+    label: HOSTED_PROVIDER_LABEL,
+    groups: groups.hosted,
+    notice: providerNotice(providerFor(HOSTED_PROVIDER)),
+  };
+  // Cloud gets its own section between the two existing providers, and only
+  // when the backend reports the provider at all.
+  const sections: ProviderSection[] = cloudProvider
+    ? [
+        kllmSection,
+        {
+          provider: CLOUD_PROVIDER,
+          label: CLOUD_PROVIDER_LABEL,
+          groups: groups.cloud,
+          notice: providerNotice(cloudProvider),
+        },
+        hostedSection,
+      ]
+    : [kllmSection, hostedSection];
 
   const renderGroup = (label: string, list: KllmModelLike[]) => {
     if (list.length === 0) return null;
@@ -253,6 +284,7 @@ export function ModelPicker({
       unloaded.length === 0 &&
       failed.length === 0 &&
       unavailable.length === 0;
+    if (empty && section.notice === "Unreachable") return null;
     return (
       <Fragment key={section.provider}>
         {index > 0 && <Select.Separator className="my-1.5 border-t border-border/60" />}
@@ -260,7 +292,6 @@ export function ModelPicker({
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/85">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate">{section.label}</span>
-            <ManagedByRevora size="xs" className="shrink-0" />
           </span>
           {section.notice ? (
             <span className="shrink-0 rounded bg-surface-2/70 px-1.5 py-0.5 text-[10px] font-medium normal-case text-muted-foreground whitespace-nowrap">
@@ -276,7 +307,13 @@ export function ModelPicker({
         {renderGroup("Unavailable", unavailable)}
         {empty && (
           <div className="px-2.5 py-2 text-[11px] text-muted-foreground">
-            No {section.provider === HOSTED_PROVIDER ? "hosted" : "kLLM"} models reported.
+            No{" "}
+            {section.provider === CLOUD_PROVIDER
+              ? "kLLM Cloud"
+              : section.provider === HOSTED_PROVIDER
+                ? "hosted"
+                : "kLLM"}{" "}
+            models reported.
           </div>
         )}
       </Fragment>
@@ -310,7 +347,7 @@ export function ModelPicker({
               className={cn(
                 "rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-xl backdrop-blur-md",
                 compact
-                  ? "w-[300px] sm:w-[340px] max-w-[calc(100vw-2rem)]"
+                  ? "w-[300px] sm:w-[340px] max-w-[calc(100vw-24px)]"
                   : "w-full"
               )}
             >

@@ -161,7 +161,12 @@ def resolve_max_tokens(
     return max(1, min(allowed, MAX_OUTPUT_TOKENS))
 
 
-def safe_chat_error(exc: Exception, *, display_model: str | None = None) -> tuple[str, str]:
+def safe_chat_error(
+    exc: Exception,
+    *,
+    display_model: str | None = None,
+    provider_label: str = "kLLM",
+) -> tuple[str, str]:
     if isinstance(exc, HTTPException):
         detail = exc.detail if isinstance(exc.detail, str) else "Chat request failed."
         return "chat_error", detail
@@ -171,7 +176,15 @@ def safe_chat_error(exc: Exception, *, display_model: str | None = None) -> tupl
         return exc.reason_code or "kllm_error", exc.message
     if isinstance(exc, asyncio.TimeoutError):
         model_text = f" for '{display_model}'" if display_model else ""
-        return "timeout", f"kLLM timed out while serving{model_text}."
+        return "timeout", f"{provider_label} timed out while serving{model_text}."
+    if provider_label != "kLLM":
+        # Cloud failures never borrow the local kLLM wording or its hints.
+        model_text = f" for '{display_model}'" if display_model else ""
+        return (
+            "kllm_cloud_error",
+            f"{provider_label} could not complete the request{model_text}. "
+            "Please try again later.",
+        )
     message = llm_service._managed_error_message(exc, display_model or "model")
     lower = message.lower()
     if "busy" in lower or "capacity" in lower:
@@ -508,13 +521,37 @@ async def stream_chat_sse(
     temperature: float | None,
     reasoning_effort: str | None = None,
     stream_factory: Callable[[], AsyncIterator[Any]] | None = None,
+    provider_label: str = "kLLM",
+    first_token_timeout: float | None = None,
+    idle_timeout: float | None = None,
+    total_timeout: float | None = None,
+    status_interval: float | None = None,
 ) -> AsyncIterator[str]:
+    """Stream a chat turn as SSE.
+
+    ``first_token_timeout`` is an *absolute* prefill deadline measured from
+    ``start``: relay keepalives and locally generated status events can never
+    restart it. ``idle_timeout`` resets on real content or a relay keepalive,
+    but never on a status event. ``total_timeout`` is an absolute ceiling that
+    nothing can extend.
+    """
+    if first_token_timeout is None:
+        first_token_timeout = FIRST_TOKEN_TIMEOUT_SECONDS
+    if idle_timeout is None:
+        idle_timeout = IDLE_TIMEOUT_SECONDS
+    if total_timeout is None:
+        total_timeout = TOTAL_TIMEOUT_SECONDS
+    if status_interval is None:
+        status_interval = 15.0
     start = monotonic()
-    last_event = start
+    last_status_at = start
+    _first_token_logged = False
+    if settings.KLLM_CLOUD_DIAGNOSTICS:
+        logger.info("cloud_chat_diag start model=%s", model)
+    last_content_at = start
+    last_idle_reset_at = start
     emitted = False
     finish_reason = "stop"
-    # A clean EOF proves the connection ended, not that the model finished.
-    # Only an upstream done/[DONE] frame is a terminal signal.
     terminal_seen = False
     ait = None
     try:
@@ -539,65 +576,117 @@ async def stream_chat_sse(
                 )
                 return
 
-            # Absolute deadline from the fixed start: never reset by keepalives.
-            remaining_total = TOTAL_TIMEOUT_SECONDS - (monotonic() - start)
+            now = monotonic()
+            remaining_total = total_timeout - (now - start)
             if remaining_total <= 0:
                 raise TimeoutError()
 
-            timeout = min(
-                IDLE_TIMEOUT_SECONDS if emitted else FIRST_TOKEN_TIMEOUT_SECONDS,
-                remaining_total,
-            )
+            if not emitted:
+                remaining_prefill = first_token_timeout - (now - start)
+                wait_budget = min(remaining_prefill, remaining_total, status_interval)
+            else:
+                remaining_idle = idle_timeout - (now - last_idle_reset_at)
+                wait_budget = min(remaining_idle, remaining_total, status_interval)
+
+            if wait_budget <= 0:
+                raise TimeoutError()
+
             try:
-                item = await asyncio.wait_for(ait.__anext__(), timeout=timeout)
+                item = await asyncio.wait_for(ait.__anext__(), timeout=wait_budget)
+            except asyncio.TimeoutError:
+                now = monotonic()
+                expired = False
+                if not emitted:
+                    if (now - start) >= first_token_timeout or (now - start) >= total_timeout:
+                        expired = True
+                else:
+                    if (now - last_idle_reset_at) >= idle_timeout or (now - start) >= total_timeout:
+                        expired = True
+                if expired:
+                    raise TimeoutError()
+                # Status interval elapsed without an upstream item: emit a local,
+                # rate-limited waiting status. It is NOT content, does NOT flip
+                # `emitted`, and does NOT reset any deadline.
+                if now - last_status_at >= status_interval:
+                    phase = (
+                        "waiting_for_first_token" if not emitted else "waiting_for_more_tokens"
+                    )
+                    yield sse_event(
+                        {
+                            "type": "status",
+                            "status": "thinking",
+                            "phase": phase,
+                            "elapsed_seconds": int(now - start),
+                        }
+                    )
+                    last_status_at = now
+                continue
             except StopAsyncIteration:
                 break
 
-            # Every item — including an internal keepalive — proves the upstream
-            # is alive and restarts the wait_for window above. Only visible
-            # content flips `emitted`, so genuine prefill keepalives keep the
-            # first-token deadline from firing on a healthy, silent prefill.
-            last_event = monotonic()
+            now = monotonic()
             if isinstance(item, StreamMeta):
                 if item.kind == "keepalive":
                     # Relay prefill comment: internal liveness only. Never sent
-                    # to the client, never content, never a finish reason.
+                    # to the client, never content, never a finish reason. It
+                    # never extends the prefill deadline, but it does prove the
+                    # upstream is alive, so it resets the content-idle window
+                    # (original behaviour). It must not reset the absolute total.
+                    last_idle_reset_at = now
                     continue
                 if item.kind == "end":
-                    # [DONE] terminal marker carries no reason. Leave the actual
-                    # upstream finish_reason (e.g. "length") untouched, but it does
-                    # prove the provider closed the stream on purpose.
                     terminal_seen = True
+                    continue
+                if item.kind == "status" and item.data:
+                    # Upstream status is forwarded only if it carries a neutral
+                    # status value; arbitrary payloads are dropped. It is not
+                    # content and does not reset any deadline.
+                    if isinstance(item.data, dict) and item.data.get("status") in (
+                        "thinking",
+                        "waking",
+                        "queued",
+                    ):
+                        yield sse_event({"type": "status", **item.data})
                     continue
                 if item.kind == "usage" and item.data:
                     yield sse_event({"type": "usage", **item.data})
-                elif item.kind == "timings" and item.data:
+                    continue
+                if item.kind == "timings" and item.data:
                     yield sse_event({"type": "timings", **item.data})
-                elif item.kind == "status" and item.data:
-                    yield sse_event({"type": "status", **item.data})
-                elif item.kind == "progress" and item.data:
-                    # Prefill telemetry: non-content, never changes completion.
+                    continue
+                if item.kind == "progress" and item.data:
                     yield sse_event({"type": "progress", **item.data})
-                elif item.kind == "model" and item.data:
-                    # Authoritative model id for this response; non-terminal.
+                    continue
+                if item.kind == "model" and item.data:
                     yield sse_event({"type": "model", **item.data})
-                elif item.kind == "done":
+                    continue
+                if item.kind == "done":
                     terminal_seen = True
-                    reason = item.data.get("finish_reason")
+                    reason = None
+                    if isinstance(item.data, dict):
+                        reason = item.data.get("finish_reason")
                     if isinstance(reason, str) and reason:
                         finish_reason = reason
+                    continue
                 continue
 
             delta = str(item)
             if not delta:
                 continue
             emitted = True
+            last_content_at = now
+            last_idle_reset_at = now
+            last_status_at = now
+            if settings.KLLM_CLOUD_DIAGNOSTICS and not _first_token_logged:
+                _first_token_logged = True
+                logger.info(
+                    "cloud_chat_diag first_token model=%s ms=%s",
+                    model,
+                    int((now - start) * 1000),
+                )
             yield sse_event({"type": "delta", "content": delta})
 
         if not terminal_seen:
-            # The upstream iterator ended without a terminal event. Report an
-            # incomplete answer instead of claiming a clean "stop"; the client
-            # surfaces it as an interrupted response.
             finish_reason = INCOMPLETE_FINISH_REASON
             logger.warning(
                 "chat_stream_missing_terminal model=%s messages=%s emitted=%s duration_ms=%s",
@@ -624,23 +713,23 @@ async def stream_chat_sse(
         )
         raise
     except Exception as exc:
-        code, message = safe_chat_error(exc, display_model=model)
+        code, message = safe_chat_error(
+            exc, display_model=model, provider_label=provider_label
+        )
         logger.warning(
             "chat_stream_error model=%s code=%s error_type=%s duration_ms=%s idle_ms=%s",
             model,
             code,
             type(exc).__name__,
             int((monotonic() - start) * 1000),
-            int((monotonic() - last_event) * 1000),
+            int((monotonic() - last_content_at) * 1000),
         )
         yield sse_event({"type": "error", "code": code, "message": message})
     finally:
-        # The lease is owned by the HTTP response (see LeaseStreamingResponse)
-        # and released after this generator is closed, so closing the upstream
-        # iterator is the only cleanup left here.
         aclose = getattr(ait, "aclose", None)
         if callable(aclose):
             try:
                 await aclose()
             except Exception:
                 pass
+

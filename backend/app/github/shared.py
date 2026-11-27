@@ -30,6 +30,49 @@ logger = logging.getLogger(__name__)
 _TERMINAL_REVIEW_STATUSES = {"completed", "failed", "cancelled", "stopped", "timed_out"}
 
 
+async def _ensure_managed_model_selectable(
+    db_session, provider: str, model: str
+) -> None:
+    """Validate a managed provider's model through that provider's own gate.
+
+    kLLM Cloud and local kLLM are independent: a Cloud mapping must be checked
+    against the Cloud relay/approval gate (``kllm_cloud_service``) and never
+    against local kLLM readiness, so a stopped local kLLM can never block a
+    Cloud review. Any other managed provider keeps the local kLLM gate.
+
+    Raises :class:`ProviderUnavailableError` on a definitive failure so the
+    caller fails fast without substituting another provider.
+    """
+    provider_row = await provider_registry_service.get_by_identifier(
+        db_session, provider
+    )
+    if provider_row is not None and provider_row.slug == "kllm-cloud":
+        from app.services.kllm_cloud_service import (
+            KllmCloudError,
+            ensure_model_ready,
+        )
+
+        try:
+            await ensure_model_ready(db_session, model, surface="review")
+        except KllmCloudError as exc:
+            raise ProviderUnavailableError(
+                provider,
+                exc.message,
+                definitive=bool(getattr(exc, "definitive", False)),
+            ) from exc
+        return
+    from app.services.kllm_service import KllmError, ensure_model_selectable
+
+    try:
+        await ensure_model_selectable(db_session, model)
+    except KllmError as exc:
+        raise ProviderUnavailableError(
+            provider,
+            exc.message,
+            definitive=bool(getattr(exc, "definitive", False)),
+        ) from exc
+
+
 async def resolve_provider_config(
     db_session,
     user_id: str,
@@ -57,23 +100,16 @@ async def resolve_provider_config(
         model = db_repo.settings.get("assigned_model")
         api_key_id = db_repo.settings.get("assigned_key_id")
         if provider and model:
-            # Server-owned provider (kLLM): no user key exists. Validate the
-            # live readiness snapshot at execution time and fail fast — never
-            # substitute another provider or clear the mapping.
+            # Server-owned provider (kLLM / kLLM Cloud): no user key exists.
+            # Validate the live readiness snapshot at execution time and fail
+            # fast — never substitute another provider or clear the mapping.
+            # Each managed provider is checked through its OWN gate so a
+            # stopped local kLLM never blocks a Cloud review.
             provider_row = await provider_registry_service.get_by_identifier(
                 db_session, provider
             )
             if provider_row is not None and provider_row.is_managed:
-                from app.services.kllm_service import KllmError, ensure_model_selectable
-
-                try:
-                    await ensure_model_selectable(db_session, model)
-                except KllmError as exc:
-                    raise ProviderUnavailableError(
-                        provider,
-                        exc.message,
-                        definitive=bool(getattr(exc, "definitive", False)),
-                    ) from exc
+                await _ensure_managed_model_selectable(db_session, provider, model)
                 config_source = CONFIG_SOURCE_REPO
                 logger.info(f"MODE 1 (managed repo config): {provider}/{model}")
                 return provider, model, None, config_source
@@ -140,19 +176,9 @@ async def resolve_provider_config(
                     db_session, provider
                 )
                 if provider_row is not None and provider_row.is_managed:
-                    from app.services.kllm_service import (
-                        KllmError,
-                        ensure_model_selectable,
+                    await _ensure_managed_model_selectable(
+                        db_session, provider, model
                     )
-
-                    try:
-                        await ensure_model_selectable(db_session, model)
-                    except KllmError as exc:
-                        raise ProviderUnavailableError(
-                            provider,
-                            exc.message,
-                            definitive=bool(getattr(exc, "definitive", False)),
-                        ) from exc
                     config_source = CONFIG_SOURCE_ROUTING
                     logger.info(f"MODE 2 (managed routing): {provider}/{model}")
                     return provider, model, None, config_source
@@ -197,10 +223,24 @@ async def build_available_providers_for_user(
     available = []
     for provider in providers:
         if provider.is_managed:
-            # Server-owned provider: usable without a user key, but only when
-            # at least one model is loaded and ready right now.
+            # Server-owned provider: usable without a user key. Each managed
+            # provider exposes its own ready catalogue; kLLM Cloud is never
+            # served from local kLLM readiness.
             from app.core.config import settings
 
+            if provider.slug == "kllm-cloud":
+                if not settings.KLLM_CLOUD_ENABLED:
+                    continue
+                from app.services import kllm_cloud_service
+
+                ready = await kllm_cloud_service.model_options(
+                    db_session, surface="review"
+                )
+                if not ready:
+                    continue
+                model = ready[0]["model_name"]
+                available.append((provider.name, model, ""))
+                continue
             if not settings.KLLM_ENABLED:
                 continue
             from app.services.kllm_service import get_ready_models

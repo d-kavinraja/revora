@@ -187,10 +187,11 @@ function ConfigModal({
     return norm1 === norm2;
   };
 
-  // Managed providers (kLLM) are server-owned: no user key exists, and the
-  // catalogue only contains models kLLM currently reports as ready.
+  // Managed providers (kLLM, kLLM Cloud) are server-owned: no user key exists,
+  // and the catalogue only contains models the provider reports as ready.
   const isManagedProvider =
     selectedProvider === 'kllm' ||
+    selectedProvider === 'kllm-cloud' ||
     managedProviders.some((p) => matchProvider(p, selectedProvider));
 
   const providerKeys = apiKeys.filter(k => matchProvider(k.provider, selectedProvider) && k.is_valid && (k.is_enabled !== false));
@@ -453,7 +454,7 @@ function ConfigModal({
 
               {isManagedProvider && models.length === 0 && (
                 <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500 leading-relaxed">
-                  No kLLM models are available right now. An administrator can
+                  No {selectedProvider === 'kllm-cloud' ? 'kLLM Cloud' : 'kLLM'} models are available right now. An administrator can
                   load one or approve it for on-demand loading from the admin
                   console. The existing mapping is kept until you change it.
                 </div>

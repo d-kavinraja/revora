@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     dashboard,
     health,
     kllm,
+    kllm_cloud,
     llm,
     models,
     mouthmap,
@@ -65,6 +66,9 @@ api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(persistent_chat.router, prefix="/persistent-chat", tags=["persistent-chat"])
 api_router.include_router(stt.router, prefix="/stt", tags=["stt"])
 api_router.include_router(kllm.router, prefix="/kllm", tags=["kllm"])
+api_router.include_router(
+    kllm_cloud.router, prefix="/kllm-cloud", tags=["kllm-cloud"]
+)
 api_router.include_router(mouthmap.router, prefix="/mouthmap", tags=["mouthmap"])
 api_router.include_router(botaniq.router, prefix="/botaniq", tags=["botaniq"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])

@@ -12,6 +12,7 @@ import {
   type ChatModelEvent,
   type ChatProgressEvent,
   type ChatTimingsEvent,
+  type ChatStatusEvent,
   type ChatUsageEvent,
   type ReasoningEffort,
   streamChatCompletion,
@@ -30,14 +31,19 @@ import {
   editPrompt,
   editUndoNotice,
   finalStatusFor,
+  isManagedProviderReachable,
   isModelSelectable,
+  KLLM_PROVIDER,
+  modelProviderSlug,
   nextRequestContextMeter,
   pickDefaultModel,
   planMessageEdit,
   providerForKey,
   regenerationPrompt,
   resolveSelectedModel,
+  turnProvenance,
   undoNotice,
+  visibleChatModels,
   withPendingChatDraft,
   type ChatMessage,
   type EditPlan,
@@ -46,6 +52,11 @@ import {
   type ResponsePhase,
   type TemporaryChat,
 } from '@/lib/chat-state';
+import {
+  activityLabelFor,
+  mergeBackendStatus,
+  type LiveChatActivity,
+} from '@/lib/chat-activity';
 import { createStreamRegistry, type StreamRegistry } from '@/lib/stream-lifecycle';
 import { formatSpeechError, insertTranscript } from '@/lib/speech';
 import { useChatModes } from '@/lib/use-chat-modes';
@@ -54,12 +65,10 @@ import { useChatStore } from '@/store/useChatStore';
 
 import Image from 'next/image';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
-import { ManagedByRevora } from '@/components/shared/managed-by-revora';
 import { ChatComposer } from './chat-composer';
 import { useSpeechToText } from './use-speech-to-text';
 import { ChatTabs } from './chat-tabs';
 import { ChatMessageList } from './chat-message-list';
-import { ChatProviderStatusBanners } from './chat-provider-status-banners';
 import { ChatTopBar } from './chat-top-bar';
 
 const SCROLL_NEAR_BOTTOM_PX = 80;
@@ -78,6 +87,13 @@ const READINESS_ERROR_CODES = new Set([
   'kllm_state_stale',
   'hosted_busy',
   'kllm_busy',
+  'kllm_cloud_unavailable',
+  'kllm_cloud_busy',
+  'kllm_cloud_timeout',
+  'kllm_cloud_protocol_error',
+  'kllm_cloud_request_error',
+  'timeout',
+  'model_removed',
 ]);
 
 type ChatMenu = 'context' | 'model' | 'effort' | null;
@@ -242,6 +258,9 @@ export function ChatShell({
     enabled: chatFlagEnabled && isActive,
   });
 
+  // Offline managed providers never surface as disabled rows or banners.
+  const visibleModels = useMemo(() => visibleChatModels(statusQuery.data), [statusQuery.data]);
+
   // Notify parent when the model catalog becomes unavailable/stale so the
   // SideRays background animation can be disabled.
   useEffect(() => {
@@ -263,9 +282,9 @@ export function ChatShell({
 
   useEffect(() => {
     if (!activeChat) return;
-    const next = pickDefaultModel(statusQuery.data?.models, activeChat.model);
+    const next = pickDefaultModel(visibleModels, activeChat.model);
     if (next !== activeChat.model) setChatModel(activeChat.id, next);
-  }, [activeChat, setChatModel, statusQuery.data?.models]);
+  }, [activeChat, setChatModel, visibleModels]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -385,6 +404,20 @@ export function ChatShell({
     : undefined;
   const isThinking = isGenerating && !thinkingMessage?.content?.trim();
 
+  // A shared clock derives elapsed time from each turn's submission timestamp,
+  // so switching chats cannot inherit another request's timer value.
+  const [activityClock, setActivityClock] = useState(() => Date.now());
+  const [activityByChat, setActivityByChat] = useState<Record<string, LiveChatActivity>>({});
+  const timerActivity = activeChat ? activityByChat[activeChat.id] : undefined;
+  useEffect(() => {
+    if (!isGenerating) return;
+    const timer = window.setInterval(() => setActivityClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isGenerating]);
+  const elapsedSeconds = timerActivity && timerActivity.assistantMessageId === activeStreamMessageId
+    ? Math.max(0, Math.floor((activityClock - timerActivity.startedAt) / 1000))
+    : 0;
+
   useEffect(() => {
     if (isFreshChat && listRef.current) {
       listRef.current.scrollTop = 0;
@@ -401,9 +434,12 @@ export function ChatShell({
   }, [isThinking]);
 
   const selectedModel = useMemo(
-    () => resolveSelectedModel(statusQuery.data?.models, activeChat?.model),
-    [activeChat?.model, statusQuery.data?.models],
+    () => resolveSelectedModel(visibleModels, activeChat?.model),
+    [activeChat?.model, visibleModels],
   );
+  const showKllmLockup =
+    isManagedProviderReachable(statusQuery.data, KLLM_PROVIDER) &&
+    modelProviderSlug(selectedModel) === KLLM_PROVIDER;
 
   const activeMetrics = activeStreamMessageId
     ? metrics[activeStreamMessageId]
@@ -417,6 +453,23 @@ export function ChatShell({
       : activeMetrics?.phase === 'thinking'
         ? 'thinking'
         : 'preparing';
+
+  // The shared activity label uses only the selected turn's neutral backend
+  // status, real prefill progress, response phase and elapsed time. It hides
+  // as soon as streamed content arrives.
+  const activeActivity = activeChat ? activityByChat[activeChat.id] : undefined;
+  const streamActivity = activeActivity?.assistantMessageId === activeStreamMessageId ? activeActivity : undefined;
+  const activityPhase = activeMetrics?.phase ?? null;
+  const hasStreamingContent = Boolean(streamActivity?.hasContent) || Boolean(thinkingMessage?.content?.trim());
+  const activityLabel = isGenerating
+    ? activityLabelFor({
+        status: streamActivity?.status ?? null,
+        hasPrefillProgress: streamActivity?.hasPrefillProgress ?? false,
+        phase: activityPhase,
+        elapsedSeconds,
+        hasContent: hasStreamingContent,
+      })
+    : null;
 
   // The meter describes the NEXT request of the SELECTED chat with the SELECTED
   // model. Its bar/numerator is the fitted PROMPT only; the reply reserve and
@@ -531,8 +584,14 @@ export function ChatShell({
     // queued callback of this generation is already a no-op.
     streamRegistry.end(token);
     clearStreaming(token.chatId, token.messageId);
+    setActivityByChat((current) => {
+      if (current[chatId]?.assistantMessageId !== token.messageId) return current;
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
     token.controller.abort();
-  }, [clearStreaming, finishAssistantMessage, flushNow, queueMetrics, streamRegistry]);
+  }, [clearStreaming, finishAssistantMessage, flushNow, queueMetrics, setActivityByChat, streamRegistry]);
 
   const startGeneration = useCallback(async (
     chat: TemporaryChat,
@@ -544,7 +603,7 @@ export function ChatShell({
     // The window belongs to THIS chat's model, not to whichever chat happens to
     // be selected, so a regeneration in another tab is fitted with its own.
     const modelWindow =
-      statusQuery.data?.models?.find(
+      visibleModels.find(
         (m) => canonicalModelKey(m.key) === canonicalModelKey(chat.model),
       )?.context_window ?? null;
     const context = buildChatContext(useChatStore.getState().chats[chat.id] ?? chat, {
@@ -562,6 +621,17 @@ export function ChatShell({
 
     const controller = new AbortController();
     const token = streamRegistry.begin(chat.id, assistantMessageId, controller);
+    const startedAt = Date.now();
+    setActivityByChat((current) => ({
+      ...current,
+      [chat.id]: {
+        assistantMessageId,
+        startedAt,
+        status: null,
+        hasPrefillProgress: false,
+        hasContent: false,
+      },
+    }));
     markStreaming(chat.id, assistantMessageId);
     stickToBottomRef.current = true;
     queueMetrics(assistantMessageId, {
@@ -637,6 +707,11 @@ export function ChatShell({
         },
         {
           onDelta: (delta) => guarded(() => {
+            setActivityByChat((current) => {
+              const activity = current[chat.id];
+              if (activity?.assistantMessageId !== assistantMessageId) return current;
+              return { ...current, [chat.id]: { ...activity, hasContent: true } };
+            });
             if (!receivedDelta) {
               receivedDelta = true;
               queueMetrics(assistantMessageId, { phase: 'generating' });
@@ -665,14 +740,31 @@ export function ChatShell({
           },
           onUsage: (event) => guarded(() => handleUsage(event)),
           onTimings: (event) => guarded(() => handleTimings(event)),
-          onStatus: () => guarded(() => {
-            if (!receivedDelta) queueMetrics(assistantMessageId, { phase: 'thinking' });
+          onStatus: (event: ChatStatusEvent) => guarded(() => {
+            if (!receivedDelta) {
+              if (event?.status) {
+                setActivityByChat((current) => {
+                  const activity = current[chat.id];
+                  if (activity?.assistantMessageId !== assistantMessageId) return current;
+                  return {
+                    ...current,
+                    [chat.id]: { ...activity, status: mergeBackendStatus(activity.status, event.status, event.phase) },
+                  };
+                });
+              }
+              queueMetrics(assistantMessageId, { phase: 'thinking' });
+            }
           }),
           onProgress: (event: ChatProgressEvent) => guarded(() => {
             // Once real content has arrived, a late prefill progress event must
             // not revert the phase to "preparing" while text is already growing.
             if (receivedDelta) return;
             if (event.cache === undefined || event.processed === undefined || event.total === undefined) return;
+            setActivityByChat((current) => {
+              const activity = current[chat.id];
+              if (activity?.assistantMessageId !== assistantMessageId) return current;
+              return { ...current, [chat.id]: { ...activity, hasPrefillProgress: true } };
+            });
             queueMetrics(assistantMessageId, {
               phase: 'preparing',
               progress: { cache: event.cache, processed: event.processed, total: event.total },
@@ -729,6 +821,12 @@ export function ChatShell({
       // Only this generation's marker is cleared; a newer generation of the
       // same chat keeps its own.
       clearStreaming(chat.id, assistantMessageId);
+      setActivityByChat((current) => {
+        if (current[chat.id]?.assistantMessageId !== assistantMessageId) return current;
+        const next = { ...current };
+        delete next[chat.id];
+        return next;
+      });
     }
   }, [
     clearStreaming,
@@ -741,8 +839,8 @@ export function ChatShell({
     reasoningEffort,
     scheduleFrame,
     setConfirmedModel,
-    statusQuery.data?.models,
     streamRegistry,
+    visibleModels,
   ]);
 
   const sendMessage = useCallback(async (contentOverride?: string) => {
@@ -757,7 +855,7 @@ export function ChatShell({
     // Reserve the prompt AND its answer atomically. Appending only the prompt
     // when the last slot is free would leave an orphaned question the chat can
     // never answer, so the store refuses instead of half-writing the turn.
-    const started = beginTurn(chat.id, content);
+    const started = beginTurn(chat.id, content, turnProvenance(chat.model, selectedModel));
     if (!started.ok) {
       setSendError(
         started.reason === 'chat_full'
@@ -785,7 +883,8 @@ export function ChatShell({
   const applyAndStartRegeneration = useCallback(async (chatId: string, plan: RegenerationPlan) => {
     // The store refuses a plan whose history no longer matches, so a stale
     // closure can never rewrite newer turns.
-    if (!applyRegeneration(chatId, plan)) return;
+    const chatModel = useChatStore.getState().chats[chatId]?.model;
+    if (!applyRegeneration(chatId, plan, turnProvenance(chatModel, selectedModel))) return;
     setUndoEdit(null);
     setPendingEdit(null);
     setEditingMessageId(null);
@@ -799,7 +898,7 @@ export function ChatShell({
     const currentChat = useChatStore.getState().chats[chatId];
     if (!currentChat) return;
     await startGeneration(currentChat, plan.assistantMessageId);
-  }, [applyRegeneration, startGeneration]);
+  }, [applyRegeneration, selectedModel, startGeneration]);
 
   const retryMessage = useCallback((assistantMessageId: string) => {
     const chat = activeChat;
@@ -850,7 +949,8 @@ export function ChatShell({
     // A newer send or regeneration makes its undo stale; never show two bars.
     setUndoRegeneration(null);
     setPendingRegeneration(null);
-    if (!applyMessageEdit(chatId, plan)) return;
+    const chatModel = useChatStore.getState().chats[chatId]?.model;
+    if (!applyMessageEdit(chatId, plan, turnProvenance(chatModel, selectedModel))) return;
     const replacedIds = plan.replaced.map((m) => m.id);
     // Detach the replaced answer's telemetry before dropping it, so undo can
     // restore the answer's tokens, timings and processing card with its text.
@@ -870,7 +970,7 @@ export function ChatShell({
     const currentChat = useChatStore.getState().chats[chatId];
     if (!currentChat) return;
     await startGeneration(currentChat, plan.assistantMessageId);
-  }, [applyMessageEdit, dropMetricsForIds, startGeneration]);
+  }, [applyMessageEdit, dropMetricsForIds, selectedModel, startGeneration]);
 
   const requestMessageEdit = useCallback((messageId: string, content: string) => {
     const chat = activeChat;
@@ -907,6 +1007,11 @@ export function ChatShell({
 
   const onDeleteChat = useCallback((chatId: string) => {
     stopChat(chatId);
+    setActivityByChat((current) => {
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
     dropMetricsFor(chatId);
     deleteChat(chatId);
     // An undo from the deleted chat would resurrect removed history.
@@ -915,10 +1020,15 @@ export function ChatShell({
     setUndoEdit((prev) => (prev?.chatId === chatId ? null : prev));
     setEditingMessageId(null);
     setPendingEdit(null);
-  }, [deleteChat, dropMetricsFor, stopChat]);
+  }, [deleteChat, dropMetricsFor, setActivityByChat, stopChat]);
 
   const onClearChat = useCallback((chatId: string) => {
     stopChat(chatId);
+    setActivityByChat((current) => {
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
     dropMetricsFor(chatId);
     clearChat(chatId);
     // Clearing is an explicit reset: it must not be undoable back to the old turns.
@@ -927,7 +1037,7 @@ export function ChatShell({
     setUndoEdit((prev) => (prev?.chatId === chatId ? null : prev));
     setEditingMessageId(null);
     setPendingEdit(null);
-  }, [clearChat, dropMetricsFor, stopChat]);
+  }, [clearChat, dropMetricsFor, setActivityByChat, stopChat]);
 
   const onSelectChat = useCallback((chatId: string) => {
     selectChat(chatId);
@@ -936,12 +1046,10 @@ export function ChatShell({
   }, [selectChat]);
 
   const onNewChat = useCallback(() => {
-    createNewChat(activeChat?.model ?? pickDefaultModel(statusQuery.data?.models, null));
+    createNewChat(activeChat?.model ?? pickDefaultModel(visibleModels, null));
     setEditingMessageId(null);
     setPendingEdit(null);
-  }, [activeChat?.model, createNewChat, statusQuery.data?.models]);
-
-  // Provider reachability banners are rendered via shared <ChatProviderStatusBanners />.
+  }, [activeChat?.model, createNewChat, visibleModels]);
 
   const scrollToBottom = () => {
     const el = listRef.current;
@@ -968,78 +1076,94 @@ export function ChatShell({
               type="button"
               onClick={() => activeChat && onClearChat(activeChat.id)}
               disabled={!activeChat || activeChat.messages.length === 0 || isGenerating}
-              className="chat-ink inline-flex h-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+              className="chat-ink inline-flex h-10 min-h-8 min-w-8 w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border/60 text-xs transition hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 md:h-8 md:w-auto"
+              aria-label="Clear chat"
               title="Clear chat"
             >
               <Trash2Icon size={14} />
               <span className="hidden sm:inline">Clear</span>
             </button>
           )}
+          sessionSlot={(
+            <ChatTabs
+              chats={chats}
+              activeId={activeId}
+              canCreate={canCreate}
+              generatingChatIds={Object.keys(streaming)}
+              panelIdBase={panelIdBase}
+              onSelect={onSelectChat}
+              onNew={onNewChat}
+              onDelete={onDeleteChat}
+              onStop={stopChat}
+              bare
+            />
+          )}
         />
 
-        <ChatTabs
-          chats={chats}
-          activeId={activeId}
-          canCreate={canCreate}
-          generatingChatIds={Object.keys(streaming)}
-          panelIdBase={panelIdBase}
-          onSelect={onSelectChat}
-          onNew={onNewChat}
-          onDelete={onDeleteChat}
-          onStop={stopChat}
-        />
+        <div className="hidden md:block">
+          <ChatTabs
+            chats={chats}
+            activeId={activeId}
+            canCreate={canCreate}
+            generatingChatIds={Object.keys(streaming)}
+            panelIdBase={panelIdBase}
+            onSelect={onSelectChat}
+            onNew={onNewChat}
+            onDelete={onDeleteChat}
+            onStop={stopChat}
+          />
+        </div>
 
         <div
           id={activeIndex >= 0 ? `${panelIdBase}-panel-${activeIndex}` : undefined}
           role="tabpanel"
           aria-label={activeChat?.title || 'Chat conversation'}
           ref={listRef}
-          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden max-[520px]:overflow-y-auto' : 'overflow-y-auto'} overscroll-contain bg-transparent px-3 py-6 md:px-6`}
+          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden max-[520px]:overflow-y-auto' : 'overflow-y-auto'} overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6`}
         >
-          <ChatProviderStatusBanners catalog={statusQuery.data} />
           {!activeChat || activeChat.messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center">
-              <div className="max-w-md px-4">
-                <div className="flex items-center justify-center gap-5 mb-8 md:gap-6 md:mb-10">
-                  <div className="flex items-center gap-3 md:gap-4">
+              <div className="flex w-full max-w-md flex-col items-center px-4">
+                <div className="mb-8 flex w-full items-center justify-center gap-2.5 px-4 sm:gap-4 md:mb-10 md:gap-6">
+                  <div className="flex min-w-0 items-center gap-2 md:gap-3">
                     <Image
                       src="/revora-logo.png"
                       alt="Revora"
-                      width={48}
-                      height={48}
-                      style={{ width: 48, height: 48 }}
-                      className="rounded-xl object-contain shrink-0 md:w-16 md:h-16"
+                      width={28}
+                      height={28}
+                      style={{ width: 28, height: 28 }}
+                      className="h-7 w-7 shrink-0 rounded-lg object-contain sm:h-8 sm:w-8 md:h-16 md:w-16"
                     />
                     <span
-                      className="font-bold text-2xl tracking-tight text-foreground font-heading md:text-3xl"
+                      className="font-heading text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-2xl md:text-3xl"
                       style={{ fontFamily: 'var(--font-oxanium, inherit)' }}
                     >
                       Revora
                     </span>
                   </div>
-                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xl font-light backdrop-blur-sm text-muted-foreground/70 bg-muted/40 border border-border/50 dark:text-slate-100 dark:bg-white/10 dark:border-white/15 md:w-10 md:h-10 md:text-2xl" aria-hidden>×</span>
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <Image
-                      src="/assets/kllm.svg"
-                      alt="kLLM"
-                      width={42}
-                      height={42}
-                      style={{ width: 42, height: 42 }}
-                      className="rounded-lg shrink-0 md:w-14 md:h-14"
-                    />
-                    <span className="font-bold text-2xl tracking-tight text-foreground md:text-3xl">kLLM</span>
-                    <ManagedByRevora size="xs" className="shrink-0" />
-                  </div>
+                  {showKllmLockup ? (
+                    <>
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted/40 text-base font-light text-foreground dark:border-white/15 dark:bg-white/10 sm:h-8 sm:w-8 md:h-10 md:w-10 md:text-2xl" aria-hidden>×</span>
+                      <div className="flex min-w-0 items-center gap-2 md:gap-3">
+                        <Image
+                          src="/assets/kllm.svg"
+                          alt="kLLM"
+                          width={26}
+                          height={26}
+                          style={{ width: 26, height: 26 }}
+                          className="h-7 w-7 shrink-0 rounded-lg sm:h-8 sm:w-8 md:h-14 md:w-14"
+                        />
+                        <span className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-2xl md:text-3xl">kLLM</span>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
-                <p className="text-xl font-medium tracking-tight text-foreground">What can I help with?</p>
-                <p className="chat-ink mt-2 text-sm leading-6">
+                <h2 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                  What can I help with?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                   Temporary in-memory chat. Messages are cleared on refresh, close, logout, or account change.
                 </p>
-                {!statusQuery.data?.models?.some(isModelSelectable) && statusQuery.data?.enabled ? (
-                  <p className="mt-3 text-sm text-warning">
-                    No model is loaded right now. Chat unlocks when an administrator loads one.
-                  </p>
-                ) : null}
               </div>
             </div>
           ) : (
@@ -1048,6 +1172,7 @@ export function ChatShell({
               metrics={metrics}
               activeStreamMessageId={activeStreamMessageId}
               thinking={isThinking}
+              activityLabel={activityLabel}
               thinkingOrbRef={thinkingOrbRef}
               canRegenerate={!isGenerating}
               canEdit={!isGenerating}
