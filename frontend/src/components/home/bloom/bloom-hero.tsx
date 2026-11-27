@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ASSETS } from './assets';
 import { BloomGithubPill } from './bloom-github-pill';
 import { BloomNav } from './bloom-nav';
@@ -27,6 +28,16 @@ export function BloomHero() {
         <br />
         <em>diffs blind.</em>
       </Split>
+
+      {/* Mobile-only sign-in pill; same destination as the desktop nav's "Sign in" link. */}
+      <div className="hero-cta hidden max-[761px]:flex justify-center mt-5 px-4">
+        <Link
+          href="/login"
+          className="inline-flex items-center justify-center min-h-[46px] px-7 rounded-full border border-[#4d6a10]/35 bg-[#f6f8f1]/90 backdrop-blur-md text-[15px] font-medium tracking-[-0.01em] text-[#3f5710] shadow-[0_8px_22px_rgba(45,62,12,0.12)] transition duration-200 hover:bg-[#fff] active:scale-[0.97]"
+        >
+          Sign in →
+        </Link>
+      </div>
 
       <div className="hero-media" aria-hidden="true">
         <video

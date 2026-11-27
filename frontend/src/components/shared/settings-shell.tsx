@@ -28,9 +28,9 @@ export function SettingsShell() {
   return (
     <nav
       aria-label="Settings sections"
-      className="mb-8 overflow-x-auto border-b border-border"
+      className="-mx-4 mb-8 overflow-x-auto border-b border-border px-4 md:mx-0 md:px-0"
     >
-      <ul className="flex min-w-max items-center gap-1">
+      <ul className="flex min-w-max items-center gap-1 pr-4 md:pr-0">
         {SETTINGS_TABS.map((tab) => {
           const active =
             pathname === tab.href || pathname.startsWith(tab.href + '/');

@@ -1057,17 +1057,31 @@ async def update_repository_config(
     is_managed = bool(provider_row is not None and provider_row.is_managed)
 
     if is_managed:
-        # Managed providers never use a user key. Validate availability at save
-        # time: ready models always pass; an unloaded model passes only when an
-        # administrator approved it for review-demand loading. Never substitute
-        # another model.
+        # Managed providers never use a user key. Each one is validated against
+        # the catalogue that actually serves it: kLLM Cloud models are
+        # namespaced ('kllm-cloud:<model>') and only the cloud relay knows them,
+        # so they must never be checked against local kLLM readiness. The cloud
+        # gate also owns approval and the per-surface (Chat/Review) flag, so a
+        # model an administrator disabled, left unapproved, or turned off for
+        # Reviews cannot be saved. Local kLLM keeps its existing readiness and
+        # review-demand loading policy. Never substitute another model.
         if config.assigned_model is not None:
-            from app.services.kllm_service import KllmError, ensure_model_selectable
+            from app.services import kllm_cloud_service
 
-            try:
-                await ensure_model_selectable(db, config.assigned_model)
-            except KllmError as exc:
-                raise HTTPException(status_code=400, detail=exc.message) from exc
+            if provider_row.slug == kllm_cloud_service.PROVIDER_SLUG:
+                try:
+                    await kllm_cloud_service.ensure_model_ready(
+                        db, config.assigned_model, surface="review"
+                    )
+                except kllm_cloud_service.KllmCloudError as exc:
+                    raise HTTPException(status_code=400, detail=exc.message) from exc
+            else:
+                from app.services.kllm_service import KllmError, ensure_model_selectable
+
+                try:
+                    await ensure_model_selectable(db, config.assigned_model)
+                except KllmError as exc:
+                    raise HTTPException(status_code=400, detail=exc.message) from exc
 
     # Validate model if assigned_model and assigned_key_id are provided
     elif config.assigned_provider and config.assigned_model and config.assigned_key_id:

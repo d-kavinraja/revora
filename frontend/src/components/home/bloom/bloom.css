@@ -1255,6 +1255,21 @@ body.bloom-page {
   .bloom .hero-title {
     top: 26%;
   }
+  /* Sign-in pill: starts where the two-line headline ends (2 x 1.04 line-height at its clamp() size). */
+  .bloom .hero-cta {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(26% + 2.08 * clamp(34px, 5.2vw, 76px));
+    z-index: 6;
+    /* The unlayered `.bloom *` reset and `.bloom a` colour beat Tailwind's layered utilities, so restate the spacing and label colour here. */
+    margin-top: 20px;
+    padding-inline: 16px;
+  }
+  .bloom .hero-cta a {
+    padding-inline: 28px;
+    color: #3f5710;
+  }
   .bloom .hero-media {
     height: 66%;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%);

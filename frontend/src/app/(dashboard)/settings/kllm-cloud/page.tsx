@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CloudLightning, RefreshCwIcon } from 'lucide-react';
 
 import { api, type CloudModelStatus, type CloudStatus } from '@/lib/api';
@@ -12,7 +12,7 @@ import { FeatureUnavailable } from '@/components/shared/feature-unavailable';
 import { PageHeader } from '@/components/shared/page-header';
 import { SettingsShell } from '@/components/shared/settings-shell';
 import { formatContextWindow, CLOUD_PROVIDER, CLOUD_SUPPORT_DESCRIPTION } from '@/lib/chat-state';
-import { surfaceLabel, surfaceStates } from '@/lib/cloud-status';
+import { surfaceLabel, surfaceStates, type CloudSurfaceState } from '@/lib/cloud-status';
 import { usePlatformFeatures, featureState } from '@/lib/use-platform-features';
 
 const STATUS_INTERVAL_MS = 20_000;
@@ -43,6 +43,28 @@ function stateLabel(status: CloudStatus | null): string {
   if (!status.configured) return 'Not configured';
   if (status.stale) return 'Stale';
   return status.reachable ? 'Available' : 'Unreachable';
+}
+
+/** Capability badge text: whether the administrator enabled this surface for the model. */
+function availabilityLabel(item: CloudSurfaceState): string {
+  const name = item.surface === 'chat' ? 'Chat' : 'Reviews';
+  return item.enabled ? name : `No ${name.toLowerCase()}`;
+}
+
+/** Desktop table cells for one surface: its availability badge and readiness pill share a row. */
+function SurfaceCells({ item }: { item: CloudSurfaceState }) {
+  return (
+    <>
+      <td className="px-4 py-3 align-middle">
+        <Pill tone={item.enabled ? 'success' : 'muted'}>{availabilityLabel(item)}</Pill>
+      </td>
+      <td className="px-4 py-3 align-middle">
+        <Pill tone={item.tone} dot className="whitespace-normal!">
+          {surfaceLabel(item)}
+        </Pill>
+      </td>
+    </>
+  );
 }
 
 /** Why the model list is empty: never claim a failure the backend did not report. */
@@ -213,69 +235,115 @@ export default function KllmCloudPage() {
       )}
       {models.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-surface-2/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          {/* Desktop and tablet: one aligned table. Each model spans two rows, one per surface, so each Chat/Reviews badge and its readiness pill share a row. */}
+          <table className="hidden w-full table-fixed text-sm md:table">
+            <colgroup>
+              <col />
+              <col className="w-28" />
+              <col className="w-36" />
+              <col className="w-60" />
+            </colgroup>
+            <thead className="border-b border-border bg-surface-2/40 text-left text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 font-medium">Model</th>
-                <th className="px-4 py-2 font-medium">Context</th>
-                <th className="px-4 py-2 font-medium">Available for</th>
-                <th className="px-4 py-2 font-medium">Readiness</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3 align-middle text-xs font-semibold uppercase tracking-wider">Model</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3 align-middle text-xs font-semibold uppercase tracking-wider">Context</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3 align-middle text-xs font-semibold uppercase tracking-wider">Available for</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3 align-middle text-xs font-semibold uppercase tracking-wider">Readiness</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
-              {models.map((model) => {
+            <tbody>
+              {models.map((model, index) => {
                 const context = formatContextWindow(model.context_window);
                 // One pill per surface: Chat and Reviews are independent,
                 // so a single combined status would be misleading.
                 const states = surfaceStates(model);
                 return (
-                  <tr key={model.key}>
-                    <td className="px-4 py-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <ModelIcon
-                          model={{
-                            key: model.key,
-                            display_name: model.display_name,
-                            provider: CLOUD_PROVIDER,
-                            category: CLOUD_PROVIDER,
-                          }}
-                          size={16}
-                          className="shrink-0"
-                        />
-                        <span className="truncate font-medium text-foreground" title={model.model_id}>
-                          {model.display_name}
-                        </span>
-                        {model.vision && <Pill tone="info">Vision</Pill>}
-                      </div>
-                      {model.description && (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{model.description}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{context ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Pill tone={model.chat_enabled ? 'success' : 'muted'}>
-                          {model.chat_enabled ? 'Chat' : 'No chat'}
-                        </Pill>
-                        <Pill tone={model.review_enabled ? 'success' : 'muted'}>
-                          {model.review_enabled ? 'Reviews' : 'No reviews'}
-                        </Pill>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {states.map((item) => (
-                          <Pill key={item.surface} tone={item.tone} dot>
-                            {surfaceLabel(item)}
-                          </Pill>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={model.key}>
+                    <tr className={index > 0 ? 'border-t border-border' : undefined}>
+                      <td rowSpan={2} className="px-4 py-3 align-middle">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <ModelIcon
+                            model={{
+                              key: model.key,
+                              display_name: model.display_name,
+                              provider: CLOUD_PROVIDER,
+                              category: CLOUD_PROVIDER,
+                            }}
+                            size={16}
+                            className="shrink-0"
+                          />
+                          <span className="truncate font-medium text-foreground" title={model.model_id}>
+                            {model.display_name}
+                          </span>
+                          {model.vision && <Pill tone="info" className="shrink-0">Vision</Pill>}
+                        </div>
+                        {model.description && (
+                          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{model.description}</p>
+                        )}
+                      </td>
+                      <td rowSpan={2} className="whitespace-nowrap px-4 py-3 align-middle tabular-nums text-muted-foreground">
+                        {context ?? '—'}
+                      </td>
+                      <SurfaceCells item={states[0]} />
+                    </tr>
+                    <tr>
+                      <SurfaceCells item={states[1]} />
+                    </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
+
+          {/* Mobile: a stacked card per model, so no column is cut off on narrow screens. */}
+          <ul className="divide-y divide-border md:hidden">
+            {models.map((model) => {
+              const context = formatContextWindow(model.context_window);
+              const states = surfaceStates(model);
+              return (
+                <li key={model.key} className="px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <ModelIcon
+                        model={{
+                          key: model.key,
+                          display_name: model.display_name,
+                          provider: CLOUD_PROVIDER,
+                          category: CLOUD_PROVIDER,
+                        }}
+                        size={16}
+                        className="shrink-0"
+                      />
+                      <span className="truncate font-medium text-foreground" title={model.model_id}>
+                        {model.display_name}
+                      </span>
+                    </div>
+                    {context && <Pill tone="muted" className="shrink-0">Context: {context}</Pill>}
+                  </div>
+                  {model.description && (
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{model.description}</p>
+                  )}
+                  {model.vision && (
+                    <div className="mt-2">
+                      <Pill tone="info">Vision</Pill>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                    {states.map((item) => (
+                      <div key={item.surface} className="flex items-center justify-between gap-2">
+                        <Pill tone={item.enabled ? 'success' : 'muted'} className="shrink-0">
+                          {availabilityLabel(item)}
+                        </Pill>
+                        <Pill tone={item.tone} dot className="whitespace-normal!">
+                          {surfaceLabel(item)}
+                        </Pill>
+                      </div>
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
