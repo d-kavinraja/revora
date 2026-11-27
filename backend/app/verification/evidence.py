@@ -12,12 +12,15 @@ class EvidenceEngine:
     """Generates evidence for verified findings."""
 
     def _find_actual_file(self, repo_path: str, file_path: str) -> str | None:
+        base_dir = os.path.realpath(repo_path)
         try:
-            full_path = safe_join(repo_path, file_path)
+            full_path = os.path.realpath(os.path.join(base_dir, file_path))
+            if os.path.commonpath((base_dir, full_path)) != base_dir:
+                return None
         except ValueError:
             return None
         if os.path.exists(full_path):
-            return os.path.relpath(full_path, os.path.realpath(repo_path))
+            return os.path.relpath(full_path, base_dir)
 
         basename = os.path.basename(file_path)
         if not basename:
@@ -44,8 +47,11 @@ class EvidenceEngine:
         file_path = self._find_actual_file(repo_path, file_path)
         if file_path is None:
             return None
+        base_dir = os.path.realpath(repo_path)
         try:
-            full_path = safe_join(repo_path, file_path)
+            full_path = os.path.realpath(os.path.join(base_dir, file_path))
+            if os.path.commonpath((base_dir, full_path)) != base_dir:
+                return None
         except ValueError:
             return None
         if not os.path.exists(full_path):
