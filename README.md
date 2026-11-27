@@ -27,7 +27,7 @@
   </p>
 </div>
 
-![Revora — repository-aware AI code reviews](banner/revora-banner.png)
+![Revora — repository-aware AI code reviews](banner/revora-banner-repo.png)
 
 ## Contents
 
@@ -103,7 +103,6 @@ React app never calls Hugging Face directly and never sees a Space token:
 - **MouthMap** — lip-reading video inference with a seeded test dataset and run history.
 - **BotaniQ** — medicinal-plant identification from leaf/plant images with top-5 results and history.
 
-![MouthMap Model Lab demo](frontend/public/assets/model-lab-demo.gif)
 
 ## Architecture
 
