@@ -1119,7 +1119,7 @@ export function ChatShell({
           role="tabpanel"
           aria-label={activeChat?.title || 'Chat conversation'}
           ref={listRef}
-          className={`relative z-10 min-h-0 flex-1 ${isFreshChat ? 'overflow-hidden max-[520px]:overflow-y-auto' : 'overflow-y-auto'} overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6`}
+          className={`relative z-10 min-h-0 min-w-0 flex-1 ${isFreshChat ? 'overflow-hidden max-[520px]:overflow-y-auto' : 'overflow-x-hidden overflow-y-auto'} overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6`}
         >
           {!activeChat || activeChat.messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center text-center">

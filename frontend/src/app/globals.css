@@ -57,6 +57,17 @@
   --tw-prose-pre-bg: #0f172a;
   --tw-prose-code: #0f172a;
   --tw-prose-kbd: #0f172a;
+  /* Long unbroken strings/links must wrap instead of widening the page. */
+  overflow-wrap: break-word;
+}
+/* Markdown tables (rendered with a scroll wrapper in message-bubble.tsx):
+   keep row labels readable and drop the border under the last row. */
+.chat-markdown table td:first-child {
+  min-width: 96px;
+  font-weight: 500;
+}
+.chat-markdown table tr:last-child td {
+  border-bottom-width: 0;
 }
 :is(.dark, .admin-dark) .chat-markdown {
   --tw-prose-pre-code: #f8fafc;

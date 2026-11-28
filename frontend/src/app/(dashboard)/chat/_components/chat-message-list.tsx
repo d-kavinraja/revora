@@ -102,5 +102,9 @@ export function ChatMessageList({
     onRetry,
   ]);
 
-  return <div className="mx-auto flex max-w-3xl flex-col gap-8 pb-4">{rendered}</div>;
+  // min-w-0/max-w-full: flex children default to min-width:auto, so a wide
+  // Markdown table could otherwise push this column (and the whole chat UI)
+  // wider than the mobile viewport. Tables scroll inside their own container
+  // in MessageBubble; these guards keep the column locked to the screen width.
+  return <div className="mx-auto flex w-full min-w-0 max-w-full max-w-3xl flex-col gap-8 pb-4">{rendered}</div>;
 }

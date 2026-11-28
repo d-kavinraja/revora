@@ -63,6 +63,31 @@ const PHASE_DOT: Record<ResponsePhase, string> = {
   truncated: 'bg-warning',
 };
 
+/**
+ * Markdown element overrides shared by streaming and completed messages.
+ * `table` gets a dedicated horizontal scroll container so a wide multi-column
+ * table scrolls inside the message bubble instead of expanding its flex
+ * ancestors past the mobile viewport; `pre` gets the code card.
+ */
+const MARKDOWN_COMPONENTS: NonNullable<React.ComponentProps<typeof ReactMarkdown>['components']> = {
+  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+  table: ({ children }) => (
+    <div className="my-3 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-zinc-200/80 dark:border-zinc-800 [-webkit-overflow-scrolling:touch]">
+      <table className="w-max min-w-full border-collapse text-left text-xs sm:text-sm">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="whitespace-nowrap border-b border-zinc-200 bg-zinc-50/90 px-3 py-2 font-semibold text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-100">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="min-w-[110px] max-w-[220px] break-words border-b border-zinc-100 px-3 py-2 align-top text-zinc-700 dark:border-zinc-800/70 dark:text-zinc-300">
+      {children}
+    </td>
+  ),
+};
+
 function formatElapsed(ms?: number): string | null {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return null;
   const seconds = ms / 1000;
@@ -211,7 +236,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]">
+    <div className="my-3 w-full max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
         <span className="text-[11px] font-medium text-slate-400">{lang}</span>
         <button
@@ -224,7 +249,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
           <span>{copied ? 'Copied!' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="!m-0 !border-0 !rounded-none overflow-x-auto p-3 text-[13px] leading-6 text-[#f8fafc]">
+      <pre className="!m-0 !border-0 !rounded-none w-full max-w-full overflow-x-auto p-3 text-[13px] leading-6 text-[#f8fafc]">
         <code className={className}>{codeEl?.props?.children}</code>
       </pre>
     </div>
@@ -341,10 +366,7 @@ export function MessageBubble({
   const deferredMarkdown = useDeferredValue(markdownSource);
   const renderedMarkdown = useMemo(
     () => (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{ pre: ({ children }) => <CodeBlock>{children}</CodeBlock> }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
         {deferredMarkdown}
       </ReactMarkdown>
     ),
@@ -363,10 +385,10 @@ export function MessageBubble({
   };
 
   return (
-    <div className={`group/msg flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`min-w-0 ${isUser ? 'max-w-[92%] md:max-w-[78%]' : 'w-full max-w-[92%] md:max-w-[100%]'}`}>
+    <div className={`group/msg flex w-full min-w-0 max-w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`min-w-0 max-w-full ${isUser ? 'max-w-[92%] md:max-w-[78%]' : 'w-full max-w-[92%] md:max-w-[100%]'}`}>
         <div
-          className={`text-[15px] leading-7 ${
+          className={`max-w-full overflow-hidden text-[15px] leading-7 ${
             isUser
               ? 'rounded-2xl rounded-br-sm border border-slate-800 bg-slate-900 px-4 py-3 text-white shadow-sm dark:border-slate-200/80 dark:bg-slate-100 dark:text-slate-900'
               : isError
@@ -391,7 +413,7 @@ export function MessageBubble({
               <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-foreground/40 align-middle" />
             </div>
           ) : (
-            <div className="chat-markdown prose prose-sm dark:prose-invert max-w-none prose-p:my-0 prose-p:leading-7 prose-li:my-0 prose-pre:my-3 prose-pre:overflow-x-auto prose-pre:rounded-xl prose-code:before:content-none prose-code:after:content-none">
+            <div className="chat-markdown prose prose-sm dark:prose-invert min-w-0 max-w-none break-words prose-p:my-0 prose-p:leading-7 prose-li:my-0 prose-pre:my-3 prose-pre:overflow-x-auto prose-pre:rounded-xl prose-code:before:content-none prose-code:after:content-none">
               {renderedMarkdown}
             </div>
           )}

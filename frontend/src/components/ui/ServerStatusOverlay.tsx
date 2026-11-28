@@ -157,10 +157,10 @@ export function ServerStatusOverlay() {
           <>
             <div>
               <h2 className="text-xl font-bold text-zinc-100">
-                Server is Restarting{dots}
+                Revora is in Planned Maintenance{dots}
               </h2>
               <p className="text-sm mt-2 font-mono leading-relaxed text-zinc-400">
-                The Revora backend is waking up from sleep mode. Your work is safe — please wait a moment.
+                We&apos;re working on things — back in a moment. Your work is safe; the page resumes automatically.
               </p>
             </div>
 
@@ -182,10 +182,6 @@ export function ServerStatusOverlay() {
               ))}
             </div>
 
-            {/* Info note */}
-            <p className="text-xs font-mono text-zinc-500">
-              Free-tier services pause after 15 min of inactivity. Auto-recovering every 3s.
-            </p>
           </>
         )}
       </div>

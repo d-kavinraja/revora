@@ -1,17 +1,16 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { checkHealth } from '@/lib/api';
 import { isSafeInternalPath } from '@/lib/safe-redirect';
-import LetterGlitch from '@/components/ui/LetterGlitch';
-import PixelCard from '@/components/ui/PixelCard';
-
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/ui/footer';
+import MeadowRiseFooter from '@/components/ui/meadow-rise-footer';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_ATTEMPTS = 40; // ~2 minutes
+
+type Status = 'waking' | 'alive' | 'timeout';
 
 function WakingUpContent() {
   const router = useRouter();
@@ -19,32 +18,22 @@ function WakingUpContent() {
   const redirectParam = searchParams.get('redirect');
   // Never navigate to an attacker-supplied external URL after wake-up.
   const redirect = isSafeInternalPath(redirectParam) ? redirectParam : '/dashboard';
-  const [dots, setDots] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<'waking' | 'alive' | 'timeout'>('waking');
+  const [status, setStatus] = useState<Status>('waking');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const dotsRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Animate the dots
-  useEffect(() => {
-    dotsRef.current = setInterval(() => {
-      setDots(d => d.length >= 3 ? '' : d + '.');
-    }, 500);
-    return () => { if (dotsRef.current) clearInterval(dotsRef.current); };
-  }, []);
 
   // Poll the health endpoint
   useEffect(() => {
     // Immediately check once on mount
-    checkHealth().then(alive => {
+    checkHealth().then((alive) => {
       if (alive) {
         setStatus('alive');
-        return;
+        if (intervalRef.current) clearInterval(intervalRef.current);
       }
     });
 
     intervalRef.current = setInterval(async () => {
-      setAttempt(a => {
+      setAttempt((a) => {
         const next = a + 1;
         if (next >= MAX_ATTEMPTS) {
           setStatus('timeout');
@@ -60,145 +49,119 @@ function WakingUpContent() {
       }
     }, POLL_INTERVAL_MS);
 
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
   // Redirect once server is alive
   useEffect(() => {
     if (status === 'alive') {
-      const t = setTimeout(() => router.replace(redirect), 1200);
+      const t = setTimeout(() => router.replace(redirect), 1600);
       return () => clearTimeout(t);
     }
   }, [status, redirect, router]);
 
-  const progressPct = Math.min((attempt / MAX_ATTEMPTS) * 100, 100);
+  // The headline: the maintenance notice, with the italic accent the scene
+  // writes in by hand.
+  const heading =
+    status === 'alive'
+      ? 'Revora is *awake again*\nback to the fields.'
+      : 'Revora is in *planned maintenance*\nback in a moment.';
+
+  // The supporting line carries the live status so the scene stays useful.
+  const subheading =
+    status === 'alive'
+      ? 'All systems are back online. Taking you to where you left off…'
+      : status === 'timeout'
+        ? 'Maintenance is taking a little longer than expected. Give it a moment, then try again.'
+        : `We're working on things and checking the service every ${POLL_INTERVAL_MS / 1000} seconds — attempt ${Math.min(attempt + 1, MAX_ATTEMPTS)} of ${MAX_ATTEMPTS}.`;
+
+  // Only offer the pill when there is an action to take.
+  const cta =
+    status === 'timeout'
+      ? { label: 'Try again', href: '/waking-up' }
+      : status === 'waking'
+        ? { label: 'Attempt ' + Math.min(attempt + 1, MAX_ATTEMPTS) + ' of ' + MAX_ATTEMPTS, href: '#' }
+        : null;
 
   return (
-    <div className="dark min-h-[calc(100dvh-var(--revora-announcement-height,0px))] flex flex-col bg-background relative overflow-hidden">
-      <Header hideThemeToggle={true} />
-
-      <div className="flex-1 flex flex-col items-center justify-center relative w-full h-full">
-        <div className="absolute inset-0 z-0 opacity-80">
-          <LetterGlitch
-            glitchSpeed={50}
-            centerVignette={true}
-            outerVignette={false}
-            smooth={true}
+    <main className="w-full">
+      {/* On laptop/desktop the default scene headline (up to 92px) crowds the
+          viewport edges; cap it so the notice sits centred with air around it.
+          Mobile keeps the component's own scale. */}
+      <style>{`
+        @media (min-width: 900px) {
+          .waking-meadow .mrf-h {
+            font-size: clamp(40px, 4.4vw, 60px);
+            max-width: 24ch;
+          }
+        }
+      `}</style>
+      <MeadowRiseFooter
+        className="waking-meadow"
+        name="Revora"
+        brandHref="/"
+        logo={
+          // The real Revora mark, recoloured to a white silhouette so it reads
+          // on the dark footer ground (brightness(0) kills the blue gradient,
+          // invert(1) turns it pure white; transparency is preserved).
+          <Image
+            src="/revora-logo.png"
+            alt=""
+            width={30}
+            height={30}
+            priority
+            className="mrf-mark"
+            style={{ width: 30, height: 30, objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
           />
-        </div>
-
-        <PixelCard variant="default" colors="#18181b,#27272a,#3f3f46" className="relative z-10 max-w-md w-full rounded-3xl bg-zinc-950/95 border border-zinc-800 backdrop-blur-md shadow-2xl shadow-black/50 mx-4">
-          <div className="flex flex-col items-center justify-center gap-8 w-full h-full p-8 text-center">
-          {/* Logo / Icon */}
-          <div className="relative">
-            <div
-              className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl bg-zinc-900 border border-zinc-800"
-            >
-              {status === 'alive' ? (
-                // Checkmark when alive
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : status === 'timeout' ? (
-                // Warning when timeout
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-              ) : (
-                // Server icon while waking
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-                  <line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
-                </svg>
-              )}
-            </div>
-            {/* Pulse ring while waking */}
-            {status === 'waking' && (
-              <span className="absolute inset-0 rounded-2xl animate-ping opacity-30 bg-zinc-500"
-              />
-            )}
-          </div>
-
-          {/* Text */}
-          {status === 'alive' ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <h1 className="text-2xl font-bold text-white drop-shadow-md">Server is ready!</h1>
-              <p className="text-zinc-300 text-sm mt-2">Redirecting you now{dots}</p>
-            </div>
-          ) : status === 'timeout' ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <h1 className="text-2xl font-bold text-red-400 drop-shadow-md">Server taking too long</h1>
-              <p className="text-zinc-300 text-sm leading-relaxed mt-3">
-                The server hasn&apos;t responded in 2 minutes. This can happen on the Render free tier during very high load.
-              </p>
-              <button
-                onClick={() => { setAttempt(0); setStatus('waking'); }}
-                className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold text-zinc-900 bg-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-black/25"
-              >
-                Try Again
-              </button>
-            </div>
-          ) : (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
-              <h1 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
-                Server Down, Waking Up or Restarting<span className="inline-block w-6 text-left">{dots}</span>
-              </h1>
-              <p className="text-zinc-300 text-sm mt-4 leading-relaxed max-w-[320px] mx-auto font-medium">
-                Your Revora backend is currently offline, restarting, or waking up from sleep mode.<br />
-                This usually takes <span className="text-zinc-100 font-bold">nearly 2 minutes</span>.
-              </p>
-            </div>
-          )}
-
-          {/* Progress Bar & Status */}
-          {status === 'waking' && (
-            <div className="w-full max-w-sm mt-4 animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-150 fill-mode-both">
-              <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/10 backdrop-blur-md">
-                <div
-                  className="h-full rounded-full transition-all duration-300 bg-white"
-                  style={{
-                    width: `${progressPct}%`,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-zinc-400 mt-3 font-medium font-mono">
-                Checking every {POLL_INTERVAL_MS / 1000}s — attempt {attempt + 1} of {MAX_ATTEMPTS}
-              </p>
-            </div>
-          )}
-
-          {/* Educational Note */}
-          {status === 'waking' && (
-            <div className="mt-4 pt-5 text-left border-t border-zinc-800 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300 fill-mode-both">
-              <div className="flex items-center gap-2 mb-2">
-                <span role="img" aria-label="lightbulb">💡</span>
-                <h2 className="font-semibold text-sm text-zinc-100">Why is this happening?</h2>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Revora uses a Serverless architecture to reduce compute power and costs.
-                Services pause when inactive and automatically restart upon request. You only see this page when the server is cold-starting.
-              </p>
-            </div>
-          )}
-          </div>
-        </PixelCard>
-      </div>
-
-      <Footer
-        logoSrc="/revora-logo.png"
-        className="z-20 relative bg-background/95 backdrop-blur-xl border-t border-border shadow-[0_-8px_30px_rgba(0,0,0,0.12)]"
+        }
+        tagline="The Open-Source AI Code Review Platform."
+        heading={heading}
+        subheading={subheading}
+        cta={cta}
+        preset="golden"
+        seed={7}
+        mist={0.6}
+        newsletter={false}
+        height="calc(100dvh - var(--revora-announcement-height, 0px))"
+        heroHeight="clamp(500px, 74svh, 700px)"
+        maxWidth="1080px"
+        columns={[
+          {
+            title: 'Platform',
+            links: [
+              { label: 'Home', href: '/' },
+              { label: 'Sign in', href: '/login' },
+              { label: 'Create account', href: '/register' },
+            ],
+          },
+          {
+            title: 'Project',
+            links: [
+              { label: 'GitHub', href: 'https://github.com/d-kavinraja/revora' },
+              { label: 'Releases', href: 'https://github.com/d-kavinraja/revora/releases' },
+              { label: 'Contributing', href: 'https://github.com/d-kavinraja/revora/blob/main/CONTRIBUTING.md' },
+            ],
+          },
+        ]}
+        socials={[]}
+        copyright={'© ' + new Date().getFullYear() + ' Revora. All rights reserved.'}
+        legal={[{ label: 'License', href: 'https://github.com/d-kavinraja/revora/blob/main/LICENSE' }]}
       />
-    </div>
+    </main>
   );
 }
 
 export default function WakingUpPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-[calc(100dvh-var(--revora-announcement-height,0px))] flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-[calc(100dvh-var(--revora-announcement-height,0px))] flex items-center justify-center bg-background">
+          <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+        </div>
+      }
+    >
       <WakingUpContent />
     </Suspense>
   );

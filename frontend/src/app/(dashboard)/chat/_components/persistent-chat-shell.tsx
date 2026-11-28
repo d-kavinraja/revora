@@ -607,7 +607,7 @@ export function PersistentChatShell({
             const element = event.currentTarget;
             stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
           }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6"
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-transparent px-4 py-4 md:px-6 md:py-6"
         >
           {conversations.isLoading && <p className="mx-auto max-w-3xl py-2 text-xs text-muted-foreground">Loading saved conversations…</p>}
           {!activeId && messages.length === 0 ? (
